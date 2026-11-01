@@ -23,6 +23,7 @@ use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
 };
+pub use tasks::{RequestContext, current_request_id, with_request_context};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ApplicationError {

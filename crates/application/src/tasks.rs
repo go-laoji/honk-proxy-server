@@ -7,6 +7,29 @@ use sha2::{Digest, Sha256};
 use std::future::Future;
 use tokio::sync::oneshot;
 
+#[derive(Clone)]
+pub struct RequestContext {
+    pub request_id: String,
+    pub peer: Option<std::net::SocketAddr>,
+}
+tokio::task_local! {static REQUEST_CONTEXT:RequestContext;}
+pub fn current_request_id() -> Option<String> {
+    REQUEST_CONTEXT.try_with(|c| c.request_id.clone()).ok()
+}
+pub async fn with_request_context<T>(
+    context: RequestContext,
+    future: impl Future<Output = T>,
+) -> T {
+    REQUEST_CONTEXT.scope(context, future).await
+}
+async fn scoped<T>(context: Option<RequestContext>, future: impl Future<Output = T>) -> T {
+    if let Some(c) = context {
+        with_request_context(c, future).await
+    } else {
+        future.await
+    }
+}
+
 struct WorkHandle<T> {
     task: TaskInfo,
     completion: oneshot::Receiver<Result<T, ApplicationError>>,
@@ -41,7 +64,9 @@ pub(super) fn work_spec<T: serde::Serialize>(
         kind,
         resource_kind: revision.map(|_| "configuration".into()),
         resource_id: revision.map(|r| r.to_string()),
-        request_id: request_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
+        request_id: request_id
+            .or_else(current_request_id)
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
         input_fingerprint: fingerprint(&(kind, revision, input))?,
         configuration_revision: revision,
     })
@@ -101,9 +126,10 @@ impl Supervisor {
             return Err(EngineError::ShuttingDown.into());
         }
         let service = self.clone();
+        let context = REQUEST_CONTEXT.try_with(Clone::clone).ok();
         let task = self.provider_tasks.spawn(async move {
             let _permit = permit;
-            work(service).await
+            scoped(context, work(service)).await
         });
         drop(registration);
         Ok(task)
@@ -160,7 +186,8 @@ impl Supervisor {
                 return;
             }
             // The tracked parent retains its permit and joins even if work panics.
-            let result = tokio::spawn(work(service.clone()))
+            let context = REQUEST_CONTEXT.try_with(Clone::clone).ok();
+            let result = tokio::spawn(scoped(context, work(service.clone())))
                 .await
                 .unwrap_or(Err(ApplicationError::Worker));
             let outcome = match &result {
@@ -330,6 +357,15 @@ impl Supervisor {
     }
     pub fn event_epoch(&self) -> &str {
         &self.store.epoch
+    }
+    pub async fn record_management_event(
+        &self,
+        event: hps_storage::tasks::ManagementEvent,
+    ) -> Result<(), ApplicationError> {
+        self.store
+            .record_management_event(event)
+            .await
+            .map_err(Into::into)
     }
     pub fn cancellation(&self) -> tokio_util::sync::CancellationToken {
         self.provider_cancel.clone()

@@ -201,7 +201,7 @@ impl Store {
     ) -> Result<(), StorageError> {
         if !identifier(&input.request_id, 64)
             || !identifier(input.action, 64)
-            || !["started", "succeeded", "rejected", "failed"].contains(&input.outcome)
+            || !["started", "accepted", "succeeded", "rejected", "failed"].contains(&input.outcome)
             || !text(&input.resource_kind, 32)
             || !text(&input.resource_id, 128)
             || !text(&input.node_id, 128)

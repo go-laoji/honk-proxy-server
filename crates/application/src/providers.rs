@@ -301,11 +301,14 @@ impl Supervisor {
                     .clone()
                     .try_acquire_owned()
                     .map_err(|_| ApplicationError::ExtractionCapacity)?;
-                Ok(
-                    ProviderClient::with_resolver(&config, Some(Arc::new(current.dns.clone())))?
-                        .diagnostic(&config, &kind)
-                        .await?,
-                )
+                let resolver = current
+                    .config
+                    .dns
+                    .enabled
+                    .then(|| Arc::new(current.dns.clone()) as Arc<dyn hps_net::NameResolver>);
+                Ok(ProviderClient::with_resolver(&config, resolver)?
+                    .diagnostic(&config, &kind)
+                    .await?)
             },
             |value| hps_storage::tasks::WorkResult {
                 state: "completed",

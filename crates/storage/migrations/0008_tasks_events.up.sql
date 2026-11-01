@@ -152,3 +152,22 @@ END;
 CREATE TRIGGER task_terminal_insert_bound AFTER INSERT ON task_records WHEN NEW.terminal=1 BEGIN
  DELETE FROM task_records WHERE terminal=1 AND id<>NEW.id AND id < coalesce((SELECT id FROM task_records WHERE terminal=1 AND id<>NEW.id ORDER BY id DESC LIMIT 1 OFFSET 9998),0);
 END;
+
+CREATE TRIGGER node_control_event_insert AFTER INSERT ON node_controls BEGIN
+ INSERT INTO service_events(recorded_epoch,occurred_at,level,module,code,resource_kind,resource_id,node_id,action,outcome)
+ VALUES((SELECT epoch FROM event_context),NEW.updated_at*1000,'info','runtime','node_'||NEW.state,'node',NEW.node_id,NEW.node_id,'node_control','succeeded');
+END;
+
+CREATE TRIGGER node_control_event_update AFTER UPDATE ON node_controls BEGIN
+ INSERT INTO service_events(recorded_epoch,occurred_at,level,module,code,resource_kind,resource_id,node_id,action,outcome)
+ VALUES((SELECT epoch FROM event_context),NEW.updated_at*1000,'info','runtime','node_'||NEW.state,'node',NEW.node_id,NEW.node_id,'node_control','succeeded');
+END;
+
+CREATE TRIGGER configuration_revision_event AFTER INSERT ON config_revisions WHEN NEW.parent_id IS NOT NULL BEGIN
+ INSERT INTO service_events(recorded_epoch,occurred_at,level,module,code,resource_kind,resource_id,configuration_revision,action,outcome)
+ VALUES((SELECT epoch FROM event_context),NEW.created_at*1000,'info','configuration','configuration_revision_saved','configuration',cast(NEW.id AS TEXT),NEW.id,'configuration_prepare','succeeded');
+END;
+CREATE TRIGGER configuration_draft_event AFTER UPDATE ON config_draft BEGIN
+ INSERT INTO service_events(recorded_epoch,occurred_at,level,module,code,resource_kind,resource_id,configuration_revision,action,outcome)
+ VALUES((SELECT epoch FROM event_context),NEW.updated_at*1000,'info','configuration','configuration_draft_saved','configuration',cast(NEW.base_revision AS TEXT),NEW.base_revision,'configuration_draft','succeeded');
+END;

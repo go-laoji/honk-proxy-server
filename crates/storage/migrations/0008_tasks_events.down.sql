@@ -1,3 +1,7 @@
+DROP TRIGGER IF EXISTS node_control_event_insert;
+DROP TRIGGER IF EXISTS node_control_event_update;
+DROP TRIGGER IF EXISTS configuration_revision_event;
+DROP TRIGGER IF EXISTS configuration_draft_event;
 DROP TRIGGER IF EXISTS task_terminal_insert_bound;
 DROP TRIGGER IF EXISTS health_run_task_update;
 DROP TRIGGER IF EXISTS provider_task_insert;
