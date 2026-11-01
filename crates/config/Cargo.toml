@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+hps-net.workspace = true
 hps-domain.workspace = true
 serde.workspace = true
 thiserror.workspace = true

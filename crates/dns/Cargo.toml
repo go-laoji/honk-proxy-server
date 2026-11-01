@@ -1,0 +1,29 @@
+[package]
+name = "hps-dns"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+hps-config.workspace = true
+hps-net.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+hickory-proto = "0.26.3"
+sha2 = "0.10"
+bytes = "1"
+http = "1"
+hyper = { version = "1", features = ["client", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+http-body-util = "0.1"
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+rustls-pemfile = "2"
+webpki-roots = "1"
+tokio-util = { version = "0.7", features = ["rt"] }
+
+[dev-dependencies]
+rcgen = "0.14"
+tempfile = "3"
+hyper = { version = "1", features = ["server"] }
