@@ -36,7 +36,8 @@
   .muted {
     @apply text-slate-500 dark:text-slate-400;
   }
-  .field {
+  .field,
+  .input {
     @apply w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-950;
   }
 }
