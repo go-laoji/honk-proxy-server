@@ -50,6 +50,10 @@ enum Command {
         #[command(subcommand)]
         command: DnsCommand,
     },
+    Group {
+        #[command(subcommand)]
+        command: GroupCommand,
+    },
     Provider {
         #[command(subcommand)]
         command: ProviderCommand,
@@ -121,6 +125,56 @@ enum DnsCommand {
     },
     Save {
         path: PathBuf,
+        #[arg(long)]
+        expected_revision: i64,
+    },
+}
+#[derive(Subcommand)]
+enum GroupCommand {
+    Show,
+    Simulate {
+        #[arg(long)]
+        group: Option<String>,
+        #[arg(long)]
+        inbound: Option<String>,
+        #[arg(long)]
+        source_ip: Option<std::net::IpAddr>,
+        #[arg(long)]
+        host: Option<String>,
+        #[arg(long)]
+        port: Option<u16>,
+        #[arg(long)]
+        udp: bool,
+        #[arg(long)]
+        after: Option<String>,
+        #[arg(long,default_value_t=50,value_parser=clap::value_parser!(u32).range(1..=200))]
+        limit: u32,
+    },
+    Save {
+        path: PathBuf,
+        #[arg(long)]
+        expected_revision: i64,
+    },
+    Upsert {
+        path: PathBuf,
+        #[arg(long)]
+        expected_revision: i64,
+    },
+    Delete {
+        id: String,
+        #[arg(long)]
+        expected_revision: i64,
+    },
+    Pin {
+        id: String,
+        node: String,
+        #[arg(long = "fallback")]
+        fallback: Vec<String>,
+        #[arg(long)]
+        expected_revision: i64,
+    },
+    Unpin {
+        id: String,
         #[arg(long)]
         expected_revision: i64,
     },
@@ -427,6 +481,115 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
             InboundCommand::Stop { id } => {
                 serde_json::to_value(client.stop_inbound(id).await.map_err(client_error)?)
             }
+        },
+        Command::Group { command } => match command {
+            GroupCommand::Show => {
+                serde_json::to_value(client.groups().await.map_err(client_error)?)
+            }
+            GroupCommand::Simulate {
+                group,
+                inbound,
+                source_ip,
+                host,
+                port,
+                udp,
+                after,
+                limit,
+            } => serde_json::to_value(
+                client
+                    .simulate_group(&hps_domain::SelectionQuery {
+                        group: group.clone(),
+                        inbound: inbound.clone(),
+                        source_ip: *source_ip,
+                        destination_host: host.clone(),
+                        destination_port: *port,
+                        transport: if *udp {
+                            hps_domain::SelectionTransport::Udp
+                        } else {
+                            hps_domain::SelectionTransport::Tcp
+                        },
+                        after: after.clone(),
+                        limit: Some(*limit as usize),
+                    })
+                    .await
+                    .map_err(client_error)?,
+            ),
+            GroupCommand::Save {
+                path,
+                expected_revision,
+            } => {
+                let body = read_group_toml(path)?;
+                let configuration = toml::from_str::<hps_config::SelectionConfig>(&body)
+                    .map_err(|_| (2, "invalid group policy TOML".into()))?;
+                serde_json::to_value(
+                    client
+                        .save_groups(&hps_config::SelectionSave {
+                            configuration,
+                            expected_revision: *expected_revision,
+                        })
+                        .await
+                        .map_err(client_error)?,
+                )
+            }
+            GroupCommand::Upsert {
+                path,
+                expected_revision,
+            } => {
+                let body = read_group_toml(path)?;
+                let group = toml::from_str::<hps_config::GroupConfig>(&body)
+                    .map_err(|_| (2, "invalid group TOML".into()))?;
+                serde_json::to_value(
+                    client
+                        .upsert_group(&hps_config::GroupUpsert {
+                            group,
+                            expected_revision: *expected_revision,
+                        })
+                        .await
+                        .map_err(client_error)?,
+                )
+            }
+            GroupCommand::Delete {
+                id,
+                expected_revision,
+            } => serde_json::to_value(
+                client
+                    .delete_group(&hps_config::GroupDelete {
+                        group_id: id.clone(),
+                        expected_revision: *expected_revision,
+                    })
+                    .await
+                    .map_err(client_error)?,
+            ),
+            GroupCommand::Pin {
+                id,
+                node,
+                fallback,
+                expected_revision,
+            } => serde_json::to_value(
+                client
+                    .pin_group(&hps_config::GroupPin {
+                        group_id: id.clone(),
+                        node_id: Some(node.clone()),
+                        fallback_nodes: fallback.clone(),
+                        expected_revision: *expected_revision,
+                    })
+                    .await
+                    .map_err(client_error)?,
+            ),
+            GroupCommand::Unpin {
+                id,
+                expected_revision,
+            } => serde_json::to_value(
+                client
+                    .pin_group(&hps_config::GroupPin {
+                        group_id: id.clone(),
+                        node_id: None,
+                        fallback_nodes: vec![],
+                        expected_revision: *expected_revision,
+                    })
+                    .await
+                    .map_err(client_error)?,
+            ),
         },
         Command::Dns { command } => match command {
             DnsCommand::Show { after, limit } => serde_json::to_value(
@@ -784,6 +947,16 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
     value.map_err(|e| (5, e.to_string()))
 }
 
+fn read_group_toml(path: &std::path::Path) -> Result<String, (u8, String)> {
+    let metadata = std::fs::metadata(path).map_err(|e| (2, e.to_string()))?;
+    if !metadata.is_file() || metadata.len() > 8 * 1024 * 1024 {
+        return Err((
+            2,
+            "group TOML must be a regular file no larger than 8 MiB".into(),
+        ));
+    }
+    std::fs::read_to_string(path).map_err(|e| (2, e.to_string()))
+}
 fn read_config_input(
     path: &std::path::Path,
     expected_revision: i64,

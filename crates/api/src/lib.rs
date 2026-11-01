@@ -17,6 +17,7 @@ use std::{
 
 mod configuration;
 mod dns;
+mod groups;
 mod health;
 mod providers;
 #[cfg(feature = "web-ui")]
@@ -149,6 +150,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .merge(providers::router())
         .merge(health::router())
         .merge(dns::router())
+        .merge(groups::router())
         .layer(axum::extract::DefaultBodyLimit::max(4 * 1024 * 1024));
     #[cfg(feature = "web-ui")]
     let router = router.fallback(web::serve);
@@ -270,6 +272,7 @@ fn application_error(error: ApplicationError) -> (StatusCode, Json<ApiError>) {
             (StatusCode::NOT_FOUND, "inbound_not_found")
         }
         ApplicationError::ProviderUnavailable => (StatusCode::NOT_FOUND, "provider_unavailable"),
+        ApplicationError::GroupUnavailable => (StatusCode::NOT_FOUND, "group_not_found"),
         ApplicationError::Provider(error) => (StatusCode::BAD_GATEWAY, error.code),
         ApplicationError::Capture(_) => (
             StatusCode::UNPROCESSABLE_ENTITY,
