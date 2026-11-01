@@ -42,6 +42,10 @@ enum Command {
         #[command(subcommand)]
         command: InboundCommand,
     },
+    Health {
+        #[command(subcommand)]
+        command: HealthCommand,
+    },
     Provider {
         #[command(subcommand)]
         command: ProviderCommand,
@@ -64,6 +68,31 @@ enum Command {
     },
 }
 
+#[derive(Subcommand)]
+enum HealthCommand {
+    Show {
+        #[arg(long)]
+        after: Option<String>,
+        #[arg(long,default_value_t=50,value_parser=clap::value_parser!(u32).range(1..=200))]
+        limit: u32,
+    },
+    Probe {
+        #[arg(long = "node")]
+        nodes: Vec<String>,
+        #[arg(long)]
+        request_id: Option<String>,
+        #[arg(long)]
+        wait: bool,
+    },
+    Task {
+        id: i64,
+    },
+    Save {
+        path: PathBuf,
+        #[arg(long)]
+        expected_revision: i64,
+    },
+}
 #[derive(Subcommand)]
 enum ConfigCommand {
     Show,
@@ -211,8 +240,19 @@ async fn main() -> ExitCode {
             if value
                 .get("state")
                 .and_then(serde_json::Value::as_str)
-                .is_some_and(|s| ["failed", "outcome_unknown", "discarded"].contains(&s))
+                .is_some_and(|s| {
+                    ["failed", "outcome_unknown", "discarded", "interrupted"].contains(&s)
+                })
                 || value.get("valid").and_then(serde_json::Value::as_bool) == Some(false)
+                || (matches!(
+                    args.command,
+                    Command::Health {
+                        command: HealthCommand::Task { .. } | HealthCommand::Probe { .. }
+                    }
+                ) && value
+                    .get("failed")
+                    .and_then(serde_json::Value::as_u64)
+                    .is_some_and(|n| n > 0))
             {
                 ExitCode::from(5)
             } else {
@@ -293,6 +333,68 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
             }
             InboundCommand::Stop { id } => {
                 serde_json::to_value(client.stop_inbound(id).await.map_err(client_error)?)
+            }
+        },
+        Command::Health { command } => match command {
+            HealthCommand::Show { after, limit } => serde_json::to_value(
+                client
+                    .health(after.as_deref(), *limit)
+                    .await
+                    .map_err(client_error)?,
+            ),
+            HealthCommand::Task { id } => {
+                serde_json::to_value(client.health_task(*id).await.map_err(client_error)?)
+            }
+            HealthCommand::Save {
+                path,
+                expected_revision,
+            } => {
+                let metadata = std::fs::metadata(path).map_err(|e| (2, e.to_string()))?;
+                if !metadata.is_file() || metadata.len() > 128 * 1024 {
+                    return Err((
+                        2,
+                        "health TOML must be a regular file no larger than 128 KiB".into(),
+                    ));
+                }
+                let body = std::fs::read_to_string(path).map_err(|e| (2, e.to_string()))?;
+                let configuration: hps_config::HealthConfig = toml::from_str(&body)
+                    .map_err(|_| (2, "invalid health TOML; check syntax and fields".into()))?;
+                serde_json::to_value(
+                    client
+                        .save_health(&hps_config::HealthSave {
+                            configuration,
+                            expected_revision: *expected_revision,
+                        })
+                        .await
+                        .map_err(client_error)?,
+                )
+            }
+            HealthCommand::Probe {
+                nodes,
+                request_id,
+                wait,
+            } => {
+                let request_id = request_id
+                    .clone()
+                    .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+                eprintln!(
+                    "health request_id={request_id}; reuse this ID if acknowledgment is lost"
+                );
+                let mut task = client
+                    .probe_health(&hps_domain::HealthProbeInput {
+                        request_id,
+                        node_ids: nodes.clone(),
+                    })
+                    .await
+                    .map_err(client_error)?;
+                if *wait {
+                    let deadline = tokio::time::Instant::now() + Duration::from_secs(args.timeout);
+                    while task.state == "running" && tokio::time::Instant::now() < deadline {
+                        tokio::time::sleep(Duration::from_millis(250)).await;
+                        task = client.health_task(task.id).await.map_err(client_error)?;
+                    }
+                }
+                serde_json::to_value(task)
             }
         },
         Command::Provider { command } => match command {
