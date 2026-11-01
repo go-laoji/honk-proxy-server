@@ -178,7 +178,7 @@
       "acceptance": "IPv4/IPv6、TTL/缓存、不可见域名回退明确；真实Linux DNS接管；外部加密DNS识别限制如实说明。",
       "issue": 14,
       "url": "https://github.com/go-laoji/honk-proxy-server/issues/14",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "id": "T10",
