@@ -162,6 +162,35 @@ impl HpsClient {
         ))
         .await
     }
+    pub async fn provider_controller(
+        &self,
+        id: &str,
+    ) -> Result<hps_domain::ProviderControllerStatus, ClientError> {
+        self.get_json(&format!("api/v1/providers/{}/controller", segment(id)?))
+            .await
+    }
+    pub async fn pause_provider(
+        &self,
+        id: &str,
+        paused: bool,
+    ) -> Result<hps_domain::ProviderControllerStatus, ClientError> {
+        self.post_json(&format!(
+            "api/v1/providers/{}/controller/{}",
+            segment(id)?,
+            if paused { "pause" } else { "resume" }
+        ))
+        .await
+    }
+    pub async fn evaluate_provider(
+        &self,
+        id: &str,
+    ) -> Result<hps_domain::ControllerEvaluation, ClientError> {
+        self.post_json(&format!(
+            "api/v1/providers/{}/controller/evaluate",
+            segment(id)?
+        ))
+        .await
+    }
     pub async fn provider_diagnostic(
         &self,
         id: &str,

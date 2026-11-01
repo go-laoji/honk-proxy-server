@@ -2,8 +2,8 @@ use super::*;
 use axum::extract::{DefaultBodyLimit, Query};
 use hps_config::{ProviderConfig, ProviderSave};
 use hps_domain::{
-    ConfigActivationResult, ExpectedRevision, ExtractionInput, ExtractionTask, LeaseInfo,
-    ProviderDetail, ProviderView,
+    ConfigActivationResult, ControllerEvaluation, ExpectedRevision, ExtractionInput,
+    ExtractionTask, LeaseInfo, ProviderControllerStatus, ProviderDetail, ProviderView,
 };
 use serde::Deserialize;
 pub fn router() -> Router<Arc<AppState>> {
@@ -15,6 +15,10 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/v1/providers/{id}/extract", post(extract))
         .route("/api/v1/providers/{id}/leases", get(leases))
         .route("/api/v1/providers/{id}/diagnose/{kind}", post(diagnose))
+        .route("/api/v1/providers/{id}/controller", get(controller))
+        .route("/api/v1/providers/{id}/controller/pause", post(pause))
+        .route("/api/v1/providers/{id}/controller/resume", post(resume))
+        .route("/api/v1/providers/{id}/controller/evaluate", post(evaluate))
         .route("/api/v1/provider-tasks/{id}", get(task))
         .layer(DefaultBodyLimit::max(1024 * 1024))
 }
@@ -111,6 +115,47 @@ async fn diagnose(
         .map_err(application_error)
 }
 
+async fn controller(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> ApiResult<ProviderControllerStatus> {
+    application(&state)?
+        .provider_controller(&id)
+        .await
+        .map(Json)
+        .map_err(application_error)
+}
+async fn pause(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> ApiResult<ProviderControllerStatus> {
+    application(&state)?
+        .pause_controller(id, true)
+        .await
+        .map(Json)
+        .map_err(application_error)
+}
+async fn resume(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> ApiResult<ProviderControllerStatus> {
+    application(&state)?
+        .pause_controller(id, false)
+        .await
+        .map(Json)
+        .map_err(application_error)
+}
+async fn evaluate(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> ApiResult<ControllerEvaluation> {
+    application(&state)?
+        .evaluate_controller(id)
+        .await
+        .map(Json)
+        .map_err(application_error)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -188,6 +233,26 @@ mod tests {
         );
         let diagnostic = client.provider_diagnostic("vendor", "quota").await.unwrap();
         assert_eq!(diagnostic["supported"], false);
+        let controller = client.provider_controller("vendor").await.unwrap();
+        assert!(!controller.enabled);
+        assert_eq!(controller.used_requests, 1);
+        let evaluated = client.evaluate_provider("vendor").await.unwrap();
+        assert!(evaluated.task.is_none());
+        assert_eq!(evaluated.status.decision, "disabled");
+        let paused = client.pause_provider("vendor", true).await.unwrap();
+        assert_eq!(paused.paused_reason.as_deref(), Some("manual"));
+        assert!(matches!(
+            client
+                .extract_provider("vendor", "paused-request".into())
+                .await,
+            Err(hps_client::ClientError::Api { status: 409, .. })
+        ));
+        let resumed = client.pause_provider("vendor", false).await.unwrap();
+        assert!(resumed.paused_reason.is_none());
+        assert_eq!(
+            (resumed.used_requests, resumed.reserved_nodes),
+            (controller.used_requests, controller.reserved_nodes)
+        );
         client
             .delete_provider("vendor", activated.desired_revision)
             .await

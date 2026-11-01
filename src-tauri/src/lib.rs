@@ -71,6 +71,7 @@ fn supported_provider_get(path: &str) -> bool {
             query.is_none() && id.parse::<i64>().is_ok_and(|n| n > 0)
         }
         ["api", "v1", "providers", id] => query.is_none() && valid_resource_id(id),
+        ["api", "v1", "providers", id, "controller"] => query.is_none() && valid_resource_id(id),
         ["api", "v1", "providers", id, "leases"] => {
             valid_resource_id(id)
                 && query.is_none_or(|q| {
@@ -100,7 +101,8 @@ fn supported_action(path: &str) -> bool {
         return true;
     }
     let parts: Vec<_> = path.split('/').collect();
-    if matches!(parts.as_slice(),["api","v1","providers",id,"save"|"delete"|"extract"] if valid_resource_id(id))
+    if matches!(parts.as_slice(),["api","v1","providers",id,"controller","pause"|"resume"|"evaluate"] if valid_resource_id(id))
+        || matches!(parts.as_slice(),["api","v1","providers",id,"save"|"delete"|"extract"] if valid_resource_id(id))
         || matches!(parts.as_slice(),["api","v1","providers",id,"diagnose","quota"|"whitelist"] if valid_resource_id(id))
     {
         return true;
@@ -232,6 +234,13 @@ mod tests {
             "api/v1/providers/source/leases?before=200&limit=50"
         ));
         assert!(supported_api("api/v1/provider-tasks/1"));
+        assert!(supported_api("api/v1/providers/source/controller"));
+        assert!(supported_action(
+            "api/v1/providers/source/controller/resume"
+        ));
+        assert!(!supported_action(
+            "api/v1/providers/source/controller/reset-budget"
+        ));
         assert!(!supported_api(
             "api/v1/providers/source/leases?before=1&url=http://external"
         ));

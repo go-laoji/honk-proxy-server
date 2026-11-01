@@ -136,6 +136,21 @@ enum InboundCommand {
 #[derive(Subcommand)]
 enum ProviderCommand {
     List,
+    Controller {
+        id: String,
+    },
+    Pause {
+        id: String,
+    },
+    #[command(
+        about = "Acknowledge an uncertain result and resume; preserves budgets and cooldowns"
+    )]
+    Resume {
+        id: String,
+    },
+    Evaluate {
+        id: String,
+    },
     Show {
         id: String,
     },
@@ -281,6 +296,24 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
             }
         },
         Command::Provider { command } => match command {
+            ProviderCommand::Controller { id } => {
+                serde_json::to_value(client.provider_controller(id).await.map_err(client_error)?)
+            }
+            ProviderCommand::Pause { id } => serde_json::to_value(
+                client
+                    .pause_provider(id, true)
+                    .await
+                    .map_err(client_error)?,
+            ),
+            ProviderCommand::Resume { id } => serde_json::to_value(
+                client
+                    .pause_provider(id, false)
+                    .await
+                    .map_err(client_error)?,
+            ),
+            ProviderCommand::Evaluate { id } => {
+                serde_json::to_value(client.evaluate_provider(id).await.map_err(client_error)?)
+            }
             ProviderCommand::List => {
                 serde_json::to_value(client.providers().await.map_err(client_error)?)
             }
