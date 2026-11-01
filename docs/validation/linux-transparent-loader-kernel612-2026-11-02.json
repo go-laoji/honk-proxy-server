@@ -1,0 +1,33 @@
+{
+  "disabled_no_capture": true,
+  "forwarding_verified": false,
+  "kernel": "6.12.115-0-virt",
+  "map_ids": [
+    24,
+    28,
+    30,
+    31,
+    32,
+    33,
+    36,
+    37,
+    38,
+    39
+  ],
+  "maps_released": true,
+  "namespace_conflict_rejected": true,
+  "namespace_reacquired": true,
+  "object_sha256": "2e1a3626dce0c2f0597f244fec799329c5b9002601dc426b00d02d41bed22522",
+  "program_ids": [
+    17,
+    18,
+    16,
+    15,
+    13,
+    12,
+    14
+  ],
+  "programs_released": true,
+  "scope": "disabled_loader_lifecycle_only",
+  "tcx_links": 2
+}

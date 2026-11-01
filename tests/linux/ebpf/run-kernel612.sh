@@ -10,9 +10,12 @@ for app in sh mount mkdir ip uname cat poweroff modprobe; do ln -s busybox "$roo
 cp -a /qemu/kernel/lib/modules "$rootfs/lib/modules"
 kver=$(basename /qemu/kernel/lib/modules/*)
 depmod -b "$rootfs" "$kver"
-if [ -n "${HPS_DNS_TEST:-}" ]; then
+if [ -n "${HPS_TEST_BINARY:-}" ]; then
+    cp "$HPS_TEST_BINARY" "$rootfs/hps"
+    printf '%s\n' "${HPS_TEST_FILTER:?HPS_TEST_FILTER is required for an integration test}" > "$rootfs/test-filter"
+elif [ -n "${HPS_DNS_TEST:-}" ]; then
     cp "$HPS_DNS_TEST" "$rootfs/hps"
-    touch "$rootfs/dns-test"
+    printf '%s\n' real_dns_capture > "$rootfs/test-filter"
 else
     cp "${HPS_CLI:-/artifacts/hps}" "$rootfs/hps"
 fi
@@ -29,8 +32,9 @@ mount -t cgroup2 none /sys/fs/cgroup
 modprobe ipv6 || true
 ip link set lo up
 uname -r
-if [ -f /dns-test ]; then
-    HPS_EBPF_OBJECT=/hps-ebpf /hps --exact real_dns_capture --ignored --nocapture
+if [ -f /test-filter ]; then
+    hps_filter=$(cat /test-filter)
+    HPS_TEST_CGROUP_ROOT=/sys/fs/cgroup HPS_EBPF_OBJECT=/hps-ebpf /hps --exact "$hps_filter" --ignored --nocapture
 else
     /hps --output json linux self-test --object /hps-ebpf
 fi

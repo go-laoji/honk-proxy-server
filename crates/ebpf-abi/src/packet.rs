@@ -14,6 +14,17 @@ pub enum PacketError {
     UnsupportedExtension,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NetworkHeader {
+    pub family: u32,
+    pub source: [u32; 4],
+    pub destination: [u32; 4],
+    protocol: u8,
+    network_offset: usize,
+    transport_offset: usize,
+    payload_end: usize,
+    fragmented: bool,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PacketHeader {
     pub family: u32,
     pub protocol: u32,
@@ -71,7 +82,7 @@ fn address(input: &[u8; 40], offset: usize) -> [u32; 4] {
 /// Ethernet framing is present at TC ingress/egress, including loopback.
 /// At most two visible VLAN tags and four IPv6 options/atomic-fragment headers.
 #[inline(always)]
-pub fn parse(packet: &impl PacketRead) -> Result<PacketHeader, PacketError> {
+pub fn network_header(packet: &impl PacketRead) -> Result<NetworkHeader, PacketError> {
     let end = packet.packet_len();
     let ethernet = read::<14>(packet, 0, end)?;
     let mut ether_type = u16::from_be_bytes([ethernet[12], ethernet[13]]);
@@ -86,7 +97,7 @@ pub fn parse(packet: &impl PacketRead) -> Result<PacketHeader, PacketError> {
     if matches!(ether_type, 0x8100 | 0x88a8) {
         return Err(PacketError::UnsupportedExtension);
     }
-    let (family, source, destination, mut protocol, mut transport, ip_end) = match ether_type {
+    let (family, source, destination, protocol, transport, ip_end, fragmented) = match ether_type {
         0x0800 => {
             let ip = read::<20>(packet, network, end)?;
             let header = usize::from(ip[0] & 15) * 4;
@@ -95,9 +106,7 @@ pub fn parse(packet: &impl PacketRead) -> Result<PacketHeader, PacketError> {
                 return Err(PacketError::Malformed);
             }
             // MF or a nonzero offset: a partial transport must never be mistaken for a flow.
-            if u16::from_be_bytes([ip[6], ip[7]]) & 0x3fff != 0 {
-                return Err(PacketError::Fragmented);
-            }
+            let fragmented = u16::from_be_bytes([ip[6], ip[7]]) & 0x3fff != 0;
             let source = [
                 u32::from_ne_bytes([ip[12], ip[13], ip[14], ip[15]]),
                 0,
@@ -117,6 +126,7 @@ pub fn parse(packet: &impl PacketRead) -> Result<PacketHeader, PacketError> {
                 ip[9],
                 network + header,
                 network + total,
+                fragmented,
             )
         }
         0x86dd => {
@@ -135,10 +145,46 @@ pub fn parse(packet: &impl PacketRead) -> Result<PacketHeader, PacketError> {
                 ip[6],
                 network + 40,
                 network + 40 + payload,
+                false,
             )
         }
         _ => return Err(PacketError::NotIp),
     };
+    Ok(NetworkHeader {
+        family,
+        source,
+        destination,
+        protocol,
+        network_offset: network,
+        transport_offset: transport,
+        payload_end: ip_end,
+        fragmented,
+    })
+}
+#[inline(always)]
+pub fn parse(packet: &impl PacketRead) -> Result<PacketHeader, PacketError> {
+    transport_header(packet, &network_header(packet)?)
+}
+/// Call after CIDR bypass has been checked, so excluded destinations do not
+/// become capture failures merely because their transport shape is unsupported.
+#[inline(always)]
+pub fn transport_header(
+    packet: &impl PacketRead,
+    header: &NetworkHeader,
+) -> Result<PacketHeader, PacketError> {
+    let NetworkHeader {
+        family,
+        source,
+        destination,
+        mut protocol,
+        network_offset: network,
+        transport_offset: mut transport,
+        payload_end: ip_end,
+        fragmented,
+    } = *header;
+    if fragmented {
+        return Err(PacketError::Fragmented);
+    }
     if family == 6 {
         for _ in 0..4 {
             match protocol {

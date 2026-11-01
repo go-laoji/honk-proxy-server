@@ -3,6 +3,7 @@
 #![feature(core_intrinsics)]
 #![allow(internal_features)]
 mod dns;
+mod transparent;
 use aya_ebpf::{
     EbpfContext,
     helpers::{

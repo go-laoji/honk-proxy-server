@@ -1011,6 +1011,7 @@ dependencies = [
  "hps-domain",
  "hps-ebpf-abi",
  "hps-net",
+ "ipnet",
  "libc",
  "serde_json",
  "sha2",
