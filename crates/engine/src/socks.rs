@@ -17,6 +17,7 @@ pub(crate) async fn serve(mut io: BoxIo, session: Session) -> Result<(), ProxyEr
             reply(
                 &mut io,
                 match error {
+                    ProxyError::Rejected => 2,
                     ProxyError::NoUpstream => 3,
                     ProxyError::Timeout => 6,
                     _ => 5,

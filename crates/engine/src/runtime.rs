@@ -23,6 +23,10 @@ use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
 #[derive(Debug, thiserror::Error)]
 pub enum EngineError {
+    #[error(
+        "routing requires an unavailable data-plane capability, including verified Linux process origin"
+    )]
+    Routing,
     #[error("invalid proxy configuration")]
     Configuration,
     #[error("invalid TLS configuration")]
@@ -118,7 +122,16 @@ impl Engine {
         previous: Option<&Arc<Self>>,
     ) -> Result<Arc<Self>, EngineError> {
         config.validate().map_err(|_| EngineError::Configuration)?;
-        let mut dialer = Dialer::new(&config).map_err(|_| EngineError::Tls)?;
+        let mut dialer = Dialer::new(&config).map_err(|e| {
+            if matches!(
+                e,
+                crate::ProxyError::UnsupportedRule | crate::ProxyError::RuleConfiguration
+            ) {
+                EngineError::Routing
+            } else {
+                EngineError::Tls
+            }
+        })?;
         if let Some(old) = previous {
             dialer.preserve_static_deadlines(&old.dialer);
             dialer.pool = old.dialer.pool.clone();
@@ -211,6 +224,13 @@ impl Engine {
     pub fn selection(&self, query: &hps_domain::SelectionQuery) -> hps_domain::SelectionDecision {
         self.dialer.selection(query)
     }
+    pub fn simulate_route(
+        &self,
+        context: &hps_domain::RoutingContext,
+        revision: i64,
+    ) -> hps_domain::RouteSimulation {
+        self.dialer.simulate_route(context, revision)
+    }
     pub fn group_last_choices(&self) -> std::collections::HashMap<String, String> {
         self.dialer.group_last_choices()
     }
@@ -278,6 +298,7 @@ impl Engine {
         self.entries.values().all(|entry| entry.tracker.is_empty())
     }
     pub fn set_generation(&self, id: i64) {
+        self.dialer.set_revision(id);
         let _ = self
             .generation
             .compare_exchange(0, id, Ordering::AcqRel, Ordering::Acquire);
@@ -396,14 +417,10 @@ impl Engine {
         !self.cancel.is_cancelled()
             && self.entries.values().any(|entry| {
                 entry.running.load(Ordering::Acquire)
-                    && self
-                        .dialer
-                        .selection(&hps_domain::SelectionQuery {
-                            inbound: Some(entry.config.id.clone()),
-                            ..Default::default()
-                        })
-                        .eligible
-                        > 0
+                    && self.dialer.can_forward(
+                        &entry.config.id,
+                        &format!("{:?}", entry.config.protocol).to_lowercase(),
+                    )
                     && entry
                         .status()
                         .certificate

@@ -498,6 +498,7 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
             } => serde_json::to_value(
                 client
                     .simulate_group(&hps_domain::SelectionQuery {
+                        node: None,
                         group: group.clone(),
                         inbound: inbound.clone(),
                         source_ip: *source_ip,

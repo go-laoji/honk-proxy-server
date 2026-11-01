@@ -264,9 +264,9 @@ fn application_error(error: ApplicationError) -> (StatusCode, Json<ApiError>) {
         }
         ApplicationError::Invalid
         | ApplicationError::Storage(StorageError::Invalid)
-        | ApplicationError::Engine(EngineError::Tls | EngineError::Configuration) => {
-            (StatusCode::UNPROCESSABLE_ENTITY, "invalid_configuration")
-        }
+        | ApplicationError::Engine(
+            EngineError::Tls | EngineError::Configuration | EngineError::Routing,
+        ) => (StatusCode::UNPROCESSABLE_ENTITY, "invalid_configuration"),
         ApplicationError::Engine(EngineError::Bind) => (StatusCode::CONFLICT, "listen_failed"),
         ApplicationError::Engine(EngineError::NotFound) => {
             (StatusCode::NOT_FOUND, "inbound_not_found")

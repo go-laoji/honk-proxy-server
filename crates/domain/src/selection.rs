@@ -11,6 +11,7 @@ pub enum SelectionTransport {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct SelectionQuery {
+    pub node: Option<String>,
     pub group: Option<String>,
     pub inbound: Option<String>,
     pub source_ip: Option<IpAddr>,

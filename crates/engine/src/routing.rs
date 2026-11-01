@@ -26,6 +26,33 @@ pub struct Router {
     observe: bool,
 }
 impl Router {
+    pub fn potential_actions(&self, inbound: &str, protocol: &str) -> Vec<&RouteAction> {
+        let mut actions = vec![];
+        for rule in &self.rules {
+            let c = &rule.rule.conditions;
+            if !rule.rule.enabled
+                || (!c.inbounds.is_empty() && !c.inbounds.iter().any(|id| id == inbound))
+                || (!c.inbound_protocols.is_empty()
+                    && !c.inbound_protocols.iter().any(|p| p == protocol))
+                || (!c.transports.is_empty()
+                    && !c.transports.contains(&hps_domain::SelectionTransport::Tcp))
+            {
+                continue;
+            }
+            actions.push(&rule.rule.action);
+            if c.domains.is_empty()
+                && c.domain_suffixes.is_empty()
+                && c.destination_cidrs.is_empty()
+                && c.destination_ports.is_empty()
+                && c.source_cidrs.is_empty()
+                && c.process.is_none()
+            {
+                return actions;
+            }
+        }
+        actions.push(&self.default);
+        actions
+    }
     pub fn compile(
         config: &ProxyConfig,
         capabilities: RoutingCapabilities,
