@@ -115,6 +115,8 @@ pub struct EnvironmentCheck {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LinuxPreflight {
+    #[serde(default)]
+    pub loader_compiled: bool,
     pub platform: String,
     pub kernel_release: Option<String>,
     pub checks: Vec<EnvironmentCheck>,

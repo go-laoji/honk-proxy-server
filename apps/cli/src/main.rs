@@ -154,6 +154,9 @@ enum ConfigCommand {
 #[derive(Subcommand)]
 enum LinuxCommand {
     Preflight,
+    #[command(
+        about = "Run a local Linux eBPF self-test in a new cgroup; does not use --endpoint or enable proxy capture"
+    )]
     SelfTest {
         #[arg(long)]
         object: PathBuf,

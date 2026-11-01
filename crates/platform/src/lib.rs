@@ -22,6 +22,7 @@ pub fn preflight() -> LinuxPreflight {
         collect(&System)
     } else {
         LinuxPreflight {
+            loader_compiled: false,
             platform: std::env::consts::OS.into(),
             kernel_release: None,
             checks: vec![check(
@@ -186,6 +187,7 @@ fn collect(source: &impl Source) -> LinuxPreflight {
         "只读预检未加载/附加 eBPF，未验证原始目标、hook 冲突或代理出口",
     ));
     LinuxPreflight {
+        loader_compiled: cfg!(target_os = "linux"),
         platform: "linux".into(),
         kernel_release: release,
         checks,
@@ -264,5 +266,21 @@ pub mod ebpf {
     }
     pub fn self_test_child(_: &Path, _: SocketAddr, _: bool) -> Result<(), String> {
         Err("eBPF test helper requires Linux".into())
+    }
+}
+
+#[cfg(all(test, not(target_os = "linux")))]
+mod unsupported_ebpf_tests {
+    #[test]
+    fn local_self_test_never_claims_success_on_other_platforms() {
+        assert!(
+            super::ebpf::self_test(
+                std::path::Path::new("absent"),
+                std::path::Path::new("absent"),
+                std::path::Path::new("absent")
+            )
+            .unwrap_err()
+            .contains("requires Linux")
+        );
     }
 }
