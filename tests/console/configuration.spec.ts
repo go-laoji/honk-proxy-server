@@ -112,6 +112,7 @@ test("shared config draft conflicts, activation, redacted export, pending restar
     await page.screenshot({
       path: "/tmp/hps-configuration-console.png",
       fullPage: true,
+      animations: "disabled",
     });
     expect((await page.context().cookies()).length).toBe(0);
   } finally {
