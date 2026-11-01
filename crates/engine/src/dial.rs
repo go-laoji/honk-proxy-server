@@ -247,15 +247,15 @@ impl Dialer {
         {
             return false;
         }
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
         config.enabled
-            && config
-                .expires_at_unix
-                .is_none_or(|expires| expires > now.saturating_add(minimum))
+            && config.expires_at_unix.is_none_or(|expiry| {
+                UNIX_EPOCH
+                    .checked_add(Duration::from_secs(expiry))
+                    .and_then(|expires| expires.duration_since(SystemTime::now()).ok())
+                    .is_some_and(|remaining| remaining > Duration::from_secs(minimum))
+            })
     }
+
     pub fn eligible_count(&self) -> usize {
         let dynamic = self.pool.snapshot();
         self.upstreams

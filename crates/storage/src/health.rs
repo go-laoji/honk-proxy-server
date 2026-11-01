@@ -196,7 +196,7 @@ impl Store {
                 .prepare("SELECT id FROM health_tasks ORDER BY id DESC LIMIT 30")?
                 .query_map([], |r| r.get(0))?
                 .collect::<Result<Vec<_>, _>>()?;
-            ids.into_iter().map(|id| task(c, id)).collect()
+            ids.into_iter().map(|id| task_summary(c, id)).collect()
         })
         .await
     }
@@ -229,4 +229,33 @@ impl Store {
         })
         .await
     }
+}
+fn task_summary(c: &Connection, id: i64) -> Result<HealthTask, StorageError> {
+    let (request_id, trigger, created_at, merged) = c.query_row(
+        "SELECT request_id,trigger,created_at,merged FROM health_tasks WHERE id=?1",
+        [id],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+    )?;
+    let(total,completed,healthy,skipped,inflight,interrupted):(u32,u32,u32,u32,u32,u32)=c.query_row("SELECT count(*),coalesce(sum(state NOT IN ('queued','probing')),0),coalesce(sum(json_extract(result,'$.verdict')='healthy'),0),coalesce(sum(state='discarded' OR json_extract(result,'$.verdict') IN ('skipped','expired','unsupported')),0),coalesce(sum(state IN ('queued','probing')),0),coalesce(sum(state='interrupted'),0) FROM health_runs WHERE id IN (SELECT run_id FROM health_task_runs WHERE task_id=?1)",[id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?)))?;
+    Ok(HealthTask {
+        id,
+        request_id,
+        trigger,
+        created_at,
+        merged,
+        total,
+        completed,
+        healthy,
+        failed: completed.saturating_sub(healthy + skipped),
+        skipped,
+        state: if inflight > 0 {
+            "running"
+        } else if interrupted > 0 {
+            "interrupted"
+        } else {
+            "completed"
+        }
+        .into(),
+        runs: vec![],
+    })
 }

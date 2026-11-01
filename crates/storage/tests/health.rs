@@ -101,6 +101,10 @@ async fn atomic_queue_budget_identity_coalescing_and_restart_recovery() {
         store.health_states().await.unwrap()[0].result.checked_at,
         result().checked_at
     );
+    assert_eq!(
+        store.health_states().await.unwrap()[0].result.verdict,
+        HealthVerdict::Unknown
+    );
     assert_eq!(store.health_usage().await.unwrap().used, 2);
     assert_eq!(store.health_usage().await.unwrap().probing, 0);
     assert!(matches!(

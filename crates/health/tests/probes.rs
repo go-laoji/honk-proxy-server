@@ -201,9 +201,11 @@ async fn short_lifetime_and_udp_do_not_touch_supplier_and_family_is_explicit() {
         .probe(&dialer.probe_plans()[0], &HealthConfig::default())
         .await;
     assert_eq!(result.verdict, HealthVerdict::Skipped);
-    let mut udp = ProbeProfile::default();
-    udp.transport = HealthTransport::Udp;
-    udp.enabled = false;
+    let udp = ProbeProfile {
+        transport: HealthTransport::Udp,
+        enabled: false,
+        ..Default::default()
+    };
     let result = PreparedProfile::prepare(udp)
         .unwrap()
         .probe(&dialer.probe_plans()[0], &HealthConfig::default())

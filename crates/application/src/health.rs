@@ -80,6 +80,14 @@ impl Supervisor {
                 state.result.checked_at = event.observed_at;
                 state.result.node_id = event.node_id.clone();
                 state.result.target_ok = None;
+                state.result.http_status = None;
+                state.result.endpoint_reachable = event.phase != ProbePhase::EndpointConnect;
+                state.result.authenticated = if event.phase == ProbePhase::Authentication {
+                    Some(false)
+                } else {
+                    None
+                };
+                state.result.tunnel_established = false;
                 state.next_due_at = event.observed_at;
                 records.push(state.clone());
             }
@@ -281,7 +289,24 @@ impl Supervisor {
                 .engine
                 .health_registry()
                 .publish(result.clone(), current.config.health.max_staleness_secs);
-            self.health.states.lock().unwrap().insert(
+            let mut states = self.health.states.lock().unwrap();
+            if states.len() >= 400000 {
+                let identities = current
+                    .engine
+                    .probe_plans()
+                    .into_iter()
+                    .map(|p| p.identity().to_owned())
+                    .collect::<HashSet<_>>();
+                let fingerprints = current
+                    .health_profiles
+                    .iter()
+                    .map(|p| p.fingerprint.clone())
+                    .collect::<HashSet<_>>();
+                states.retain(|(identity, fp), _| {
+                    identities.contains(identity) && fingerprints.contains(fp)
+                });
+            }
+            states.insert(
                 key,
                 HealthState {
                     result,

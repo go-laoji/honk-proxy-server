@@ -14,7 +14,28 @@ impl Supervisor {
             .map(|p| (p.id.clone(), hps_provider::fingerprint(p)))
             .collect();
         let mut leases = self.store.active_leases().await?;
-        leases.sort_by_key(|lease| std::cmp::Reverse((lease.candidate.expires_at, lease.id)));
+        let healthy = current
+            .engine
+            .probe_plans()
+            .into_iter()
+            .filter(|p| current.engine.health_usable(p.identity()))
+            .map(|p| {
+                (
+                    p.provider_id().map(str::to_owned),
+                    health_endpoint_key(p.config()),
+                )
+            })
+            .collect::<HashSet<_>>();
+        leases.sort_by_cached_key(|lease| {
+            std::cmp::Reverse((
+                healthy.contains(&(
+                    Some(lease.provider_id.clone()),
+                    health_endpoint_key(&lease.candidate.upstream),
+                )),
+                lease.candidate.expires_at,
+                lease.id,
+            ))
+        });
         let mut seen = HashSet::new();
         let mut counts = HashMap::<String, u32>::new();
         let nodes = leases
@@ -311,4 +332,12 @@ impl Supervisor {
         })
         .await
     }
+}
+
+fn health_endpoint_key(upstream: &hps_config::UpstreamConfig) -> String {
+    let mut config = upstream.clone();
+    config.id.clear();
+    config.enabled = true;
+    config.expires_at_unix = None;
+    serde_json::to_string(&config).expect("upstream serialization")
 }

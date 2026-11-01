@@ -45,13 +45,13 @@ impl HealthRegistry {
         self.events.subscribe()
     }
     pub fn publish(&self, result: ProbeResult, maximum_age: u64) {
-        let now = unix_now();
-        let age = now.saturating_sub(result.checked_at);
-        let lifetime = if result.checked_at > now {
-            0
-        } else {
-            maximum_age.saturating_sub(age as u64)
-        };
+        let wall = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default();
+        let timestamp = Duration::from_secs(result.checked_at.max(0) as u64);
+        let lifetime = wall.checked_sub(timestamp).map_or(Duration::ZERO, |age| {
+            Duration::from_secs(maximum_age).saturating_sub(age)
+        });
         if result.verdict == HealthVerdict::Healthy {
             // A delayed completion cannot clear a later real connection failure.
             let mut failures = self.failures.write().unwrap();
@@ -73,7 +73,7 @@ impl HealthRegistry {
                 (result.identity.clone(), result.profile_fingerprint.clone()),
                 Fact {
                     result,
-                    fresh_until: Instant::now() + Duration::from_secs(lifetime),
+                    fresh_until: Instant::now() + lifetime,
                 },
             );
         }

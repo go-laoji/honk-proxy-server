@@ -413,6 +413,8 @@ fn migrate(connection: &mut Connection, bootstrap: &str) -> Result<(), StorageEr
         )?;
     }
     transaction.execute("UPDATE health_runs SET state='interrupted',finished_at=?1 WHERE state IN ('queued','probing')",[unix_now()])?;
+    // Fresh proof is reacquired after every process start; persisted results remain diagnostic history.
+    transaction.execute("UPDATE health_state SET result=json_set(result,'$.verdict','unknown','$.error_code','process_restarted'),next_due_at=?1 WHERE json_extract(result,'$.verdict')='healthy'",[unix_now()])?;
     transaction.execute("UPDATE provider_control SET paused_reason='process_interrupted' WHERE last_task_id IN (SELECT id FROM provider_tasks WHERE state='outcome_unknown' AND error_code='process_interrupted' AND (provider_control.acknowledged_at IS NULL OR provider_control.acknowledged_at<provider_tasks.finished_at))",[])?;
     let observed: Option<(i64, bool)> = transaction
         .query_row(
