@@ -261,6 +261,8 @@ pub struct ConfigInput {
     pub expected_draft_version: Option<i64>,
     #[serde(default)]
     pub note: String,
+    #[serde(default)]
+    pub use_draft_credentials: bool,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConfigActivate {

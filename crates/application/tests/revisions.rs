@@ -17,6 +17,7 @@ fn input(config: &DaemonConfig, expected_revision: i64) -> ConfigInput {
         expected_revision,
         expected_draft_version: None,
         note: "test revision".into(),
+        use_draft_credentials: false,
     }
 }
 async fn tunnel(supervisor: &Arc<Supervisor>, destination: std::net::SocketAddr) -> BoxIo {
@@ -265,6 +266,7 @@ async fn draft_conflict_redacted_round_trip_and_secret_change_diff_never_expose_
         expected_revision: 1,
         expected_draft_version: Some(1),
         note: "redacted import".into(),
+        use_draft_credentials: false,
     };
     assert!(supervisor.validate(draft.clone()).await.valid);
     supervisor.save_draft(draft.clone()).await.unwrap();
@@ -313,6 +315,7 @@ async fn draft_conflict_redacted_round_trip_and_secret_change_diff_never_expose_
             expected_revision: revision.id,
             expected_draft_version: None,
             note: String::new(),
+            use_draft_credentials: false,
         })
         .await;
     assert!(!bad.valid);
@@ -322,6 +325,7 @@ async fn draft_conflict_redacted_round_trip_and_secret_change_diff_never_expose_
             expected_revision: revision.id,
             expected_draft_version: None,
             note: String::new(),
+            use_draft_credentials: false,
         })
         .await;
     assert!(!invalid.valid);
@@ -451,5 +455,90 @@ async fn dropped_caller_does_not_abandon_activation_queued_behind_database_lock(
         service.workspace().await.unwrap().activations[0].state,
         "applied"
     );
+    service.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn refreshed_redacted_draft_preserves_new_and_rotated_credentials_without_stale_reference() {
+    let service = Supervisor::boot(
+        Store::open(None, DaemonConfig::default()).unwrap(),
+        StartupOverrides::default(),
+    )
+    .await
+    .unwrap();
+    let mut config = DaemonConfig::default();
+    let mut upstream = support::upstream("127.0.0.1:18080".parse().unwrap(), ProxyProtocol::Http);
+    upstream.credentials = Some(UpstreamCredentials {
+        username: "supplier".into(),
+        password: "new-draft-secret".into(),
+    });
+    config.proxy.upstreams.push(upstream);
+    let mut save = input(&config, 1);
+    save.expected_draft_version = Some(1);
+    service.save_draft(save).await.unwrap();
+    let workspace = service.workspace().await.unwrap();
+    let refreshed = ConfigInput {
+        toml: workspace.draft.toml,
+        expected_revision: 1,
+        expected_draft_version: Some(workspace.draft.version),
+        note: "refreshed shared draft".into(),
+        use_draft_credentials: true,
+    };
+    let revision = service.create_revision(refreshed).await.unwrap();
+    service
+        .activate(ConfigActivate {
+            revision: revision.id,
+            expected_revision: 1,
+            defer_until_restart: false,
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        service.current().config.proxy.upstreams[0]
+            .credentials
+            .as_ref()
+            .unwrap()
+            .password,
+        "new-draft-secret"
+    );
+    config.proxy.upstreams[0]
+        .credentials
+        .as_mut()
+        .unwrap()
+        .password = "rotated-draft-secret".into();
+    let mut save = input(&config, revision.id);
+    save.expected_draft_version = Some(workspace.draft.version);
+    service.save_draft(save).await.unwrap();
+    let workspace = service.workspace().await.unwrap();
+    let mut refreshed = ConfigInput {
+        toml: workspace.draft.toml,
+        expected_revision: revision.id,
+        expected_draft_version: Some(workspace.draft.version),
+        note: "rotated shared draft".into(),
+        use_draft_credentials: true,
+    };
+    let next = service.create_revision(refreshed.clone()).await.unwrap();
+    service
+        .activate(ConfigActivate {
+            revision: next.id,
+            expected_revision: revision.id,
+            defer_until_restart: false,
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        service.current().config.proxy.upstreams[0]
+            .credentials
+            .as_ref()
+            .unwrap()
+            .password,
+        "rotated-draft-secret"
+    );
+    refreshed.expected_revision = next.id;
+    refreshed.expected_draft_version = Some(1);
+    assert!(matches!(
+        service.create_revision(refreshed).await,
+        Err(ApplicationError::Storage(StorageError::Conflict))
+    ));
     service.shutdown().await.unwrap();
 }

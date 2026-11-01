@@ -36,6 +36,7 @@ export default function ConfigPage({
 }) {
   const [workspace, setWorkspace] = useState<ConfigWorkspace | null>(null);
   const [editor, setEditor] = useState("");
+  const [useDraftCredentials, setUseDraftCredentials] = useState(true);
   const [note, setNote] = useState("");
   const [validation, setValidation] = useState<ConfigValidation | null>(null);
   const [validated, setValidated] = useState<{
@@ -72,7 +73,10 @@ export default function ConfigPage({
       setWorkspace(state);
       setValidation(null);
       setValidated(null);
-      if (replaceEditor) setEditor(state.draft.toml);
+      if (replaceEditor) {
+        setEditor(state.draft.toml);
+        setUseDraftCredentials(true);
+      }
     }
     return state;
   }
@@ -94,6 +98,7 @@ export default function ConfigPage({
       expected_revision: workspace!.desired_revision,
       expected_draft_version: workspace!.draft.version,
       note: note || "控制台保存",
+      use_draft_credentials: useDraftCredentials,
     };
   }
   async function validate() {
@@ -132,6 +137,7 @@ export default function ConfigPage({
     const text = await file.text();
     if (mounted.current) {
       setEditor(text);
+      setUseDraftCredentials(false);
       setValidation(null);
       setValidated(null);
       setSaved(null);
@@ -236,6 +242,7 @@ export default function ConfigPage({
               disabled={Boolean(pending)}
               onClick={() => {
                 setEditor(workspace.desired_toml);
+                setUseDraftCredentials(false);
                 setValidation(null);
                 setValidated(null);
                 setSaved(null);
@@ -479,6 +486,7 @@ export default function ConfigPage({
                               `api/v1/config/revisions/${revision.id}`,
                             );
                             setEditor(exported.toml);
+                            setUseDraftCredentials(false);
                             setValidation(null);
                             setValidated(null);
                             setSaved(null);

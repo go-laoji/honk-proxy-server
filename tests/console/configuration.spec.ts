@@ -43,6 +43,8 @@ test("shared config draft conflicts, activation, redacted export, pending restar
     await expect(peer.getByRole("alert")).toContainText(
       "configuration changed",
     );
+    await page.reload();
+    await expect(editor).toHaveValue(/\[REDACTED\]/);
     await page.getByRole("button", { name: "校验并预览", exact: true }).click();
     await expect(page.getByRole("status")).toContainText("校验通过");
     await expect(

@@ -207,8 +207,19 @@ impl Supervisor {
                     column: Some(column),
                 }]
             })?;
+        let reference = if input.use_draft_credentials {
+            if input.expected_draft_version != Some(workspace.draft.version) {
+                return Err(vec![diagnostic(
+                    "expected_draft_version",
+                    "shared draft changed; reload before referencing its credentials",
+                )]);
+            }
+            &workspace.draft.config
+        } else {
+            &workspace.desired.config
+        };
         config
-            .restore_redacted(&workspace.desired.config)
+            .restore_redacted(reference)
             .map_err(|error| vec![diagnostic("configuration", &error.to_string())])?;
         config.resolve_paths(&self.path_base);
         Ok(config)
@@ -525,7 +536,7 @@ impl Supervisor {
 fn parse_error(diagnostics: &[ConfigDiagnostic]) -> ApplicationError {
     if diagnostics
         .iter()
-        .any(|error| error.path == "expected_revision")
+        .any(|error| error.path.starts_with("expected_"))
     {
         StorageError::Conflict.into()
     } else {

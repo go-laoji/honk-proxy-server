@@ -155,6 +155,7 @@ mod tests {
             expected_revision: 1,
             expected_draft_version: Some(1),
             note: "API edit".into(),
+            use_draft_credentials: false,
         };
         assert!(client.validate_config(&input).await.unwrap().valid);
         client.save_draft(&input).await.unwrap();

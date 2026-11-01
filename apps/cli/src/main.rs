@@ -359,6 +359,7 @@ fn read_config_input(
         expected_revision,
         expected_draft_version,
         note,
+        use_draft_credentials: false,
     })
 }
 
