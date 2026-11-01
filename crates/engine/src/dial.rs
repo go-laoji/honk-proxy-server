@@ -230,6 +230,13 @@ impl Dialer {
             self.policy.read().unwrap().traffic_failure_threshold,
         );
     }
+    pub(crate) fn prepared_static_fingerprint(&self) -> String {
+        let mut hash = Sha256::new();
+        for upstream in &self.upstreams {
+            hash.update(upstream.identity.as_bytes());
+        }
+        format!("{:x}", hash.finalize())
+    }
     pub fn set_sources(&self, sources: std::collections::HashMap<String, String>) {
         *self.sources.write().unwrap() = sources;
     }

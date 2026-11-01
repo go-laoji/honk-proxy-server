@@ -409,3 +409,51 @@ async fn real_target_rejection_is_visible_without_invalidating_health_or_replayi
     assert_eq!(node.results[0].checked_at, before);
     app.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn rotating_ca_contents_at_same_path_cannot_reuse_old_prepared_roots_or_health() {
+    let cert_a = support::certificate();
+    let cert_b = support::certificate();
+    let target = support::origin(None).await;
+    let proxy = support::http_proxy(Some(&cert_a), None, 200).await;
+    let directory = tempfile::tempdir().unwrap();
+    let trust = directory.path().join("trust.pem");
+    std::fs::copy(&cert_a.config.certificate, &trust).unwrap();
+    let mut cfg = config(&proxy, &target);
+    cfg.proxy.upstreams[0].protocol = ProxyProtocol::Https;
+    cfg.proxy.upstreams[0].tls_server_name = Some("localhost".into());
+    cfg.proxy.upstreams[0].ca_certificate = Some(trust.clone());
+    let app = boot(cfg.clone()).await;
+    until(async || app.current().engine.ready()).await;
+    let before = app.current().engine.clone();
+    let identity = before.probe_plans()[0].identity().to_owned();
+    std::fs::copy(&cert_b.config.certificate, &trust).unwrap();
+    let revision = app
+        .create_revision(hps_domain::ConfigInput {
+            toml: toml::to_string(&cfg).unwrap(),
+            expected_revision: 1,
+            expected_draft_version: None,
+            note: "rotate CA contents".into(),
+            use_draft_credentials: false,
+        })
+        .await
+        .unwrap();
+    app.activate(hps_domain::ConfigActivate {
+        revision: revision.id,
+        expected_revision: 1,
+        defer_until_restart: false,
+    })
+    .await
+    .unwrap();
+    assert!(!Arc::ptr_eq(&before, &app.current().engine));
+    assert_ne!(identity, app.current().engine.probe_plans()[0].identity());
+    assert!(!app.current().engine.ready());
+    until(async || {
+        app.health_overview(None, 20).await.unwrap().nodes[0]
+            .results
+            .iter()
+            .any(|r| r.phase == ProbePhase::UpstreamTls && r.verdict == HealthVerdict::Failed)
+    })
+    .await;
+    app.shutdown().await.unwrap();
+}

@@ -416,9 +416,11 @@ impl Supervisor {
                 restart_required,
             });
         }
-        if serde_json::to_value(&current.base_config.proxy)
-            .map_err(|_| ApplicationError::Invalid)?
-            == serde_json::to_value(&target.config.proxy).map_err(|_| ApplicationError::Invalid)?
+        if current.engine.preparation_fingerprint() == candidate.preparation_fingerprint()
+            && serde_json::to_value(&current.base_config.proxy)
+                .map_err(|_| ApplicationError::Invalid)?
+                == serde_json::to_value(&target.config.proxy)
+                    .map_err(|_| ApplicationError::Invalid)?
             && serde_json::to_value(&current.base_config.providers)
                 .map_err(|_| ApplicationError::Invalid)?
                 == serde_json::to_value(&target.config.providers)

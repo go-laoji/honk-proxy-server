@@ -6,6 +6,7 @@ use crate::{
 };
 use hps_config::{InboundConfig, ProxyConfig, ProxyProtocol};
 use hps_domain::{CertificateStatus, InboundStatus, ProxyStatus, ResourceLimits};
+use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeMap,
     future::Future,
@@ -36,6 +37,7 @@ pub enum EngineError {
 
 pub struct Engine {
     entries: BTreeMap<String, Arc<Entry>>,
+    preparation_fingerprint: String,
     dialer: Arc<Dialer>,
     limits: Arc<ResourceLimits>,
     capacity: Arc<Capacity>,
@@ -121,6 +123,9 @@ impl Engine {
             dialer.demand = old.dialer.demand.clone();
             dialer.health = old.dialer.health.clone();
         }
+        let mut preparation = Sha256::new();
+        preparation.update(serde_json::to_vec(&config).map_err(|_| EngineError::Configuration)?);
+        preparation.update(dialer.prepared_static_fingerprint().as_bytes());
         let dialer = Arc::new(dialer);
         let mut entries = BTreeMap::new();
         for config in config.inbounds {
@@ -128,6 +133,7 @@ impl Engine {
             let (tls, certificate) = match &config.tls {
                 Some(tls) => {
                     let (tls, info) = crate::tls::server(tls).map_err(|_| EngineError::Tls)?;
+                    preparation.update(info.fingerprint.as_bytes());
                     (
                         Some(TlsAcceptor::from(tls)),
                         Some(CertificateStatus {
@@ -166,6 +172,7 @@ impl Engine {
             entries.insert(entry.config.id.clone(), Arc::new(entry));
         }
         Ok(Arc::new(Self {
+            preparation_fingerprint: format!("{:x}", preparation.finalize()),
             entries,
             dialer,
             capacity: previous
@@ -180,6 +187,9 @@ impl Engine {
             cancel: CancellationToken::new(),
             generation: std::sync::atomic::AtomicI64::new(0),
         }))
+    }
+    pub fn preparation_fingerprint(&self) -> &str {
+        &self.preparation_fingerprint
     }
     pub fn health_registry(&self) -> Arc<crate::health::HealthRegistry> {
         self.dialer.health.clone()
