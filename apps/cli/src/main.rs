@@ -61,7 +61,49 @@ enum Command {
 #[derive(Subcommand)]
 enum ConfigCommand {
     Show,
-    Check { path: PathBuf },
+    Check {
+        path: PathBuf,
+    },
+    Workspace,
+    Validate {
+        path: PathBuf,
+        #[arg(long)]
+        expected_revision: Option<i64>,
+    },
+    SaveDraft {
+        path: PathBuf,
+        #[arg(long)]
+        expected_revision: i64,
+        #[arg(long)]
+        draft_version: i64,
+    },
+    Import {
+        path: PathBuf,
+        #[arg(long)]
+        expected_revision: i64,
+        #[arg(long, default_value = "CLI import")]
+        note: String,
+    },
+    Activate {
+        revision: i64,
+        #[arg(long)]
+        expected_revision: i64,
+        #[arg(long)]
+        defer_until_restart: bool,
+    },
+    Rollback {
+        revision: i64,
+        #[arg(long)]
+        expected_revision: i64,
+        #[arg(long)]
+        defer_until_restart: bool,
+    },
+    Export {
+        #[arg(long)]
+        revision: Option<i64>,
+        #[arg(long)]
+        path: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -82,12 +124,26 @@ async fn main() -> ExitCode {
         Ok(value) => {
             match args.output {
                 Output::Json => println!("{}", value),
+                Output::Text
+                    if matches!(
+                        args.command,
+                        Command::Config {
+                            command: ConfigCommand::Export { path: None, .. }
+                        }
+                    ) =>
+                {
+                    print!("{}", value["toml"].as_str().unwrap_or(""))
+                }
                 Output::Text => println!(
                     "{}",
                     serde_json::to_string_pretty(&value).expect("JSON value")
                 ),
             }
-            ExitCode::SUCCESS
+            if value.get("valid").and_then(serde_json::Value::as_bool) == Some(false) {
+                ExitCode::from(5)
+            } else {
+                ExitCode::SUCCESS
+            }
         }
         Err((code, message)) => {
             eprintln!("{message}");
@@ -152,9 +208,112 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
         Command::Linux {
             command: LinuxCommand::Preflight,
         } => serde_json::to_value(client.linux_preflight().await.map_err(client_error)?),
-        Command::Config {
-            command: ConfigCommand::Show,
-        } => serde_json::to_value(client.config().await.map_err(client_error)?),
+        Command::Config { command } => match command {
+            ConfigCommand::Show => {
+                serde_json::to_value(client.config().await.map_err(client_error)?)
+            }
+            ConfigCommand::Workspace => {
+                serde_json::to_value(client.config_workspace().await.map_err(client_error)?)
+            }
+            ConfigCommand::Validate {
+                path,
+                expected_revision,
+            } => {
+                let expected = match expected_revision {
+                    Some(expected) => *expected,
+                    None => {
+                        client
+                            .config_workspace()
+                            .await
+                            .map_err(client_error)?
+                            .desired_revision
+                    }
+                };
+                serde_json::to_value(
+                    client
+                        .validate_config(&read_config_input(path, expected, None, String::new())?)
+                        .await
+                        .map_err(client_error)?,
+                )
+            }
+            ConfigCommand::SaveDraft {
+                path,
+                expected_revision,
+                draft_version,
+            } => serde_json::to_value(
+                client
+                    .save_draft(&read_config_input(
+                        path,
+                        *expected_revision,
+                        Some(*draft_version),
+                        String::new(),
+                    )?)
+                    .await
+                    .map_err(client_error)?,
+            ),
+            ConfigCommand::Import {
+                path,
+                expected_revision,
+                note,
+            } => serde_json::to_value(
+                client
+                    .create_revision(&read_config_input(
+                        path,
+                        *expected_revision,
+                        None,
+                        note.clone(),
+                    )?)
+                    .await
+                    .map_err(client_error)?,
+            ),
+            ConfigCommand::Activate {
+                revision,
+                expected_revision,
+                defer_until_restart,
+            } => serde_json::to_value(
+                client
+                    .activate_config(&hps_domain::ConfigActivate {
+                        revision: *revision,
+                        expected_revision: *expected_revision,
+                        defer_until_restart: *defer_until_restart,
+                    })
+                    .await
+                    .map_err(client_error)?,
+            ),
+            ConfigCommand::Rollback {
+                revision,
+                expected_revision,
+                defer_until_restart,
+            } => serde_json::to_value(
+                client
+                    .rollback_config(&hps_domain::ConfigActivate {
+                        revision: *revision,
+                        expected_revision: *expected_revision,
+                        defer_until_restart: *defer_until_restart,
+                    })
+                    .await
+                    .map_err(client_error)?,
+            ),
+            ConfigCommand::Export { revision, path } => {
+                let export = client
+                    .export_config(*revision)
+                    .await
+                    .map_err(client_error)?;
+                if let Some(path) = path {
+                    let mut file = std::fs::OpenOptions::new()
+                        .write(true)
+                        .create_new(true)
+                        .open(path)
+                        .map_err(|error| (2, error.to_string()))?;
+                    file.write_all(export.toml.as_bytes())
+                        .map_err(|error| (2, error.to_string()))?;
+                    Ok(serde_json::json!({"created":path,"revision":export.revision}))
+                } else {
+                    serde_json::to_value(export)
+                }
+            }
+            ConfigCommand::Check { .. } => unreachable!(),
+        },
         Command::Ui { open } => {
             let url = client.console_url();
             if *open {
@@ -162,12 +321,27 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
             }
             Ok(serde_json::json!({"url": url.as_str()}))
         }
-        Command::Init { .. }
-        | Command::Config {
-            command: ConfigCommand::Check { .. },
-        } => unreachable!(),
+        Command::Init { .. } => unreachable!(),
     };
     value.map_err(|e| (5, e.to_string()))
+}
+
+fn read_config_input(
+    path: &std::path::Path,
+    expected_revision: i64,
+    expected_draft_version: Option<i64>,
+    note: String,
+) -> Result<hps_domain::ConfigInput, (u8, String)> {
+    let body = std::fs::read_to_string(path).map_err(|error| (2, error.to_string()))?;
+    if body.len() > 2 * 1024 * 1024 {
+        return Err((2, "configuration file exceeds 2 MiB".into()));
+    }
+    Ok(hps_domain::ConfigInput {
+        toml: body,
+        expected_revision,
+        expected_draft_version,
+        note,
+    })
 }
 
 fn open_browser(url: &str) -> std::io::Result<()> {

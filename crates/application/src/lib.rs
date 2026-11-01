@@ -54,6 +54,7 @@ pub struct RuntimeSnapshot {
     pub revision: i64,
     pub config: DaemonConfig,
     pub engine: Arc<Engine>,
+    pub management_tls: Option<hps_engine::tls::PreparedServer>,
     base_config: DaemonConfig,
 }
 pub struct Supervisor {
@@ -64,6 +65,7 @@ pub struct Supervisor {
     overrides: StartupOverrides,
     path_base: PathBuf,
     closed: std::sync::atomic::AtomicBool,
+    pending_restart: Mutex<Option<(i64, Vec<String>)>>,
 }
 impl Supervisor {
     pub async fn boot(
@@ -75,9 +77,10 @@ impl Supervisor {
         let mut config = base_config.clone();
         overrides.apply(&mut config);
         let preparing = config.clone();
-        let engine = tokio::task::spawn_blocking(move || prepare_engine(&preparing, None))
+        let prepared = tokio::task::spawn_blocking(move || prepare_engine(&preparing, None))
             .await
             .map_err(|_| ApplicationError::Worker)??;
+        let engine = prepared.engine;
         engine.prepare_enabled(None).await?;
         engine.start_enabled().await?;
         let path_base = store
@@ -93,12 +96,14 @@ impl Supervisor {
                 config,
                 base_config,
                 engine,
+                management_tls: prepared.management_tls,
             }),
             operation: tokio::sync::Mutex::new(()),
             retired: Mutex::new(vec![]),
             overrides,
             path_base,
             closed: std::sync::atomic::AtomicBool::new(false),
+            pending_restart: Mutex::new(None),
         }))
     }
     pub fn current(&self) -> Arc<RuntimeSnapshot> {
@@ -115,6 +120,16 @@ impl Supervisor {
         let current = self.current();
         let mut retired = self.retired.lock().unwrap();
         retired.retain(|engine| !engine.is_idle());
+        let mut pending = restart_fields(&current.base_config, &workspace.desired.config);
+        if let Some((revision, reasons)) = self.pending_restart.lock().unwrap().as_ref()
+            && *revision == workspace.desired.revision.id
+        {
+            for reason in reasons {
+                if !pending.contains(reason) {
+                    pending.push(reason.clone());
+                }
+            }
+        }
         Ok(ConfigWorkspace {
             format_version: 1,
             desired_revision: workspace.desired.revision.id,
@@ -140,7 +155,7 @@ impl Supervisor {
                     error_code: activation.error_code,
                 })
                 .collect(),
-            pending_restart: restart_fields(&current.base_config, &workspace.desired.config),
+            pending_restart: pending,
             storage_path: self
                 .store
                 .database_path
@@ -148,6 +163,15 @@ impl Supervisor {
                 .map(|path| path.display().to_string()),
             draining_generations: retired.len(),
             startup_overrides: self.overrides.fields(),
+            management_certificate: current.management_tls.as_ref().map(|prepared| {
+                let info = &prepared.certificate;
+                let now = hps_storage::unix_now();
+                hps_domain::CertificateStatus {
+                    not_before_unix: info.not_before_unix,
+                    not_after_unix: info.not_after_unix,
+                    valid_now: now >= info.not_before_unix && now <= info.not_after_unix,
+                }
+            }),
         })
     }
     async fn parse(&self, input: &ConfigInput) -> Result<DaemonConfig, Vec<ConfigDiagnostic>> {
@@ -286,12 +310,12 @@ impl Supervisor {
         }
         let target = self.store.revision(input.revision).await?;
         let current = self.current();
-        let restart_required = restart_fields(&current.base_config, &target.config);
+        let mut restart_required = restart_fields(&current.base_config, &target.config);
         let mut config = target.config.clone();
         self.overrides.apply(&mut config);
         let prepare = config.clone();
         let previous = current.engine.clone();
-        let candidate =
+        let prepared =
             match tokio::task::spawn_blocking(move || prepare_engine(&prepare, Some(&previous)))
                 .await
                 .map_err(|_| ApplicationError::Worker)?
@@ -308,21 +332,39 @@ impl Supervisor {
                     return Err(error);
                 }
             };
+        if current
+            .management_tls
+            .as_ref()
+            .map(|prepared| &prepared.certificate.fingerprint)
+            != prepared
+                .management_tls
+                .as_ref()
+                .map(|prepared| &prepared.certificate.fingerprint)
+            && !restart_required
+                .iter()
+                .any(|field| field == "management_tls")
+        {
+            restart_required.push("management_tls.certificate_contents".into());
+        }
+        let candidate = prepared.engine;
         if !restart_required.is_empty() || input.defer_until_restart {
             let activation_id = self
                 .store
                 .activate(input.revision, input.expected_revision, true)
                 .await?;
+            let restart_required = if restart_required.is_empty() {
+                vec!["explicit_restart_requested".into()]
+            } else {
+                restart_required
+            };
+            *self.pending_restart.lock().unwrap() =
+                Some((input.revision, restart_required.clone()));
             return Ok(ConfigActivationResult {
                 activation_id,
                 desired_revision: input.revision,
                 running_revision: current.revision,
                 state: "pending_restart".into(),
-                restart_required: if restart_required.is_empty() {
-                    vec!["explicit_restart_requested".into()]
-                } else {
-                    restart_required
-                },
+                restart_required,
             });
         }
         {
@@ -363,8 +405,10 @@ impl Supervisor {
             config,
             base_config: target.config,
             engine: candidate,
+            management_tls: prepared.management_tls,
         }));
         self.retired.lock().unwrap().push(current.engine.clone());
+        *self.pending_restart.lock().unwrap() = None;
         self.store
             .mark_applied(input.revision, Some(activation_id))
             .await?;
@@ -378,6 +422,22 @@ impl Supervisor {
     }
     pub async fn export_revision(&self, id: i64) -> Result<String, ApplicationError> {
         export(&self.store.revision(id).await?.config)
+    }
+    pub async fn rollback(
+        self: &Arc<Self>,
+        input: ConfigActivate,
+    ) -> Result<ConfigActivationResult, ApplicationError> {
+        if self
+            .store
+            .revision(input.revision)
+            .await?
+            .revision
+            .applied_at
+            .is_none()
+        {
+            return Err(ApplicationError::Invalid);
+        }
+        self.activate(input).await
     }
     pub async fn start_inbound(&self, id: &str) -> Result<InboundStatus, ApplicationError> {
         let _operation = self.operation.lock().await;
@@ -426,23 +486,32 @@ fn revision_view(revision: hps_storage::Revision) -> ConfigRevision {
         checksum: revision.checksum,
         created_at: revision.created_at,
         note: revision.note,
+        applied_at: revision.applied_at,
     }
 }
 fn export(config: &DaemonConfig) -> Result<String, ApplicationError> {
     toml::to_string_pretty(&config.redacted()).map_err(|_| ApplicationError::Invalid)
 }
+struct PreparedRuntime {
+    engine: Arc<Engine>,
+    management_tls: Option<hps_engine::tls::PreparedServer>,
+}
 fn prepare_engine(
     config: &DaemonConfig,
     previous: Option<&Arc<Engine>>,
-) -> Result<Arc<Engine>, ApplicationError> {
+) -> Result<PreparedRuntime, ApplicationError> {
     tracing_subscriber::EnvFilter::try_new(&config.log_filter)
         .map_err(|_| ApplicationError::Invalid)?;
-    if let Some(tls) = &config.management_tls {
-        let (_, info) = hps_engine::tls::server(tls).map_err(|_| ApplicationError::Invalid)?;
-        if !info.valid_now {
+    let management_tls = if let Some(tls) = &config.management_tls {
+        let prepared =
+            hps_engine::tls::prepare_server(tls).map_err(|_| ApplicationError::Invalid)?;
+        if !prepared.certificate.valid_now {
             return Err(ApplicationError::Invalid);
         }
-    }
+        Some(prepared)
+    } else {
+        None
+    };
     let engine = Engine::with_previous(config.proxy.clone(), previous)?;
     if engine.status().inbounds.iter().any(|entry| {
         entry
@@ -452,7 +521,10 @@ fn prepare_engine(
     }) {
         return Err(ApplicationError::Invalid);
     }
-    Ok(engine)
+    Ok(PreparedRuntime {
+        engine,
+        management_tls,
+    })
 }
 fn restart_fields(current: &DaemonConfig, target: &DaemonConfig) -> Vec<String> {
     let before = serde_json::to_value(current.redacted()).expect("config serialization");

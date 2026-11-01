@@ -24,6 +24,7 @@ tokio-util = { version = "0.7", features = ["rt"] }
 async-stream = "0.3"
 x509-parser = "0.18"
 libc = "0.2"
+sha2 = "0.10"
 
 [dev-dependencies]
 rcgen = "0.14"

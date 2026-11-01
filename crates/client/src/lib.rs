@@ -68,6 +68,60 @@ impl HpsClient {
             .map_err(|_| ClientError::InvalidEndpoint)?;
         Self::decode(self.http.post(url).send().await?).await
     }
+    pub async fn post_body<T: DeserializeOwned, B: serde::Serialize + ?Sized>(
+        &self,
+        path: &str,
+        body: &B,
+    ) -> Result<T, ClientError> {
+        let url = self
+            .endpoint
+            .join(path)
+            .map_err(|_| ClientError::InvalidEndpoint)?;
+        Self::decode(self.http.post(url).json(body).send().await?).await
+    }
+    pub async fn config_workspace(&self) -> Result<hps_domain::ConfigWorkspace, ClientError> {
+        self.get_json("api/v1/config/workspace").await
+    }
+    pub async fn validate_config(
+        &self,
+        input: &hps_domain::ConfigInput,
+    ) -> Result<hps_domain::ConfigValidation, ClientError> {
+        self.post_body("api/v1/config/validate", input).await
+    }
+    pub async fn save_draft(
+        &self,
+        input: &hps_domain::ConfigInput,
+    ) -> Result<hps_domain::ConfigDraft, ClientError> {
+        self.post_body("api/v1/config/draft", input).await
+    }
+    pub async fn create_revision(
+        &self,
+        input: &hps_domain::ConfigInput,
+    ) -> Result<hps_domain::ConfigRevision, ClientError> {
+        self.post_body("api/v1/config/revisions", input).await
+    }
+    pub async fn activate_config(
+        &self,
+        input: &hps_domain::ConfigActivate,
+    ) -> Result<hps_domain::ConfigActivationResult, ClientError> {
+        self.post_body("api/v1/config/activate", input).await
+    }
+    pub async fn rollback_config(
+        &self,
+        input: &hps_domain::ConfigActivate,
+    ) -> Result<hps_domain::ConfigActivationResult, ClientError> {
+        self.post_body("api/v1/config/rollback", input).await
+    }
+    pub async fn export_config(
+        &self,
+        revision: Option<i64>,
+    ) -> Result<hps_domain::ConfigExport, ClientError> {
+        let path = revision.map_or_else(
+            || "api/v1/config/export".into(),
+            |revision| format!("api/v1/config/revisions/{revision}"),
+        );
+        self.get_json(&path).await
+    }
 
     async fn decode<T: DeserializeOwned>(response: reqwest::Response) -> Result<T, ClientError> {
         if !response.status().is_success() {

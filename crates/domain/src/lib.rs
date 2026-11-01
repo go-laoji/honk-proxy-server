@@ -192,6 +192,7 @@ pub struct ConfigRevision {
     pub checksum: String,
     pub created_at: i64,
     pub note: String,
+    pub applied_at: Option<i64>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConfigActivation {
@@ -223,6 +224,13 @@ pub struct ConfigWorkspace {
     pub storage_path: Option<String>,
     pub draining_generations: usize,
     pub startup_overrides: Vec<String>,
+    pub management_certificate: Option<CertificateStatus>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigExport {
+    pub format_version: u32,
+    pub revision: i64,
+    pub toml: String,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConfigChange {

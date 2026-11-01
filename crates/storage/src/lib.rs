@@ -38,6 +38,7 @@ pub struct Revision {
     pub checksum: String,
     pub created_at: i64,
     pub note: String,
+    pub applied_at: Option<i64>,
 }
 #[derive(Debug, Clone)]
 pub struct Document {
@@ -197,7 +198,7 @@ impl Store {
         self.call(|connection|{
             let (desired,last_applied):(i64,Option<i64>)=connection.query_row("SELECT desired_revision,last_applied_revision FROM config_head WHERE singleton=1",[],|row|Ok((row.get(0)?,row.get(1)?)))?;
             let draft=connection.query_row("SELECT version,base_revision,document,updated_at FROM config_draft WHERE singleton=1",[],|row|Ok((row.get::<_,i64>(0)?,row.get::<_,i64>(1)?,row.get::<_,String>(2)?,row.get::<_,i64>(3)?)))?;
-            let mut revisions=connection.prepare("SELECT id,parent_id,checksum,created_at,note FROM config_revisions ORDER BY id DESC LIMIT 50")?;
+            let mut revisions=connection.prepare("SELECT id,parent_id,checksum,created_at,note,applied_at FROM config_revisions ORDER BY id DESC LIMIT 50")?;
             let revisions=revisions.query_map([],revision_row)?.collect::<Result<_,_>>()?;
             let mut activations=connection.prepare("SELECT id,revision,previous_revision,state,created_at,error_code FROM config_activations ORDER BY id DESC LIMIT 50")?;
             let activations=activations.query_map([],|row|Ok(Activation{id:row.get(0)?,revision:row.get(1)?,previous_revision:row.get(2)?,state:row.get(3)?,created_at:row.get(4)?,error_code:row.get(5)?}))?.collect::<Result<_,_>>()?;
@@ -265,7 +266,9 @@ impl Store {
         self.call(move|connection|{
             let transaction=connection.transaction()?;read_document(&transaction,revision)?;
             transaction.execute("UPDATE config_head SET last_applied_revision=?1 WHERE singleton=1",[revision])?;
+            transaction.execute("UPDATE config_revisions SET applied_at=?1 WHERE id=?2",params![unix_now(),revision])?;
             if let Some(id)=activation {transaction.execute("UPDATE config_activations SET state='applied',error_code=NULL WHERE id=?1 AND revision=?2",params![id,revision])?;}
+            else {transaction.execute("UPDATE config_activations SET state='applied',error_code=NULL WHERE revision=?1 AND state IN ('pending_restart','prepared','interrupted')",[revision])?;}
             transaction.commit()?;Ok(())
         }).await
     }
@@ -289,10 +292,11 @@ fn revision_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Revision> {
         checksum: row.get(2)?,
         created_at: row.get(3)?,
         note: row.get(4)?,
+        applied_at: row.get(5)?,
     })
 }
 fn read_document(connection: &Connection, id: i64) -> Result<Document, StorageError> {
-    let row=connection.query_row("SELECT id,parent_id,checksum,created_at,note,document FROM config_revisions WHERE id=?1",[id],|row|Ok((revision_row(row)?,row.get::<_,String>(5)?))).optional()?.ok_or(StorageError::NotFound)?;
+    let row=connection.query_row("SELECT id,parent_id,checksum,created_at,note,applied_at,document FROM config_revisions WHERE id=?1",[id],|row|Ok((revision_row(row)?,row.get::<_,String>(6)?))).optional()?.ok_or(StorageError::NotFound)?;
     if format!("{:x}", Sha256::digest(row.1.as_bytes())) != row.0.checksum {
         return Err(StorageError::Invalid);
     }
@@ -331,7 +335,7 @@ fn migrate(connection: &mut Connection, bootstrap: &str) -> Result<(), StorageEr
         [],
         |row| row.get(0),
     )?;
-    if version > 1 {
+    if version > 2 {
         return Err(StorageError::SchemaTooNew);
     }
     let transaction = connection.transaction()?;
@@ -339,6 +343,13 @@ fn migrate(connection: &mut Connection, bootstrap: &str) -> Result<(), StorageEr
         transaction.execute_batch(include_str!("../migrations/0001_configuration.up.sql"))?;
         transaction.execute(
             "INSERT INTO schema_migrations(version,applied_at) VALUES(1,?1)",
+            [unix_now()],
+        )?;
+    }
+    if version < 2 {
+        transaction.execute_batch(include_str!("../migrations/0002_known_good.up.sql"))?;
+        transaction.execute(
+            "INSERT INTO schema_migrations(version,applied_at) VALUES(2,?1)",
             [unix_now()],
         )?;
     }

@@ -80,7 +80,7 @@ test("Chromium without proxy credentials reaches an unresolvable origin through 
   const environment = { ...process.env };
   delete environment.DISPLAY;
   delete environment.WAYLAND_DISPLAY;
-  const daemon = spawn(resolve("target/debug/hpsd"), ["--config", config], {
+  const daemon = spawn(resolve("target/debug/hpsd"), ["--ephemeral", "--config", config], {
     stdio: "ignore",
     env: environment,
   });
