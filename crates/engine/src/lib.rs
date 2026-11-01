@@ -1,4 +1,5 @@
 //! Shared user-space transport for explicit and future transparent proxy ingress.
+mod capacity;
 pub mod dial;
 mod http_proxy;
 pub mod runtime;

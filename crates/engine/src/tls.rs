@@ -8,6 +8,30 @@ use std::{
 use tokio_rustls::rustls::{self, ClientConfig, RootCertStore, ServerConfig};
 use x509_parser::prelude::FromDer;
 
+fn read_pem(path: &std::path::Path) -> Result<Vec<u8>, ProxyError> {
+    use std::io::Read;
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NONBLOCK);
+    }
+    let file = options.open(path).map_err(|_| ProxyError::TlsConfig)?;
+    let metadata = file.metadata().map_err(|_| ProxyError::TlsConfig)?;
+    if !metadata.is_file() || metadata.len() > 1024 * 1024 {
+        return Err(ProxyError::TlsConfig);
+    }
+    let mut bytes = Vec::new();
+    file.take(1024 * 1024 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| ProxyError::TlsConfig)?;
+    if bytes.len() > 1024 * 1024 {
+        return Err(ProxyError::TlsConfig);
+    }
+    Ok(bytes)
+}
+
 #[derive(Debug, Clone)]
 pub struct CertificateInfo {
     pub not_before_unix: i64,
@@ -20,7 +44,7 @@ fn provider() -> Arc<rustls::crypto::CryptoProvider> {
 }
 
 pub fn server(config: &ServerTls) -> Result<(Arc<ServerConfig>, CertificateInfo), ProxyError> {
-    let bytes = std::fs::read(&config.certificate).map_err(|_| ProxyError::TlsConfig)?;
+    let bytes = read_pem(&config.certificate)?;
     let certs: Vec<_> = rustls_pemfile::certs(&mut BufReader::new(bytes.as_slice()))
         .collect::<Result<_, _>>()
         .map_err(|_| ProxyError::TlsConfig)?;
@@ -37,7 +61,7 @@ pub fn server(config: &ServerTls) -> Result<(Arc<ServerConfig>, CertificateInfo)
         valid_now: now >= cert.validity().not_before.timestamp()
             && now <= cert.validity().not_after.timestamp(),
     };
-    let key = std::fs::read(&config.private_key).map_err(|_| ProxyError::TlsConfig)?;
+    let key = read_pem(&config.private_key)?;
     let key = rustls_pemfile::private_key(&mut BufReader::new(key.as_slice()))
         .map_err(|_| ProxyError::TlsConfig)?
         .ok_or(ProxyError::TlsConfig)?;
@@ -54,7 +78,7 @@ pub fn server(config: &ServerTls) -> Result<(Arc<ServerConfig>, CertificateInfo)
 pub fn client(config: &UpstreamConfig) -> Result<Arc<ClientConfig>, ProxyError> {
     let mut roots = RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
     if let Some(path) = &config.ca_certificate {
-        let bytes = std::fs::read(path).map_err(|_| ProxyError::TlsConfig)?;
+        let bytes = read_pem(path)?;
         let mut reader = BufReader::new(bytes.as_slice());
         let certs = rustls_pemfile::certs(&mut reader);
         let mut count = 0;

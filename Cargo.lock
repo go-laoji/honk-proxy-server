@@ -62,6 +62,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "arc-swap"
+version = "1.9.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "380962b3d93b99642e50b9febf72c071e97e8b32d86eae9cf4ef582bb960ae6e"
+dependencies = [
+ "rustversion",
+]
+
+[[package]]
 name = "asn1-rs"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -583,6 +592,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "hps-application"
+version = "0.1.0"
+dependencies = [
+ "arc-swap",
+ "bytes",
+ "hps-config",
+ "hps-domain",
+ "hps-engine",
+ "hps-storage",
+ "http",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "rcgen",
+ "reqwest",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tokio-rustls",
+ "toml",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "hps-cli"
 version = "0.1.0"
 dependencies = [
@@ -636,6 +670,7 @@ name = "hps-domain"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -652,6 +687,7 @@ dependencies = [
  "httparse",
  "hyper",
  "hyper-util",
+ "libc",
  "rcgen",
  "reqwest",
  "rustls-pemfile",
