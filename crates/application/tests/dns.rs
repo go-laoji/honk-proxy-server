@@ -139,3 +139,44 @@ async fn dns_udp_tcp_hot_policy_cas_bind_failure_and_shutdown_are_real() {
     assert!(TcpStream::connect(listener).await.is_err());
     task.abort();
 }
+
+#[tokio::test]
+async fn dns_static_egress_cannot_reenter_its_own_proxy_inlet() {
+    use hps_config::{InboundConfig, ProxyProtocol, UpstreamConfig};
+    let reservation = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let inlet = reservation.local_addr().unwrap();
+    drop(reservation);
+    let mut config = DaemonConfig::default();
+    config.health.enabled = false;
+    config.proxy.inbounds = vec![InboundConfig {
+        id: "local".into(),
+        protocol: ProxyProtocol::Http,
+        listen: inlet,
+        enabled: true,
+        tls: None,
+        max_connections: 8,
+        bytes_per_second: 0,
+    }];
+    config.proxy.upstreams = vec![UpstreamConfig {
+        id: "self".into(),
+        protocol: ProxyProtocol::Http,
+        host: "proxy.invalid".into(),
+        port: inlet.port(),
+        enabled: true,
+        credentials: None,
+        expires_at_unix: None,
+        ca_certificate: None,
+        tls_server_name: None,
+    }];
+    let upstream = &mut config.dns.upstreams[0];
+    upstream.protocol = DnsProtocol::Tcp;
+    upstream.addresses = vec!["203.0.113.53:53".parse().unwrap()];
+    upstream.proxy_id = Some("self".into());
+    upstream.proxy_bootstrap_ips = vec![inlet.ip()];
+    let store = hps_storage::Store::open(None, config).unwrap();
+    assert!(matches!(
+        Supervisor::boot(store, StartupOverrides::default()).await,
+        Err(hps_application::ApplicationError::Invalid)
+    ));
+    let _unused = TcpListener::bind(inlet).await.unwrap();
+}

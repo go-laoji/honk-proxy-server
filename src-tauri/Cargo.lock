@@ -1553,6 +1553,7 @@ dependencies = [
  "bytes",
  "hickory-proto",
  "hps-config",
+ "hps-domain",
  "hps-net",
  "http",
  "http-body-util",
@@ -1582,7 +1583,9 @@ dependencies = [
 name = "hps-net"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "serde",
+ "socket2",
  "thiserror 2.0.21",
  "tokio",
 ]

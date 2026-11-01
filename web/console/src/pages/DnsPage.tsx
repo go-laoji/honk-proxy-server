@@ -76,6 +76,9 @@ type Overview = {
     bytes: number;
     epoch: number;
     in_flight: number;
+    system_workers: number;
+    system_queued: number;
+    system_worker_limit: number;
     hits: number;
     misses: number;
     merged: number;
@@ -277,7 +280,7 @@ export default function DnsPage({
             <Stat
               title="解析并发"
               value={`${data.cache.in_flight} / ${data.configuration.max_parallel}`}
-              detail={`请求期限 ${data.configuration.timeout_ms} ms · r${data.running_revision}`}
+              detail={`请求期限 ${data.configuration.timeout_ms} ms · r${data.running_revision}${data.configuration.upstreams.some((up) => up.protocol === "system") ? ` · 系统解析 ${data.cache.system_workers}/${data.cache.system_worker_limit} · 排队 ${data.cache.system_queued}` : ""}`}
               icon={RefreshCw}
             />
           </div>

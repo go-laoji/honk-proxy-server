@@ -151,7 +151,21 @@ impl DnsServer {
                         truncated.answers.clear();
                         truncated.authorities.clear();
                         truncated.additionals.clear();
+                        // Keep only minimal EDNS metadata. Padding/cookies/options
+                        // from an oversized upstream must not exceed the client's
+                        // UDP limit after the answer sections have been removed.
+                        if let Some(old) = truncated.edns.take() {
+                            let mut minimal = hickory_proto::op::Edns::new();
+                            minimal
+                                .set_max_payload(limit as u16)
+                                .set_rcode_high(old.rcode_high())
+                                .set_dnssec_ok(old.flags().dnssec_ok);
+                            truncated.edns = Some(minimal);
+                        }
                         data = truncated.to_vec().unwrap_or_default();
+                    }
+                    if data.len() > limit {
+                        return;
                     }
                     let _ = send_packet(&socket, &data, peer, metadata).await;
                 });

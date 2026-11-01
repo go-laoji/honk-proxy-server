@@ -242,9 +242,7 @@ impl DnsConfig {
             if !crate::valid_id(&route.id)
                 || !route_ids.insert(&route.id)
                 || !ids.contains(route.upstream.as_str())
-                || route.domain.as_ref().is_some_and(|d| {
-                    !crate::valid_host(d.trim_end_matches('.')) || d.parse::<IpAddr>().is_ok()
-                })
+                || route.domain.as_ref().is_some_and(|d| !valid_dns_route(d))
                 || route.query_types.len() > 32
                 || route.query_types.iter().any(|t| !valid_query_type(t))
                 || route.purposes.len() > 4
@@ -282,6 +280,19 @@ pub fn valid_query_type(s: &str) -> bool {
         .strip_prefix("TYPE")
         .and_then(|n| n.parse::<u16>().ok())
         .is_some_and(|n| !matches!(n, 0 | 41 | 249..=255))
+}
+fn valid_dns_route(name: &str) -> bool {
+    let name = name.trim_end_matches('.');
+    !name.is_empty()
+        && name.len() <= 253
+        && name.parse::<IpAddr>().is_err()
+        && name.split('.').all(|label| {
+            !label.is_empty()
+                && label.len() <= 63
+                && label
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b"_-".contains(&b))
+        })
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -329,5 +340,7 @@ mod tests {
         assert!(config.validate(&ProxyConfig::default()).is_err());
         assert!(!valid_query_type("AXFR"));
         assert!(!valid_query_type("TYPE252"));
+        assert!(valid_dns_route("_sip._tcp.example."));
+        assert!(!valid_dns_route("bad..example"));
     }
 }

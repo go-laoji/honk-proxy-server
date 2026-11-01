@@ -26,7 +26,7 @@ pub enum ApplicationError {
     Engine(#[from] EngineError),
     #[error("configuration is invalid; run validation for field diagnostics")]
     Invalid,
-    #[error("too many draining generations; close old connections before activating")]
+    #[error("too many draining generations; wait for proxy/DNS work to finish before activating")]
     GenerationBudget,
     #[error("runtime preparation could not finish")]
     Worker,
@@ -84,6 +84,7 @@ pub struct Supervisor {
     current: ArcSwap<RuntimeSnapshot>,
     operation: tokio::sync::Mutex<()>,
     retired: Mutex<Vec<Arc<Engine>>>,
+    retired_dns: Mutex<Vec<hps_dns::Resolver>>,
     overrides: StartupOverrides,
     path_base: PathBuf,
     closed: std::sync::atomic::AtomicBool,
@@ -134,6 +135,7 @@ impl Supervisor {
             }),
             operation: tokio::sync::Mutex::new(()),
             retired: Mutex::new(vec![]),
+            retired_dns: Mutex::new(vec![]),
             overrides,
             path_base,
             closed: std::sync::atomic::AtomicBool::new(false),
@@ -175,6 +177,8 @@ impl Supervisor {
         let current = self.current();
         let mut retired = self.retired.lock().unwrap();
         retired.retain(|engine| !engine.is_idle());
+        let mut retired_dns = self.retired_dns.lock().unwrap();
+        retired_dns.retain(|dns| !dns.is_released());
         let mut pending = restart_fields(&current.base_config, &workspace.desired.config);
         if let Some((revision, reasons)) = self.pending_restart.lock().unwrap().as_ref()
             && *revision == workspace.desired.revision.id
@@ -216,7 +220,7 @@ impl Supervisor {
                 .database_path
                 .as_ref()
                 .map(|path| path.display().to_string()),
-            draining_generations: retired.len(),
+            draining_generations: retired.len() + retired_dns.len(),
             startup_overrides: self.overrides.fields(),
             management_certificate: current.management_tls.as_ref().map(|prepared| {
                 let info = &prepared.certificate;
@@ -497,7 +501,9 @@ impl Supervisor {
         {
             let mut retired = self.retired.lock().unwrap();
             retired.retain(|engine| !engine.is_idle());
-            if retired.len() >= 32 {
+            let mut retired_dns = self.retired_dns.lock().unwrap();
+            retired_dns.retain(|dns| !dns.is_released());
+            if retired.len() + retired_dns.len() >= 32 {
                 return Err(ApplicationError::GenerationBudget);
             }
         }
@@ -580,6 +586,7 @@ impl Supervisor {
             server.start();
         }
         self.health.publish_generation(bootstrap_changed, || {
+            prepared.dns.activate();
             self.current.store(Arc::new(RuntimeSnapshot {
                 revision: input.revision,
                 config,
@@ -592,6 +599,10 @@ impl Supervisor {
                 capture,
             }))
         });
+        if current.dns.fingerprint() != self.current().dns.fingerprint() {
+            current.dns.retire();
+            self.retired_dns.lock().unwrap().push(current.dns.clone());
+        }
         if let Some(old) = &current.dns_server
             && !dns_server.as_ref().is_some_and(|new| Arc::ptr_eq(old, new))
         {
@@ -675,9 +686,16 @@ impl Supervisor {
         drop(_operation);
         self.provider_tasks.close();
         self.provider_tasks.wait().await;
-        if let Some(capture) = &self.current().capture {
-            capture.shutdown().await?;
+        self.current().dns.shutdown().await;
+        let retired_dns = std::mem::take(&mut *self.retired_dns.lock().unwrap());
+        for dns in retired_dns {
+            dns.shutdown().await;
         }
+        let capture_error = if let Some(capture) = &self.current().capture {
+            capture.shutdown().await.err()
+        } else {
+            None
+        };
         if let Some(server) = &self.current().dns_server {
             server.shutdown().await;
         }
@@ -696,6 +714,9 @@ impl Supervisor {
             )
             .await?;
         self.store.close().await?;
+        if let Some(error) = capture_error {
+            return Err(error);
+        }
         Ok(())
     }
 }

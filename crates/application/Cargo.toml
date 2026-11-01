@@ -8,6 +8,7 @@ rust-version.workspace = true
 hps-dns.workspace = true
 hps-net.workspace = true
 hps-platform.workspace = true
+if-addrs = "0.15"
 sha2 = "0.10"
 serde.workspace = true
 hps-config.workspace = true

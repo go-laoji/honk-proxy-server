@@ -52,6 +52,7 @@ pub(super) fn prepare(
     config: &DaemonConfig,
     previous: Option<&RuntimeSnapshot>,
 ) -> Result<Resolver, ApplicationError> {
+    reject_local_loops(config)?;
     let mut plans = BTreeMap::<String, Vec<ProbePlan>>::new();
     for up in &config.dns.upstreams {
         let Some(id) = &up.proxy_id else { continue };
@@ -94,16 +95,90 @@ pub(super) fn prepare(
         }
         plans.insert(id.clone(), choices);
     }
-    let resolver = Resolver::prepare(
+    let resolver = Resolver::with_previous(
         config.dns.clone(),
         &config.proxy,
         Some(Arc::new(StaticDnsEgress { plans })),
+        previous.map(|old| &old.dns),
     )
     .map_err(|_| ApplicationError::Invalid)?;
     Ok(previous
         .filter(|old| old.dns.fingerprint() == resolver.fingerprint())
         .map_or(resolver, |old| old.dns.clone()))
 }
+fn normalized(ip: std::net::IpAddr) -> std::net::IpAddr {
+    match ip {
+        std::net::IpAddr::V6(ip) => ip
+            .to_ipv4_mapped()
+            .map_or(std::net::IpAddr::V6(ip), std::net::IpAddr::V4),
+        ip => ip,
+    }
+}
+fn listener_owns(
+    listen: SocketAddr,
+    target: SocketAddr,
+    local: &std::collections::HashSet<std::net::IpAddr>,
+) -> bool {
+    if listen.port() == 0 || listen.port() != target.port() {
+        return false;
+    }
+    let destination = normalized(target.ip());
+    let bind = normalized(listen.ip());
+    bind == destination
+        || (bind.is_unspecified()
+            && (bind.is_ipv6() || destination.is_ipv4())
+            && (destination.is_loopback() || local.contains(&destination)))
+}
+fn reject_local_loops(config: &DaemonConfig) -> Result<(), ApplicationError> {
+    if !config.dns.enabled
+        || (config.dns.listen.is_none()
+            && config.dns.upstreams.iter().all(|u| u.proxy_id.is_none()))
+    {
+        return Ok(());
+    }
+    let local = if_addrs::get_if_addrs()
+        .map_err(|_| ApplicationError::Invalid)?
+        .into_iter()
+        .map(|interface| normalized(interface.ip()))
+        .collect();
+    for upstream in &config.dns.upstreams {
+        if config.dns.listen.is_some_and(|listen| {
+            upstream
+                .addresses
+                .iter()
+                .any(|target| listener_owns(listen, *target, &local))
+        }) {
+            return Err(ApplicationError::Invalid);
+        }
+        if let Some(id) = &upstream.proxy_id {
+            let proxy = config
+                .proxy
+                .upstreams
+                .iter()
+                .find(|p| &p.id == id)
+                .ok_or(ApplicationError::Invalid)?;
+            let endpoints = proxy
+                .host
+                .parse::<std::net::IpAddr>()
+                .ok()
+                .into_iter()
+                .chain(upstream.proxy_bootstrap_ips.iter().copied());
+            for ip in endpoints {
+                let target = SocketAddr::new(ip, proxy.port);
+                if config
+                    .proxy
+                    .inbounds
+                    .iter()
+                    .any(|inlet| inlet.enabled && listener_owns(inlet.listen, target, &local))
+                {
+                    return Err(ApplicationError::Invalid);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 pub(super) async fn listener(
     resolver: &Resolver,
     previous: Option<&RuntimeSnapshot>,
@@ -182,5 +257,40 @@ impl Supervisor {
             .dns
             .enabled
             .then(|| Arc::new(current.dns.clone()) as Arc<dyn hps_net::NameResolver>)
+    }
+}
+
+#[cfg(test)]
+mod loop_tests {
+    use super::*;
+    #[test]
+    fn wildcard_listeners_reject_local_interfaces_but_allow_remote_dns_at_the_same_port() {
+        let local = ["192.0.2.10".parse().unwrap()].into_iter().collect();
+        let listen = "0.0.0.0:53".parse().unwrap();
+        assert!(listener_owns(
+            listen,
+            "192.0.2.10:53".parse().unwrap(),
+            &local
+        ));
+        assert!(listener_owns(
+            listen,
+            "127.0.0.2:53".parse().unwrap(),
+            &local
+        ));
+        assert!(!listener_owns(
+            listen,
+            "1.1.1.1:53".parse().unwrap(),
+            &local
+        ));
+        assert!(!listener_owns(
+            listen,
+            "192.0.2.10:54".parse().unwrap(),
+            &local
+        ));
+        assert!(listener_owns(
+            "[::]:53".parse().unwrap(),
+            "[::ffff:127.0.0.1]:53".parse().unwrap(),
+            &local
+        ));
     }
 }

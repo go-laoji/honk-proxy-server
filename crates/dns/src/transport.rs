@@ -131,19 +131,13 @@ impl PreparedUpstream {
             return Err(DnsError::SystemQueryType);
         }
         let host = question.name().to_ascii();
-        let addresses = tokio::net::lookup_host((host.as_str(), 0))
-            .await
-            .map_err(|_| DnsError::System)?;
+        let addresses = crate::system::lookup(host).await?;
         let mut response = Message::response(query.metadata.id, OpCode::Query);
         response.queries = query.queries.clone();
         response.metadata.recursion_desired = query.metadata.recursion_desired;
         response.metadata.recursion_available = true;
         let mut seen = std::collections::HashSet::new();
-        for ip in addresses
-            .map(|a| a.ip())
-            .filter(|ip| seen.insert(*ip))
-            .take(64)
-        {
+        for ip in addresses.into_iter().filter(|ip| seen.insert(*ip)).take(64) {
             let data = match (ip, question.query_type()) {
                 (std::net::IpAddr::V4(ip), RecordType::A) => RData::A(A(ip)),
                 (std::net::IpAddr::V6(ip), RecordType::AAAA) => RData::AAAA(AAAA(ip)),
@@ -307,6 +301,17 @@ impl PreparedUpstream {
         {
             return Err(DnsError::Http);
         }
+        // RFC 8484 section 5.1: a cached HTTP response has already consumed this
+        // much of every DNS RR's lifetime, including negative SOA lifetime.
+        let age = match response.headers().get(http::header::AGE) {
+            None => 0,
+            Some(value) => value
+                .to_str()
+                .ok()
+                .and_then(|s| s.parse::<u64>().ok())
+                .ok_or(DnsError::Http)?
+                .min(u32::MAX as u64) as u32,
+        };
         let data = Limited::new(response.into_body(), 65535)
             .collect()
             .await
@@ -317,6 +322,6 @@ impl PreparedUpstream {
         if response.metadata.truncation {
             return Err(DnsError::InvalidResponse);
         }
-        Ok(response)
+        Ok(wire::age(&response, age, response.metadata.id))
     }
 }

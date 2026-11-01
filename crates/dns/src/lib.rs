@@ -1,5 +1,6 @@
 //! Policy-directed DNS with explicit bootstrap and independently bounded transports.
 pub mod server;
+mod system;
 mod transport;
 pub mod wire;
 use hickory_proto::op::Message;
@@ -10,10 +11,13 @@ use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeSet, HashMap},
     net::IpAddr,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    },
     time::{Duration, Instant},
 };
-use tokio::sync::{Semaphore, watch};
+use tokio::sync::watch;
 use transport::PreparedUpstream;
 
 pub type Result<T> = std::result::Result<T, DnsError>;
@@ -101,6 +105,12 @@ pub struct CachePage {
     pub bytes: usize,
     pub epoch: u64,
     pub in_flight: usize,
+    #[serde(default)]
+    pub system_workers: usize,
+    #[serde(default)]
+    pub system_queued: usize,
+    #[serde(default)]
+    pub system_worker_limit: usize,
     pub hits: u64,
     pub misses: u64,
     pub merged: u64,
@@ -135,7 +145,9 @@ struct Inner {
     config: DnsConfig,
     upstreams: HashMap<String, PreparedUpstream>,
     fingerprint: String,
-    slots: Arc<Semaphore>,
+    slots: Arc<Concurrency>,
+    cancel: tokio_util::sync::CancellationToken,
+    jobs: tokio_util::task::TaskTracker,
     state: Mutex<State>,
 }
 #[derive(Default)]
@@ -149,6 +161,36 @@ struct State {
     misses: u64,
     merged: u64,
     failures: u64,
+    retired: bool,
+}
+struct Concurrency {
+    active: AtomicUsize,
+    limit: AtomicUsize,
+}
+struct Permit(Arc<Concurrency>);
+impl Concurrency {
+    fn acquire(self: &Arc<Self>, local_limit: usize) -> Result<Permit> {
+        let mut active = self.active.load(Ordering::Acquire);
+        loop {
+            if active >= local_limit.min(self.limit.load(Ordering::Acquire)) {
+                return Err(DnsError::Capacity);
+            }
+            match self.active.compare_exchange_weak(
+                active,
+                active + 1,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            ) {
+                Ok(_) => return Ok(Permit(self.clone())),
+                Err(value) => active = value,
+            }
+        }
+    }
+}
+impl Drop for Permit {
+    fn drop(&mut self) {
+        self.0.active.fetch_sub(1, Ordering::AcqRel);
+    }
 }
 type FlightSender = watch::Sender<Option<Result<Arc<Resolved>>>>;
 struct Cached {
@@ -179,6 +221,14 @@ impl Resolver {
         proxy: &ProxyConfig,
         connector: Option<Arc<dyn DnsConnector>>,
     ) -> Result<Self> {
+        Self::with_previous(config, proxy, connector, None)
+    }
+    pub fn with_previous(
+        config: DnsConfig,
+        proxy: &ProxyConfig,
+        connector: Option<Arc<dyn DnsConnector>>,
+        previous: Option<&Self>,
+    ) -> Result<Self> {
         config
             .validate(proxy)
             .map_err(|_| DnsError::Configuration)?;
@@ -191,7 +241,17 @@ impl Resolver {
             upstreams.insert(up.config.id.clone(), up);
         }
         Ok(Self(Arc::new(Inner {
-            slots: Arc::new(Semaphore::new(config.max_parallel)),
+            slots: previous.map_or_else(
+                || {
+                    Arc::new(Concurrency {
+                        active: AtomicUsize::new(0),
+                        limit: AtomicUsize::new(config.max_parallel),
+                    })
+                },
+                |old| old.0.slots.clone(),
+            ),
+            cancel: tokio_util::sync::CancellationToken::new(),
+            jobs: tokio_util::task::TaskTracker::new(),
             config,
             upstreams,
             fingerprint: format!("{:x}", hash.finalize()),
@@ -200,6 +260,28 @@ impl Resolver {
     }
     pub fn fingerprint(&self) -> &str {
         &self.0.fingerprint
+    }
+    pub fn activate(&self) {
+        self.0
+            .slots
+            .limit
+            .store(self.0.config.max_parallel, Ordering::Release);
+    }
+    pub fn retire(&self) {
+        let mut state = self.0.state.lock().unwrap();
+        state.retired = true;
+        state.epoch = state.epoch.wrapping_add(1);
+        state.cache.clear();
+        state.bytes = 0;
+    }
+    pub fn is_released(&self) -> bool {
+        Arc::strong_count(&self.0) == 1 && self.0.state.lock().unwrap().flights.is_empty()
+    }
+    pub async fn shutdown(&self) {
+        self.retire();
+        self.0.cancel.cancel();
+        self.0.jobs.close();
+        self.0.jobs.wait().await;
     }
     pub fn configuration(&self) -> &DnsConfig {
         &self.0.config
@@ -215,13 +297,17 @@ impl Resolver {
         mut request: Message,
         purpose: ResolvePurpose,
     ) -> Result<WireAnswer> {
+        if self.0.cancel.is_cancelled() {
+            return Err(DnsError::Worker);
+        }
         if !self.0.config.enabled {
             return Err(DnsError::Disabled);
         }
         wire::validate_query(&request)?;
         let client_id = request.metadata.id;
         request.metadata.id = 0;
-        let canonical_name = request.queries[0].name().to_lowercase();
+        let mut canonical_name = request.queries[0].name().to_lowercase();
+        canonical_name.set_fqdn(true);
         request.queries[0].set_name(canonical_name);
         let name = request.queries[0]
             .name()
@@ -271,18 +357,13 @@ impl Resolver {
                 state.merged += 1;
                 (receiver, "merged")
             } else {
-                let permit = self
-                    .0
-                    .slots
-                    .clone()
-                    .try_acquire_owned()
-                    .map_err(|_| DnsError::Capacity)?;
+                let permit = self.0.slots.acquire(self.0.config.max_parallel)?;
                 let (sender, receiver) = watch::channel(None);
                 state.flights.insert((key.clone(), epoch), sender.clone());
                 state.misses += 1;
                 let resolver = self.clone();
                 // The owned job finishes even if the requesting browser/connection disappears.
-                tokio::spawn(async move {
+                self.0.jobs.spawn(async move {
                     let _permit = permit;
                     let started = Instant::now();
                     let deadline = tokio::time::Instant::now()
@@ -293,10 +374,8 @@ impl Resolver {
                     } else {
                         Message::query().metadata.id
                     };
-                    let result =
-                        match tokio::time::timeout_at(deadline, up.exchange(&request, deadline))
-                            .await
-                        {
+                    let response=tokio::select! {biased;_=resolver.0.cancel.cancelled()=>Ok(Err(DnsError::Worker)),response=tokio::time::timeout_at(deadline,up.exchange(&request,deadline))=>response};
+                    let result = match response {
                             Ok(Ok(message)) => {
                                 let ttl = if up.config.protocol == DnsProtocol::System {
                                     None
@@ -328,6 +407,7 @@ impl Resolver {
                             state.failures += 1;
                         }
                     }
+                    drop(_permit);
                     sender.send_replace(Some(result));
                 });
                 (receiver, "upstream")
@@ -415,13 +495,17 @@ impl Resolver {
         let more = entries.len() > limit;
         entries.truncate(limit);
         let next_after = more.then(|| entries.last().unwrap().id.clone());
+        let (system_workers, system_queued, system_worker_limit) = system::stats();
         Ok(CachePage {
             entries,
             next_after,
             total: state.cache.len(),
             bytes: state.bytes,
             epoch: state.epoch,
-            in_flight: state.flights.len(),
+            in_flight: self.0.slots.active.load(Ordering::Acquire),
+            system_workers,
+            system_queued,
+            system_worker_limit,
             hits: state.hits,
             misses: state.misses,
             merged: state.merged,
@@ -464,10 +548,15 @@ impl Resolver {
             }
         }
         let ambiguous = domains.len() > 1;
+        let source = if domains.is_empty() {
+            "unknown"
+        } else {
+            "unexpired_local_dns_answers"
+        };
         DomainContext {
             ip,
             domains: domains.into_iter().take(64).collect(),
-            source: "unexpired_local_dns_answers".into(),
+            source: source.into(),
             ambiguous,
         }
     }
@@ -549,6 +638,9 @@ impl State {
         self.bytes = self.cache.values().map(|c| c.bytes).sum();
     }
     fn insert(&mut self, key: String, answer: Arc<Resolved>, config: &DnsConfig) {
+        if self.retired {
+            return;
+        }
         let Some(ttl) = answer.ttl else { return };
         let until = answer.started + Duration::from_secs(u64::from(ttl));
         if until <= Instant::now() || config.cache_entries == 0 {

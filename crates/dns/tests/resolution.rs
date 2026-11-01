@@ -53,6 +53,18 @@ fn answer(query: &Message, ttl: u32) -> Message {
             if name.starts_with("zero.") { 0 } else { ttl },
             data,
         ));
+        if name.starts_with("large.") {
+            for _ in 0..80 {
+                response.answers.push(response.answers[0].clone());
+            }
+            let mut edns = hickory_proto::op::Edns::new();
+            edns.options_mut()
+                .insert(hickory_proto::rr::rdata::opt::EdnsOption::Unknown(
+                    12,
+                    vec![0; 2000],
+                ));
+            response.edns = Some(edns);
+        }
     }
     response
 }
@@ -181,14 +193,9 @@ async fn wire_ttl_zero_negative_and_real_ipv6_tcp_fallback() {
             "upstream"
         );
     }
-    assert_eq!(
-        resolver
-            .diagnose(input("negative.example"))
-            .await
-            .unwrap()
-            .response_code,
-        "NXDomain"
-    );
+    let negative = resolver.diagnose(input("negative.example")).await.unwrap();
+    assert_eq!(negative.response_code, "NXDomain");
+    assert!(negative.authorities[0].ttl <= negative.remaining_ttl.unwrap());
     assert_eq!(
         resolver
             .diagnose(input("negative.example"))
@@ -368,10 +375,110 @@ fn cname_context_ignores_unrelated_answers_and_rejects_loops() {
         vec!["203.0.113.9".parse::<std::net::IpAddr>().unwrap()]
     );
     assert_eq!(wire::cache_ttl(&response), Some(10));
+    response.metadata.response_code = ResponseCode::NXDomain;
+    assert!(wire::addresses(&response).is_empty());
+    response.metadata.response_code = ResponseCode::NoError;
+    response.answers.pop();
+    response.answers.push(Record::from_rdata(
+        Name::from_ascii("target.example").unwrap(),
+        10,
+        RData::CNAME(CNAME(Name::from_ascii("alias.example").unwrap())),
+    ));
+    assert!(wire::addresses(&response).is_empty());
+    assert_eq!(wire::cache_ttl(&response), None);
     let mut invalid = query.clone();
     invalid.answers = response.answers;
     assert_eq!(
         wire::validate_query(&invalid).unwrap_err(),
         DnsError::InvalidQuery
     );
+}
+
+#[tokio::test]
+async fn generations_share_capacity_retire_caches_and_shutdown_cancels_owned_io() {
+    let upstream = Upstream::start("127.0.0.1", 30, Duration::from_millis(150), false).await;
+    let mut config = DnsConfig {
+        max_parallel: 1,
+        ..Default::default()
+    };
+    config.upstreams[0].protocol = DnsProtocol::Udp;
+    config.upstreams[0].addresses = vec![upstream.address];
+    let old = Resolver::prepare(config.clone(), &ProxyConfig::default(), None).unwrap();
+    old.diagnose(input("cached.example")).await.unwrap();
+    assert_eq!(old.cache(None, 50).unwrap().total, 1);
+    let r = old.clone();
+    let previous =
+        tokio::spawn(async move { r.diagnose(input("old-flight.example")).await.unwrap() });
+    while upstream.count.load(Ordering::SeqCst) < 2 {
+        tokio::task::yield_now().await;
+    }
+    config.cache_entries = 10;
+    let new = Resolver::with_previous(config, &ProxyConfig::default(), None, Some(&old)).unwrap();
+    new.activate();
+    old.retire();
+    assert_eq!(new.cache(None, 50).unwrap().in_flight, 1);
+    assert_eq!(
+        new.diagnose(input("new-flight.example")).await.unwrap_err(),
+        DnsError::Capacity
+    );
+    previous.await.unwrap();
+    assert_eq!(old.cache(None, 50).unwrap().total, 0);
+    assert_eq!(
+        new.diagnose(input("new-flight.example"))
+            .await
+            .unwrap()
+            .source,
+        "upstream"
+    );
+    let r = new.clone();
+    let owned = tokio::spawn(async move { r.diagnose(input("shutdown.example")).await });
+    while upstream.count.load(Ordering::SeqCst) < 4 {
+        tokio::task::yield_now().await;
+    }
+    new.shutdown().await;
+    assert_eq!(owned.await.unwrap().unwrap_err(), DnsError::Worker);
+    assert_eq!(new.cache(None, 50).unwrap().in_flight, 0);
+    assert_eq!(
+        new.diagnose(input("after-stop.example")).await.unwrap_err(),
+        DnsError::Worker
+    );
+    old.shutdown().await;
+}
+
+#[tokio::test]
+async fn server_truncates_oversized_edns_udp_and_tcp_returns_the_complete_answer() {
+    let upstream = Upstream::start("127.0.0.1", 30, Duration::ZERO, false).await;
+    let resolver = upstream.resolver(DnsProtocol::Udp);
+    let server = hps_dns::server::DnsServer::bind("127.0.0.1:0".parse().unwrap(), resolver)
+        .await
+        .unwrap();
+    server.start();
+    let socket = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    let request = wire::query("large.example", "A").unwrap();
+    let bytes = request.to_vec().unwrap();
+    socket
+        .send_to(&bytes, server.local_address())
+        .await
+        .unwrap();
+    let mut buffer = vec![0; 65535];
+    let len = tokio::time::timeout(Duration::from_secs(2), socket.recv(&mut buffer))
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(len <= 512);
+    let response = Message::from_vec(&buffer[..len]).unwrap();
+    assert!(response.metadata.truncation);
+    assert_eq!(response.metadata.id, request.metadata.id);
+    let mut tcp = tokio::net::TcpStream::connect(server.local_address())
+        .await
+        .unwrap();
+    tcp.write_u16(bytes.len() as u16).await.unwrap();
+    tcp.write_all(&bytes).await.unwrap();
+    let len = tcp.read_u16().await.unwrap() as usize;
+    tcp.read_exact(&mut buffer[..len]).await.unwrap();
+    let response = Message::from_vec(&buffer[..len]).unwrap();
+    assert!(!response.metadata.truncation);
+    assert_eq!(response.answers.len(), 81);
+    drop(tcp);
+    server.shutdown().await;
 }

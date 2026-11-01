@@ -9,6 +9,9 @@ use std::str::FromStr;
 /// Follow the queried owner and its CNAME chain only. An unrelated A/AAAA in
 /// an answer section is not evidence about the queried name.
 pub fn addresses(message: &Message) -> Vec<IpAddr> {
+    if message.metadata.response_code != ResponseCode::NoError {
+        return vec![];
+    }
     let Some(question) = message.queries.first() else {
         return vec![];
     };
@@ -48,6 +51,36 @@ fn same_name(left: &Name, right: &Name) -> bool {
         .trim_end_matches('.')
         .eq_ignore_ascii_case(right.to_ascii().trim_end_matches('.'))
 }
+fn positive(message: &Message) -> bool {
+    let Some(question) = message.queries.first() else {
+        return false;
+    };
+    match question.query_type() {
+        RecordType::A => return addresses(message).iter().any(IpAddr::is_ipv4),
+        RecordType::AAAA => return addresses(message).iter().any(IpAddr::is_ipv6),
+        _ => {}
+    }
+    let mut owner = question.name().clone();
+    for _ in 0..16 {
+        if message.answers.iter().any(|r| {
+            same_name(&r.name, &owner)
+                && r.dns_class == DNSClass::IN
+                && r.data.record_type() == question.query_type()
+        }) {
+            return true;
+        }
+        let Some(next) = message.answers.iter().find_map(|r| match &r.data {
+            RData::CNAME(name) if same_name(&r.name, &owner) && r.dns_class == DNSClass::IN => {
+                Some(name.0.clone())
+            }
+            _ => None,
+        }) else {
+            return false;
+        };
+        owner = next;
+    }
+    false
+}
 
 pub fn query(name: &str, kind: &str) -> Result<Message> {
     if name.len() > 253 || !hps_config::valid_query_type(kind) {
@@ -78,6 +111,7 @@ pub fn validate_query(message: &Message) -> Result<()> {
     let question = &message.queries[0];
     if question.query_class() != DNSClass::IN
         || !hps_config::valid_query_type(&question.query_type().to_string())
+        || message.to_vec().map_or(true, |wire| wire.len() > 4096)
     {
         return Err(DnsError::InvalidQuery);
     }
@@ -105,16 +139,12 @@ pub fn cache_ttl(message: &Message) -> Option<u32> {
         .authorities
         .iter()
         .filter_map(|r| match &r.data {
-            RData::SOA(soa) => Some(r.ttl.min(soa.minimum)),
+            RData::SOA(soa) if r.dns_class == DNSClass::IN => Some(r.ttl.min(soa.minimum)),
             _ => None,
         })
         .min();
     let answers = message.answers.iter().map(|r| r.ttl).min();
-    let requested = message.queries.first()?.query_type();
-    let positive = message
-        .answers
-        .iter()
-        .any(|r| r.data.record_type() == requested);
+    let positive = positive(message);
     let ttl = match message.metadata.response_code {
         ResponseCode::NoError if positive => answers?,
         ResponseCode::NoError | ResponseCode::NXDomain => soa?.min(answers.unwrap_or(u32::MAX)),
@@ -124,6 +154,8 @@ pub fn cache_ttl(message: &Message) -> Option<u32> {
 }
 pub fn age(message: &Message, seconds: u32, id: u16) -> Message {
     let mut result = message.clone();
+    let negative = message.metadata.response_code == ResponseCode::NXDomain
+        || (message.metadata.response_code == ResponseCode::NoError && !positive(message));
     result.metadata.id = id;
     for record in result
         .answers
@@ -131,6 +163,9 @@ pub fn age(message: &Message, seconds: u32, id: u16) -> Message {
         .chain(&mut result.authorities)
         .chain(&mut result.additionals)
     {
+        if negative && let RData::SOA(soa) = &record.data {
+            record.ttl = record.ttl.min(soa.minimum);
+        }
         record.ttl = record.ttl.saturating_sub(seconds);
     }
     result

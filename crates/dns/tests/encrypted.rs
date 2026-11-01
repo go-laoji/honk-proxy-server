@@ -71,6 +71,12 @@ async fn dot_and_doh_verify_real_tls_and_never_accept_a_redirect_or_wrong_type()
                                 let data = request.into_body().collect().await.unwrap().to_bytes();
                                 let query = Message::from_vec(&data).unwrap();
                                 let mut reply = hyper::Response::builder();
+                                if path == "/aged" {
+                                    reply = reply.header("age", "25");
+                                }
+                                if path == "/expired" {
+                                    reply = reply.header("age", "60");
+                                }
                                 if path == "/redirect" {
                                     reply = reply
                                         .status(302)
@@ -145,6 +151,24 @@ async fn dot_and_doh_verify_real_tls_and_never_accept_a_redirect_or_wrong_type()
                         .unwrap_err(),
                     DnsError::Http
                 );
+            }
+            for (path, ttl) in [("/aged", Some(4)), ("/expired", None)] {
+                config.upstreams[0].https_path = Some(path.into());
+                let resolver =
+                    Resolver::prepare(config.clone(), &ProxyConfig::default(), None).unwrap();
+                let answer = resolver
+                    .diagnose(LookupInput {
+                        name: "aged.example".into(),
+                        query_type: "A".into(),
+                        purpose: ResolvePurpose::Bootstrap,
+                    })
+                    .await
+                    .unwrap();
+                assert_eq!(answer.remaining_ttl, ttl);
+                assert!(answer.answers[0].ttl <= ttl.unwrap_or(0));
+                if ttl.is_none() {
+                    assert_eq!(resolver.cache(None, 50).unwrap().total, 0);
+                }
             }
         }
         task.abort();
