@@ -308,6 +308,7 @@ impl Dialer {
         if let Err(error) = &outcome {
             let phase = *progress.phase.lock().unwrap();
             let (code, global) = match error {
+                ProxyError::LocalResource => ("local_resource_exhausted", false),
                 ProxyError::Endpoint => ("endpoint_connect_failed", true),
                 ProxyError::UpstreamTls => ("upstream_tls_failed", true),
                 ProxyError::Authentication => ("upstream_authentication_failed", true),
@@ -326,6 +327,23 @@ impl Dialer {
             };
             self.traffic_feedback(&upstream.config.id, &upstream.identity, phase, code, global);
         }
+        if let Ok(connected) = &outcome {
+            self.traffic_feedback(
+                &connected.upstream_id,
+                &connected.identity,
+                if connected.absolute_form {
+                    ProbePhase::EndpointConnect
+                } else {
+                    ProbePhase::ProxyTunnel
+                },
+                if connected.absolute_form {
+                    "endpoint_connected"
+                } else {
+                    "tunnel_established"
+                },
+                false,
+            );
+        }
         outcome.map(|mut connected| {
             connected.io = demand.wrap(connected.io);
             connected
@@ -342,7 +360,7 @@ impl Dialer {
         let config = &upstream.config;
         let tcp = TcpStream::connect((config.host.as_str(), config.port))
             .await
-            .map_err(|_| ProxyError::Endpoint)?;
+            .map_err(socket_error)?;
         progress.endpoint.store(true, Ordering::Relaxed);
         tcp.set_nodelay(true)?;
         let mut io: BoxIo = if let Some(tls) = &upstream.tls {
@@ -484,4 +502,35 @@ pub(crate) async fn read_head(io: BoxIo, max: usize) -> Result<(Vec<u8>, BoxIo),
         }
     }
     Err(ProxyError::Upstream)
+}
+
+fn socket_error(error: std::io::Error) -> ProxyError {
+    #[cfg(unix)]
+    if error.raw_os_error().is_some_and(|code| {
+        [libc::EMFILE, libc::ENFILE, libc::ENOMEM, libc::ENOBUFS].contains(&code)
+    }) {
+        return ProxyError::LocalResource;
+    }
+    if error.kind() == std::io::ErrorKind::OutOfMemory {
+        ProxyError::LocalResource
+    } else {
+        ProxyError::Endpoint
+    }
+}
+#[cfg(all(test, unix))]
+mod resource_tests {
+    use super::*;
+    #[test]
+    fn local_exhaustion_is_separate_from_remote_refusal() {
+        for code in [libc::EMFILE, libc::ENFILE, libc::ENOMEM, libc::ENOBUFS] {
+            assert!(matches!(
+                socket_error(std::io::Error::from_raw_os_error(code)),
+                ProxyError::LocalResource
+            ));
+        }
+        assert!(matches!(
+            socket_error(std::io::Error::from_raw_os_error(libc::ECONNREFUSED)),
+            ProxyError::Endpoint
+        ));
+    }
 }

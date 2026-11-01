@@ -151,3 +151,55 @@ fn health_migration_is_reversible() {
         .unwrap();
     assert_eq!(count, 0);
 }
+
+#[tokio::test]
+async fn repeated_joining_of_inflight_runs_cannot_create_unbounded_active_tasks() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::open(Some(dir.path()), DaemonConfig::default()).unwrap();
+    let first = store
+        .begin_health_task(
+            "first".into(),
+            "manual".into(),
+            vec![probe("lease:1")],
+            16,
+            10,
+        )
+        .await
+        .unwrap();
+    let c = rusqlite::Connection::open(store.database_path.as_ref().unwrap()).unwrap();
+    c.execute_batch("BEGIN;WITH RECURSIVE ids(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM ids WHERE n<4999) INSERT INTO health_tasks(request_id,trigger,created_at) SELECT 'join-'||n,'manual',1 FROM ids;INSERT OR IGNORE INTO health_task_runs(task_id,run_id) SELECT id,1 FROM health_tasks;COMMIT;").unwrap();
+    assert!(matches!(
+        store
+            .begin_health_task(
+                "another".into(),
+                "manual".into(),
+                vec![probe("lease:2")],
+                16,
+                10
+            )
+            .await,
+        Err(StorageError::HealthCapacity)
+    ));
+    assert_eq!(store.health_usage().await.unwrap().used, 1);
+    store.claim_health_run(first.runs[0].id).await.unwrap();
+    store
+        .finish_health_run(first.runs[0].id, result(), hps_storage::unix_now() + 60, 0)
+        .await
+        .unwrap();
+    store
+        .begin_health_task(
+            "after-completion".into(),
+            "manual".into(),
+            vec![probe("lease:3")],
+            16,
+            10,
+        )
+        .await
+        .unwrap();
+    let tasks: u32 = c
+        .query_row("SELECT count(*) FROM health_tasks", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(tasks, 5000);
+    drop(c);
+    store.close().await.unwrap();
+}

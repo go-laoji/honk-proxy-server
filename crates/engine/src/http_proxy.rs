@@ -195,6 +195,15 @@ async fn handle(mut request: Request<Incoming>, session: Session) -> Response<Bo
         )
     });
     let response = sender.send_request(request).await;
+    if response.is_err() {
+        session.dialer.traffic_feedback(
+            &upstream_id,
+            &identity,
+            hps_domain::ProbePhase::TargetHttp,
+            "upstream_response_failed",
+            false,
+        );
+    }
     if let Ok(response) = &response {
         let auth = absolute_form && response.status() == StatusCode::PROXY_AUTHENTICATION_REQUIRED;
         session.dialer.traffic_feedback(

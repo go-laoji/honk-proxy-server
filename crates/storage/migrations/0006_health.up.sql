@@ -33,4 +33,5 @@ CREATE TABLE health_state (
  next_due_at INTEGER NOT NULL,
  PRIMARY KEY(identity,profile_fingerprint)
 );
+CREATE INDEX health_state_age ON health_state(checked_at);
 CREATE TABLE health_daily_usage(day INTEGER PRIMARY KEY, probes INTEGER NOT NULL CHECK(probes>=0));

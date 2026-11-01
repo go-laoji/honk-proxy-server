@@ -421,6 +421,15 @@ fn dial_failure(
 ) -> ProbeResult {
     result.endpoint_reachable = error.endpoint_reachable;
     let (verdict, code) = match error.error {
+        ProxyError::LocalResource => {
+            return finish(
+                result,
+                HealthVerdict::Unknown,
+                ProbePhase::Local,
+                "local_resource_exhausted",
+                started,
+            );
+        }
         ProxyError::Endpoint => (HealthVerdict::Failed, "endpoint_connect_failed"),
         ProxyError::UpstreamTls => (HealthVerdict::Failed, "upstream_tls_failed"),
         ProxyError::Authentication => {

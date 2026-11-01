@@ -479,10 +479,12 @@ pub struct NodeHealth {
     pub enabled: bool,
     pub remaining_secs: Option<u64>,
     pub eligible: bool,
+    pub last_traffic: Option<TrafficFeedback>,
     pub results: Vec<ProbeResult>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HealthOverview<C> {
+    pub running_revision: i64,
     pub configuration: C,
     pub nodes: Vec<NodeHealth>,
     pub next_after: Option<String>,
@@ -494,4 +496,14 @@ pub struct HealthOverview<C> {
     pub used_probes: u32,
     pub budget: u32,
     pub tasks: Vec<HealthTask>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrafficFeedback {
+    pub node_id: String,
+    pub identity: String,
+    pub phase: ProbePhase,
+    pub error_code: String,
+    pub invalidated: bool,
+    pub observed_at: i64,
 }

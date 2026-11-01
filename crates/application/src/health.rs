@@ -49,10 +49,10 @@ impl Supervisor {
         self.provider_tasks.spawn(async move {
             let mut timer=tokio::time::interval(Duration::from_millis(250));timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             loop {
-                tokio::select! {biased;_=cancel.cancelled()=>break,event=feedback.recv()=>{
+                tokio::select! {biased;_=cancel.cancelled()=>break,_=timer.tick()=>{let Some(service)=weak.upgrade() else {break;};let _=service.health_tick().await;},event=feedback.recv()=>{
                     let Some(service)=weak.upgrade() else {break;};
                     match event {Ok(event)=>service.health_feedback(event).await,Err(tokio::sync::broadcast::error::RecvError::Lagged(_))=>{},Err(_)=>break}
-                },_=timer.tick()=>{let Some(service)=weak.upgrade() else {break;};let _=service.health_tick().await;}}
+                }}
             }
         });
     }
@@ -192,7 +192,19 @@ impl Supervisor {
                     let key = (plan.identity().to_owned(), profile.fingerprint.clone());
                     if pending.contains(&key)
                         || !seen.insert(key.clone())
-                        || states.get(&key).is_some_and(|s| s.next_due_at > now)
+                        || states.get(&key).is_some_and(|s| {
+                            let policy_wait = if s.result.verdict == HealthVerdict::Healthy {
+                                config.interval_secs
+                            } else {
+                                config
+                                    .retry_initial_secs
+                                    .saturating_mul(1u64 << s.failures.saturating_sub(1).min(16))
+                                    .min(config.retry_max_secs)
+                            };
+                            s.next_due_at
+                                .min(s.result.checked_at.saturating_add(policy_wait as i64))
+                                > now
+                        })
                     {
                         continue;
                     }
@@ -502,7 +514,9 @@ impl Supervisor {
                         result.verdict = HealthVerdict::Skipped;
                         result.error_code = Some("lease_margin_insufficient".into());
                     }
-                    if plan.remaining().is_some_and(|n| n.is_zero()) {
+                    if transport == HealthTransport::Tcp
+                        && plan.remaining().is_some_and(|n| n.is_zero())
+                    {
                         result.verdict = HealthVerdict::Expired;
                         result.error_code = Some("lease_expired".into());
                     }
@@ -522,11 +536,13 @@ impl Supervisor {
                         .remaining()
                         .is_none_or(|r| r > Duration::from_secs(plan.minimum_lifetime()))
                     && current.engine.health_usable(plan.identity()),
+                last_traffic: registry.last_traffic(plan.identity()),
                 results,
             });
         }
         let usage = self.store.health_usage().await?;
         Ok(HealthOverview {
+            running_revision: current.revision,
             configuration: current.config.health.clone(),
             nodes,
             next_after,

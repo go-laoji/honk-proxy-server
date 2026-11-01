@@ -17,19 +17,12 @@ struct Fact {
     result: ProbeResult,
     fresh_until: Instant,
 }
-#[derive(Clone, Debug)]
-pub struct TrafficFeedback {
-    pub node_id: String,
-    pub identity: String,
-    pub phase: ProbePhase,
-    pub error_code: String,
-    pub invalidated: bool,
-    pub observed_at: i64,
-}
+pub use hps_domain::TrafficFeedback;
 pub struct HealthRegistry {
     facts: RwLock<HashMap<(String, String), Fact>>,
     failures: RwLock<HashMap<String, (u32, Instant)>>,
     events: tokio::sync::broadcast::Sender<TrafficFeedback>,
+    last_traffic: RwLock<HashMap<String, TrafficFeedback>>,
 }
 impl Default for HealthRegistry {
     fn default() -> Self {
@@ -37,10 +30,14 @@ impl Default for HealthRegistry {
             facts: Default::default(),
             failures: Default::default(),
             events: tokio::sync::broadcast::channel(1024).0,
+            last_traffic: Default::default(),
         }
     }
 }
 impl HealthRegistry {
+    pub fn last_traffic(&self, identity: &str) -> Option<TrafficFeedback> {
+        self.last_traffic.read().unwrap().get(identity).cloned()
+    }
     pub fn subscribe(&self) -> tokio::sync::broadcast::Receiver<TrafficFeedback> {
         self.events.subscribe()
     }
@@ -145,14 +142,23 @@ impl HealthRegistry {
                 }
             }
         }
-        let _ = self.events.send(TrafficFeedback {
+        let event = TrafficFeedback {
             node_id: node_id.into(),
             identity: identity.into(),
             phase,
             error_code: code.into(),
             invalidated,
             observed_at: unix_now(),
-        });
+        };
+        let mut traffic = self.last_traffic.write().unwrap();
+        if traffic.len() >= 100000 {
+            traffic.retain(|_, value| value.observed_at >= unix_now() - 86400);
+        }
+        if traffic.len() < 100000 || traffic.contains_key(identity) {
+            traffic.insert(identity.into(), event.clone());
+        }
+        drop(traffic);
+        let _ = self.events.send(event);
     }
 }
 fn unix_now() -> i64 {

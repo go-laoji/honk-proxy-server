@@ -24,6 +24,8 @@ pub enum ProxyError {
     InvalidTarget,
     #[error("upstream connection or handshake timed out")]
     Timeout,
+    #[error("local socket or memory resource exhausted")]
+    LocalResource,
     #[error("upstream endpoint connection failed")]
     Endpoint,
     #[error("upstream TLS handshake failed")]

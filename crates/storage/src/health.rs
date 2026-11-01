@@ -123,6 +123,12 @@ impl Store {
         self.call(move|c|{
             let tx=c.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
             if let Some(id)=tx.query_row("SELECT id FROM health_tasks WHERE request_id=?1",[&request_id],|r|r.get(0)).optional()? {return task(&tx,id);}
+            let tasks:u32=tx.query_row("SELECT count(*) FROM health_tasks",[],|r|r.get(0))?;
+            if tasks>=5000 {
+                tx.execute("DELETE FROM health_tasks WHERE id IN (SELECT id FROM health_tasks WHERE id NOT IN (SELECT task_id FROM health_task_runs JOIN health_runs ON run_id=health_runs.id WHERE state IN ('queued','probing')) ORDER BY id LIMIT ?1)",[tasks-4999])?;
+                let remaining:u32=tx.query_row("SELECT count(*) FROM health_tasks",[],|r|r.get(0))?;
+                if remaining>=5000{return Err(StorageError::HealthCapacity);}
+            }
             let now=unix_now();let day=super::controller::budget_day(&tx,now)?;
             let used:u32=tx.query_row("SELECT probes FROM health_daily_usage WHERE day=?1",[day],|r|r.get(0)).optional()?.unwrap_or(0);
             let inflight:u32=tx.query_row("SELECT count(*) FROM health_runs WHERE state IN ('queued','probing')",[],|r|r.get(0))?;
@@ -178,6 +184,8 @@ impl Store {
             let document=serde_json::to_string(&result).map_err(|_|StorageError::Invalid)?;
             if tx.execute("UPDATE health_runs SET state='completed',finished_at=?2,result=?3 WHERE id=?1 AND state='probing' AND identity=?4 AND profile_fingerprint=?5",params![id,unix_now(),document,result.identity,result.profile_fingerprint])?!=1 {return Err(StorageError::Conflict);}
             tx.execute("INSERT INTO health_state(identity,profile_fingerprint,result,checked_at,failures,next_due_at) VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT(identity,profile_fingerprint) DO UPDATE SET result=excluded.result,checked_at=excluded.checked_at,failures=excluded.failures,next_due_at=excluded.next_due_at WHERE excluded.checked_at>=health_state.checked_at",params![result.identity,result.profile_fingerprint,document,result.checked_at,failures,next_due_at])?;
+            let states:u32=tx.query_row("SELECT count(*) FROM health_state",[],|r|r.get(0))?;
+            if states>400000 {tx.execute("DELETE FROM health_state WHERE rowid IN (SELECT rowid FROM health_state ORDER BY checked_at ASC LIMIT ?1)",[states-400000])?;}
             tx.commit()?;Ok(())
         }).await
     }

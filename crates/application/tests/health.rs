@@ -63,23 +63,35 @@ async fn boot(config: DaemonConfig) -> Arc<Supervisor> {
 async fn all_inlets_wait_for_real_proof_probe_has_no_demand_and_real_failure_revokes() {
     let target = support::origin(None).await;
     let proxy = support::http_proxy(None, None, 200).await;
-    let app = boot(config(&proxy, &target)).await;
+    let cert = support::certificate();
+    let mut cfg = config(&proxy, &target);
+    cfg.proxy
+        .inbounds
+        .push(support::inbound("https", ProxyProtocol::Https, Some(&cert)));
+    let app = boot(cfg).await;
     until(async || app.current().engine.ready()).await;
     assert!(app.current().engine.demand_age().is_none());
+    assert!(
+        app.health_overview(None, 20).await.unwrap().nodes[0]
+            .last_traffic
+            .is_none()
+    );
     assert!(!app.current().engine.has_active_demand());
     let status = app.current().engine.status();
     for inbound in &status.inbounds {
-        let protocol = if inbound.id == "socks" {
-            "socks5h"
-        } else {
-            "http"
+        let address: std::net::SocketAddr = inbound.listen.as_ref().unwrap().parse().unwrap();
+        let url = match inbound.id.as_str() {
+            "socks" => format!("socks5h://{address}"),
+            "https" => format!("https://localhost:{}", address.port()),
+            _ => format!("http://{address}"),
         };
         let client = reqwest::Client::builder()
             .no_proxy()
-            .proxy(
-                reqwest::Proxy::all(format!("{protocol}://{}", inbound.listen.as_ref().unwrap()))
+            .add_root_certificate(
+                reqwest::Certificate::from_pem(&std::fs::read(&cert.config.certificate).unwrap())
                     .unwrap(),
             )
+            .proxy(reqwest::Proxy::all(url).unwrap())
             .build()
             .unwrap();
         let response = client
@@ -335,4 +347,65 @@ async fn pending_admission_reserves_inventory_and_batch_coalesces_without_repurc
     assert_eq!(calls.load(Ordering::SeqCst), 1);
     app.shutdown().await.unwrap();
     server.abort();
+}
+
+#[tokio::test]
+async fn real_target_rejection_is_visible_without_invalidating_health_or_replaying_payload() {
+    use axum::{Router, http::StatusCode, routing::get};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let count = calls.clone();
+    let router = Router::new()
+        .route("/health", get(|| async { StatusCode::NO_CONTENT }))
+        .route(
+            "/business",
+            get(move || {
+                let count = count.clone();
+                async move {
+                    count.fetch_add(1, Ordering::SeqCst);
+                    StatusCode::TOO_MANY_REQUESTS
+                }
+            }),
+        );
+    let task = tokio::spawn(async move {
+        axum::serve(listener, router).await.unwrap();
+    });
+    let target = support::Server {
+        address,
+        task,
+        requests: Default::default(),
+    };
+    let proxy = support::http_proxy(None, None, 200).await;
+    let app = boot(config(&proxy, &target)).await;
+    until(async || app.current().engine.ready()).await;
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .proxy(
+            reqwest::Proxy::all(format!(
+                "http://{}",
+                app.current().engine.status().inbounds[0]
+                    .listen
+                    .as_ref()
+                    .unwrap()
+            ))
+            .unwrap(),
+        )
+        .build()
+        .unwrap();
+    let before = app.health_overview(None, 20).await.unwrap().nodes[0].results[0].checked_at;
+    let response = client
+        .get(format!("http://{address}/business"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 429);
+    assert!(app.current().engine.ready());
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    let node = app.health_overview(None, 20).await.unwrap().nodes.remove(0);
+    let traffic = node.last_traffic.unwrap();
+    assert_eq!(traffic.error_code, "target_rejected");
+    assert!(!traffic.invalidated);
+    assert_eq!(node.results[0].checked_at, before);
+    app.shutdown().await.unwrap();
 }
