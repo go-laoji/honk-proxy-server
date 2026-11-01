@@ -62,6 +62,10 @@ enum Command {
         #[command(subcommand)]
         command: NodeCommand,
     },
+    Connection {
+        #[command(subcommand)]
+        command: ConnectionCommand,
+    },
     Provider {
         #[command(subcommand)]
         command: ProviderCommand,
@@ -144,6 +148,110 @@ struct NodeActionArgs {
     expected_revision: i64,
     #[arg(long)]
     expected_control_version: i64,
+}
+#[derive(clap::Args)]
+struct ConnectionListArgs {
+    #[arg(long)]
+    snapshot: Option<String>,
+    #[arg(long)]
+    expected_epoch: Option<String>,
+    #[arg(long)]
+    id: Option<String>,
+    #[arg(long)]
+    source: Option<String>,
+    #[arg(long)]
+    source_port: Option<u16>,
+    #[arg(long)]
+    destination: Option<String>,
+    #[arg(long)]
+    destination_port: Option<u16>,
+    #[arg(long)]
+    inbound: Option<String>,
+    #[arg(long)]
+    protocol: Option<String>,
+    #[arg(long)]
+    transport: Option<String>,
+    #[arg(long)]
+    origin: Option<String>,
+    #[arg(long)]
+    node: Option<String>,
+    #[arg(long)]
+    provider: Option<String>,
+    #[arg(long)]
+    group: Option<String>,
+    #[arg(long)]
+    rule: Option<String>,
+    #[arg(long)]
+    state: Option<String>,
+    #[arg(long)]
+    error: Option<String>,
+    #[arg(long)]
+    created_after_unix_ms: Option<u64>,
+    #[arg(long)]
+    sort: Option<String>,
+    #[arg(long, default_value_t = 0)]
+    offset: u32,
+    #[arg(long, default_value_t = 50)]
+    limit: u32,
+}
+impl ConnectionListArgs {
+    fn query(&self) -> hps_domain::ConnectionQuery {
+        hps_domain::ConnectionQuery {
+            snapshot: self.snapshot.clone(),
+            expected_epoch: self.expected_epoch.clone(),
+            id: self.id.clone(),
+            source: self.source.clone(),
+            source_port: self.source_port,
+            destination: self.destination.clone(),
+            destination_port: self.destination_port,
+            inbound: self.inbound.clone(),
+            protocol: self.protocol.clone(),
+            transport: self.transport.clone(),
+            origin: self.origin.clone(),
+            node: self.node.clone(),
+            provider: self.provider.clone(),
+            group: self.group.clone(),
+            rule: self.rule.clone(),
+            state: self.state.clone(),
+            error: self.error.clone(),
+            created_after_unix_ms: self.created_after_unix_ms,
+            sort: self.sort.clone(),
+            offset: self.offset,
+            limit: Some(self.limit),
+        }
+    }
+}
+#[derive(Subcommand)]
+enum ConnectionCommand {
+    List(Box<ConnectionListArgs>),
+    Summary,
+    Show {
+        id: String,
+    },
+    Disconnect {
+        id: String,
+        #[arg(long)]
+        expected_epoch: String,
+        /// Confirm this exact connection; an HTTP exchange may close its inbound keep-alive socket.
+        #[arg(long)]
+        confirm: bool,
+    },
+    DisconnectPreview {
+        #[arg(long)]
+        snapshot: String,
+        #[arg(long)]
+        expected_epoch: String,
+        #[arg(long, value_delimiter = ',')]
+        ids: Vec<String>,
+    },
+    DisconnectConfirm {
+        #[arg(long)]
+        token: String,
+        #[arg(long)]
+        expected_epoch: String,
+        #[arg(long)]
+        confirm: bool,
+    },
 }
 #[derive(clap::Args)]
 struct NodeImportArgs {
@@ -522,7 +630,9 @@ async fn main() -> ExitCode {
 
 fn client_error(error: ClientError) -> (u8, String) {
     let code = match &error {
-        ClientError::InvalidEndpoint | ClientError::InvalidCertificate => 2,
+        ClientError::InvalidEndpoint
+        | ClientError::InvalidCertificate
+        | ClientError::InvalidConnectionId => 2,
         ClientError::Transport(e) if e.is_timeout() => 6,
         ClientError::Transport(_) => 3,
         ClientError::Api { status: 409, .. } => 7,
@@ -613,6 +723,77 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
             }
             InboundCommand::Stop { id } => {
                 serde_json::to_value(client.stop_inbound(id).await.map_err(client_error)?)
+            }
+        },
+        Command::Connection { command } => match command {
+            ConnectionCommand::List(input) => serde_json::to_value(
+                client
+                    .connections(&input.query())
+                    .await
+                    .map_err(client_error)?,
+            ),
+            ConnectionCommand::Summary => {
+                serde_json::to_value(client.connection_summary().await.map_err(client_error)?)
+            }
+            ConnectionCommand::Show { id } => {
+                serde_json::to_value(client.connection(id).await.map_err(client_error)?)
+            }
+            ConnectionCommand::Disconnect {
+                id,
+                expected_epoch,
+                confirm,
+            } => {
+                if !confirm {
+                    return Err((
+                        2,
+                        "review this connection, then pass --confirm to disconnect the exact ID"
+                            .into(),
+                    ));
+                }
+                serde_json::to_value(
+                    client
+                        .disconnect_connection(&hps_domain::ConnectionDisconnectInput {
+                            id: id.clone(),
+                            expected_epoch: expected_epoch.clone(),
+                        })
+                        .await
+                        .map_err(client_error)?,
+                )
+            }
+            ConnectionCommand::DisconnectPreview {
+                snapshot,
+                expected_epoch,
+                ids,
+            } => serde_json::to_value(
+                client
+                    .preview_disconnect_connections(&hps_domain::ConnectionDisconnectPreviewInput {
+                        snapshot: snapshot.clone(),
+                        expected_epoch: expected_epoch.clone(),
+                        ids: ids.clone(),
+                    })
+                    .await
+                    .map_err(client_error)?,
+            ),
+            ConnectionCommand::DisconnectConfirm {
+                token,
+                expected_epoch,
+                confirm,
+            } => {
+                if !confirm {
+                    return Err((
+                        2,
+                        "review the immutable disconnect preview, then pass --confirm".into(),
+                    ));
+                }
+                serde_json::to_value(
+                    client
+                        .confirm_disconnect_connections(&hps_domain::ConnectionDisconnectConfirm {
+                            token: token.clone(),
+                            expected_epoch: expected_epoch.clone(),
+                        })
+                        .await
+                        .map_err(client_error)?,
+                )
             }
         },
         Command::Node { command } => match command {

@@ -4,6 +4,41 @@ use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
 
 struct Connection(Mutex<String>);
+#[derive(serde::Serialize)]
+struct NativeApiError {
+    message: String,
+    code: String,
+    status: u16,
+    request_id: Option<String>,
+}
+impl From<&str> for NativeApiError {
+    fn from(message: &str) -> Self {
+        Self {
+            message: message.into(),
+            code: "native_transport_error".into(),
+            status: 0,
+            request_id: None,
+        }
+    }
+}
+impl From<hps_client::ClientError> for NativeApiError {
+    fn from(error: hps_client::ClientError) -> Self {
+        match error {
+            hps_client::ClientError::Api { status, error } => Self {
+                message: error.message,
+                code: error.code,
+                status,
+                request_id: Some(error.request_id),
+            },
+            other => Self {
+                message: other.to_string(),
+                code: "transport_error".into(),
+                status: 0,
+                request_id: None,
+            },
+        }
+    }
+}
 
 #[tauri::command]
 fn get_endpoint(state: tauri::State<'_, Connection>) -> Result<String, String> {
@@ -53,6 +88,7 @@ fn supported_api(path: &str) -> bool {
             | "api/v1/providers"
             | "api/v1/groups"
     ) || supported_health_get(path)
+        || supported_connections_get(path)
         || supported_nodes_get(path)
         || supported_rules_get(path)
         || supported_dns_get(path)
@@ -60,6 +96,77 @@ fn supported_api(path: &str) -> bool {
         || path
             .strip_prefix("api/v1/config/revisions/")
             .is_some_and(|id| id.parse::<i64>().is_ok_and(|id| id > 0))
+}
+fn supported_connections_get(path: &str) -> bool {
+    let (base, query) = path
+        .split_once('?')
+        .map_or((path, None), |(base, q)| (base, Some(q)));
+    if base == "api/v1/connections/summary" {
+        return query.is_none();
+    }
+    if let Some(id) = base.strip_prefix("api/v1/connections/") {
+        return query.is_none() && hps_domain::valid_connection_id(id);
+    }
+    if base != "api/v1/connections" {
+        return false;
+    }
+    query.is_none_or(|q| {
+        let mut keys = std::collections::HashSet::new();
+        !q.is_empty()
+            && url::form_urlencoded::parse(q.as_bytes()).all(|(key, value)| {
+                keys.insert(key.to_string())
+                    && match key.as_ref() {
+                        "snapshot" | "expected_epoch" => hps_domain::valid_connection_epoch(&value),
+                        "id" => hps_domain::valid_connection_id(&value),
+                        "source" => !value.is_empty() && value.len() <= 64,
+                        "source_port" | "destination_port" => {
+                            value.parse::<u16>().is_ok_and(|p| p > 0)
+                        }
+                        "destination" => {
+                            !value.is_empty()
+                                && value.len() <= 256
+                                && value.is_ascii()
+                                && !value.chars().any(char::is_control)
+                        }
+                        "inbound" => value == "@unknown" || valid_resource_id(&value),
+                        "node" => value == "@direct" || hps_config::valid_node_id(&value),
+                        "provider" => value == "@static" || valid_resource_id(&value),
+                        "group" => value == "@none" || valid_resource_id(&value),
+                        "rule" => value == "@default" || valid_resource_id(&value),
+                        "protocol" => {
+                            ["http", "https", "socks5", "transparent"].contains(&value.as_ref())
+                        }
+                        "transport" => ["tcp", "udp"].contains(&value.as_ref()),
+                        "origin" => {
+                            ["explicit", "linux_local", "gateway"].contains(&value.as_ref())
+                        }
+                        "state" => [
+                            "active",
+                            "all",
+                            "ended",
+                            "open",
+                            "dialing",
+                            "failed",
+                            "rejected",
+                            "disconnected",
+                            "closed",
+                            "disconnecting",
+                        ]
+                        .contains(&value.as_ref()),
+                        "error" => {
+                            !value.is_empty()
+                                && value.len() <= 64
+                                && value.bytes().all(|b| b.is_ascii_lowercase() || b == b'_')
+                        }
+                        "created_after_unix_ms" => value.parse::<u64>().is_ok(),
+                        "sort" => ["newest", "oldest", "bytes_up", "bytes_down", "elapsed"]
+                            .contains(&value.as_ref()),
+                        "offset" => value.parse::<u32>().is_ok_and(|o| o <= 10512),
+                        "limit" => value.parse::<u32>().is_ok_and(|n| (1..=200).contains(&n)),
+                        _ => false,
+                    }
+            })
+    })
 }
 fn supported_nodes_get(path: &str) -> bool {
     let (base, query) = path
@@ -231,6 +338,9 @@ fn supported_action(path: &str) -> bool {
             | "api/v1/nodes/action"
             | "api/v1/nodes/import/preview"
             | "api/v1/nodes/import/apply"
+            | "api/v1/connections/disconnect"
+            | "api/v1/connections/disconnect/preview"
+            | "api/v1/connections/disconnect/confirm"
             | "api/v1/groups/simulate"
             | "api/v1/groups/save"
             | "api/v1/groups/upsert"
@@ -263,7 +373,7 @@ async fn api_post(
     state: tauri::State<'_, Connection>,
     path: String,
     body: Option<serde_json::Value>,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value, NativeApiError> {
     if !supported_action(&path) {
         return Err("unsupported API operation".into());
     }
@@ -274,12 +384,12 @@ async fn api_post(
         .clone();
     let timeout = if path == "api/v1/dns/resolve" { 65 } else { 10 };
     let client =
-        HpsClient::new(&endpoint, Duration::from_secs(timeout)).map_err(|e| e.to_string())?;
+        HpsClient::new(&endpoint, Duration::from_secs(timeout)).map_err(NativeApiError::from)?;
     match body {
         Some(body) => client.post_body(&path, &body).await,
         None => client.post_json(&path).await,
     }
-    .map_err(|e| e.to_string())
+    .map_err(NativeApiError::from)
 }
 
 #[tauri::command]
@@ -323,7 +433,7 @@ async fn save_config_export(
 async fn api_get(
     state: tauri::State<'_, Connection>,
     path: String,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value, NativeApiError> {
     if !supported_api(&path) {
         return Err("unsupported API path".into());
     }
@@ -333,10 +443,10 @@ async fn api_get(
         .map_err(|_| "connection state unavailable")?
         .clone();
     HpsClient::new(&endpoint, Duration::from_secs(10))
-        .map_err(|e| e.to_string())?
+        .map_err(NativeApiError::from)?
         .get_json(&path)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(NativeApiError::from)
 }
 
 #[tauri::command]
@@ -377,6 +487,27 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn connection_paths_and_structured_errors_keep_snapshot_recovery_consistent() {
+        let epoch = "b30e2676-6a33-4cc6-814d-a8ca70a7d151";
+        let id = format!("{epoch}:00000000000000000001");
+        assert!(supported_api(
+            "api/v1/connections?node=%40direct&state=active&offset=0&limit=200"
+        ));
+        assert!(supported_api(&format!("api/v1/connections/{id}")));
+        assert!(supported_api("api/v1/connections/summary"));
+        assert!(!supported_api(
+            "api/v1/connections/summary?url=https://external"
+        ));
+        assert!(!supported_api("api/v1/connections?limit=50&limit=200"));
+        assert!(!supported_api("api/v1/connections?url=http://external"));
+        assert!(!supported_api("api/v1/connections?offset=10513"));
+        assert!(supported_action("api/v1/connections/disconnect/confirm"));
+        let failure=NativeApiError::from(hps_client::ClientError::Api {status:409,error:serde_json::from_value(serde_json::json!({"code":"connection_snapshot_expired","message":"Review a new snapshot","request_id":"test-request","retryable":false})).unwrap()});
+        assert_eq!(failure.status, 409);
+        assert_eq!(failure.code, "connection_snapshot_expired");
+        assert_eq!(failure.request_id.as_deref(), Some("test-request"));
+    }
     #[test]
     fn transport_accepts_implemented_api_only() {
         assert!(supported_api("api/v1/status"));

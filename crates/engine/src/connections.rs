@@ -391,6 +391,30 @@ impl NodeRegistry {
         state.prune();
         runtime.statistics(&state)
     }
+    pub fn connection_record(&self, id: &str) -> Option<ConnectionInfo> {
+        if !hps_domain::valid_connection_id(id) {
+            return None;
+        }
+        let (epoch, sequence) = id.split_once(':')?;
+        let runtime = self.observations();
+        if epoch != runtime.epoch {
+            return None;
+        }
+        let sequence = sequence.parse::<u64>().ok()?;
+        let mut state = runtime.state.lock().unwrap();
+        state.prune();
+        state
+            .records
+            .get(&sequence)
+            .and_then(|record| record.snapshot())
+            .or_else(|| {
+                state
+                    .recent
+                    .iter()
+                    .find(|(_, record)| record.id == id)
+                    .map(|(_, record)| record.clone())
+            })
+    }
     pub fn connection_records(
         &self,
         include_recent: bool,
@@ -472,7 +496,7 @@ impl AsyncRead for ObservedIo {
         let before = buf.filled().len();
         let result = Pin::new(&mut self.inner).poll_read(cx, buf);
         let bytes = buf.filled().len() - before;
-        if bytes > 0 {
+        if bytes > 0 && matches!(&result, Poll::Ready(Ok(()))) {
             add(&self.guard.0.record.down, bytes);
             add(
                 &self.guard.0.registry.observations().totals.bytes_down,

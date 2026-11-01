@@ -326,7 +326,7 @@ impl Supervisor {
         id: String,
     ) -> Result<ConnectionInfo, ApplicationError> {
         if !hps_domain::valid_connection_id(&id) {
-            return Err(ApplicationError::Invalid);
+            return Err(ApplicationError::ConnectionInput);
         }
         self.connection_work(move |service| {
             let registry = service.current().engine.node_registry();
@@ -335,10 +335,7 @@ impl Supervisor {
                 registry.observation_epoch(),
             )?;
             registry
-                .connection_records(true)
-                .1
-                .into_iter()
-                .find(|record| record.id == id)
+                .connection_record(&id)
                 .ok_or(ApplicationError::ConnectionUnavailable)
         })
         .await
@@ -348,7 +345,7 @@ impl Supervisor {
         input: ConnectionDisconnectInput,
     ) -> Result<ConnectionDisconnectResult, ApplicationError> {
         if !hps_domain::valid_connection_id(&input.id) {
-            return Err(ApplicationError::Invalid);
+            return Err(ApplicationError::ConnectionInput);
         }
         self.connection_work(move |service| {
             let registry = service.current().engine.node_registry();
@@ -379,7 +376,7 @@ impl Supervisor {
                 .iter()
                 .any(|id| !hps_domain::valid_connection_id(id))
         {
-            return Err(ApplicationError::Invalid);
+            return Err(ApplicationError::ConnectionInput);
         }
         self.connection_work(move |service| {
             let registry = service.current().engine.node_registry();
@@ -392,7 +389,7 @@ impl Supervisor {
                     .iter()
                     .any(|id| !snapshot.records.iter().any(|r| &r.id == *id))
             {
-                return Err(ApplicationError::Invalid);
+                return Err(ApplicationError::ConnectionInput);
             }
             let records = snapshot
                 .records
@@ -452,7 +449,7 @@ impl Supervisor {
         input: ConnectionDisconnectConfirm,
     ) -> Result<ConnectionDisconnectResult, ApplicationError> {
         if uuid::Uuid::parse_str(&input.token).is_err() {
-            return Err(ApplicationError::Invalid);
+            return Err(ApplicationError::ConnectionInput);
         }
         self.connection_work(move |service| {
             let registry = service.current().engine.node_registry();
@@ -491,7 +488,7 @@ impl Supervisor {
 impl ConnectionRuntime {
     fn snapshot(&self, id: &str) -> Result<Arc<Snapshot>, ApplicationError> {
         if uuid::Uuid::parse_str(id).is_err() {
-            return Err(ApplicationError::Invalid);
+            return Err(ApplicationError::ConnectionInput);
         }
         let mut snapshots = self.snapshots.lock().unwrap();
         snapshots.retain(|_, s| s.deadline > Instant::now());
@@ -503,7 +500,7 @@ impl ConnectionRuntime {
 }
 fn check_epoch(expected: Option<&str>, actual: &str) -> Result<(), ApplicationError> {
     if expected.is_some_and(|e| !hps_domain::valid_connection_epoch(e)) {
-        return Err(ApplicationError::Invalid);
+        return Err(ApplicationError::ConnectionInput);
     }
     if expected.is_some_and(|e| e != actual) {
         return Err(ApplicationError::ConnectionEpoch);
@@ -587,7 +584,7 @@ fn validate(q: &ConnectionQuery) -> Result<(), ApplicationError> {
             s.is_empty() || s.len() > 64 || !s.bytes().all(|b| b.is_ascii_lowercase() || b == b'_')
         })
     {
-        return Err(ApplicationError::Invalid);
+        return Err(ApplicationError::ConnectionInput);
     }
     source_filter(q.source.as_deref())?;
     Ok(())
@@ -596,7 +593,7 @@ fn source_filter(source: Option<&str>) -> Result<Option<ipnet::IpNet>, Applicati
     source
         .map(|s| {
             if s.len() > 64 {
-                return Err(ApplicationError::Invalid);
+                return Err(ApplicationError::ConnectionInput);
             }
             s.parse::<ipnet::IpNet>()
                 .or_else(|_| {
@@ -618,7 +615,7 @@ fn source_filter(source: Option<&str>) -> Result<Option<ipnet::IpNet>, Applicati
                     }
                     other => other,
                 })
-                .map_err(|_| ApplicationError::Invalid)
+                .map_err(|_| ApplicationError::ConnectionInput)
         })
         .transpose()
 }

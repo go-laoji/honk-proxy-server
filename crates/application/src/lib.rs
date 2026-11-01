@@ -25,6 +25,8 @@ use std::{
 
 #[derive(Debug, thiserror::Error)]
 pub enum ApplicationError {
+    #[error("invalid connection query, snapshot identifier or disconnect scope")]
+    ConnectionInput,
     #[error("too many concurrent connection observation operations")]
     ConnectionCapacity,
     #[error("connection observation instance changed; reload the current instance snapshot")]

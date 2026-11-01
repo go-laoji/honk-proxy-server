@@ -16,6 +16,7 @@ use std::{
 };
 
 mod configuration;
+mod connections;
 mod dns;
 mod groups;
 mod health;
@@ -149,6 +150,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/v1/config", get(config));
     let router = router
         .merge(configuration::router())
+        .merge(connections::router())
         .merge(providers::router())
         .merge(health::router())
         .merge(dns::router())
@@ -263,6 +265,25 @@ fn application_error(error: ApplicationError) -> (StatusCode, Json<ApiError>) {
         ApplicationError::Storage(StorageError::Conflict) => {
             (StatusCode::CONFLICT, "configuration_conflict")
         }
+        ApplicationError::ConnectionInput => {
+            (StatusCode::UNPROCESSABLE_ENTITY, "connection_invalid_input")
+        }
+        ApplicationError::ConnectionCapacity => (
+            StatusCode::TOO_MANY_REQUESTS,
+            "connection_observation_capacity",
+        ),
+        ApplicationError::ConnectionEpoch => (StatusCode::CONFLICT, "connection_instance_changed"),
+        ApplicationError::ConnectionSnapshot => {
+            (StatusCode::CONFLICT, "connection_snapshot_expired")
+        }
+        ApplicationError::ConnectionFilters => {
+            (StatusCode::CONFLICT, "connection_snapshot_filters_changed")
+        }
+        ApplicationError::ConnectionUnavailable => (StatusCode::NOT_FOUND, "connection_not_found"),
+        ApplicationError::ConnectionScope => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "connection_disconnect_scope_limit",
+        ),
         ApplicationError::Storage(StorageError::NotFound) => {
             (StatusCode::NOT_FOUND, "revision_not_found")
         }
