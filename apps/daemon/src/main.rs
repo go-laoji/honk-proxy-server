@@ -17,6 +17,8 @@ struct Args {
     data_dir: Option<PathBuf>,
     #[arg(long)]
     ephemeral: bool,
+    #[arg(long)]
+    recover_revision: Option<i64>,
 }
 
 #[tokio::main]
@@ -41,6 +43,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let store =
         tokio::task::spawn_blocking(move || hps_storage::Store::open(directory.as_deref(), config))
             .await??;
+    if let Some(revision) = args.recover_revision {
+        let target = store.revision(revision).await?;
+        if target.revision.applied_at.is_none() {
+            return Err("recovery requires a previously applied configuration revision".into());
+        }
+        let expected = store.workspace().await?.desired.revision.id;
+        store.activate(revision, expected, true).await?;
+    }
     let application = Supervisor::boot(
         store,
         StartupOverrides {

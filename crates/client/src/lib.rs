@@ -7,6 +7,8 @@ use std::time::Duration;
 pub enum ClientError {
     #[error("endpoint must be an HTTP(S) URL without credentials, query or fragment")]
     InvalidEndpoint,
+    #[error("CA certificate bundle is empty or invalid")]
+    InvalidCertificate,
     #[error("request failed: {0}")]
     Transport(#[from] reqwest::Error),
     #[error("HTTP {status}: {error:?}")]
@@ -21,6 +23,13 @@ pub struct HpsClient {
 
 impl HpsClient {
     pub fn new(endpoint: &str, timeout: Duration) -> Result<Self, ClientError> {
+        Self::with_ca(endpoint, timeout, None)
+    }
+    pub fn with_ca(
+        endpoint: &str,
+        timeout: Duration,
+        certificate: Option<&[u8]>,
+    ) -> Result<Self, ClientError> {
         let mut endpoint = Url::parse(endpoint).map_err(|_| ClientError::InvalidEndpoint)?;
         if !matches!(endpoint.scheme(), "http" | "https")
             || endpoint.host_str().is_none()
@@ -34,11 +43,21 @@ impl HpsClient {
         if !endpoint.path().ends_with('/') {
             endpoint.set_path(&format!("{}/", endpoint.path()));
         }
-        let http = Client::builder()
+        let mut http = Client::builder()
             .timeout(timeout)
             .redirect(reqwest::redirect::Policy::none())
-            .no_proxy()
-            .build()?;
+            .no_proxy();
+        if let Some(certificate) = certificate {
+            let certificates = reqwest::Certificate::from_pem_bundle(certificate)
+                .map_err(|_| ClientError::InvalidCertificate)?;
+            if certificates.is_empty() {
+                return Err(ClientError::InvalidCertificate);
+            }
+            for certificate in certificates {
+                http = http.add_root_certificate(certificate);
+            }
+        }
+        let http = http.build()?;
         Ok(Self { http, endpoint })
     }
 

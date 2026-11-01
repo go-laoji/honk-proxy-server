@@ -68,7 +68,10 @@ mod tests {
         let task = tokio::spawn(async move {
             axum::serve(
                 listener,
-                axum::Router::new().route("/healthz", axum::routing::get(|| async { "alive" })),
+                axum::Router::new().route(
+                    "/healthz",
+                    axum::routing::get(|| async { axum::Json(serde_json::json!({"alive":true})) }),
+                ),
             )
             .await
             .unwrap();
@@ -89,17 +92,30 @@ mod tests {
                 .send()
                 .await
                 .unwrap()
-                .text()
+                .json::<serde_json::Value>()
                 .await
                 .unwrap(),
-            "alive"
+            serde_json::json!({"alive":true})
         );
         let untrusted = reqwest::Client::builder()
             .no_proxy()
             .timeout(Duration::from_secs(2))
             .build()
             .unwrap();
-        assert!(untrusted.get(url).send().await.is_err());
+        assert!(untrusted.get(&url).send().await.is_err());
+        let typed = hps_client::HpsClient::with_ca(
+            &format!("https://localhost:{}", address.port()),
+            Duration::from_secs(2),
+            Some(certificate.cert.pem().as_bytes()),
+        )
+        .unwrap();
+        assert_eq!(
+            typed
+                .get_json::<serde_json::Value>("healthz")
+                .await
+                .unwrap(),
+            serde_json::json!({"alive":true})
+        );
         task.abort();
     }
 }

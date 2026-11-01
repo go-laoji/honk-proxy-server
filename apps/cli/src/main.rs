@@ -17,6 +17,8 @@ struct Args {
         env = "HPS_ENDPOINT"
     )]
     endpoint: String,
+    #[arg(long = "ca-cert", global = true, env = "HPS_CA_CERT")]
+    ca_certificate: Option<PathBuf>,
     #[arg(long, global = true, default_value_t = 10, value_parser = clap::value_parser!(u64).range(1..=300))]
     timeout: u64,
     #[arg(long, global = true, value_enum, default_value_t = Output::Text)]
@@ -154,7 +156,7 @@ async fn main() -> ExitCode {
 
 fn client_error(error: ClientError) -> (u8, String) {
     let code = match &error {
-        ClientError::InvalidEndpoint => 2,
+        ClientError::InvalidEndpoint | ClientError::InvalidCertificate => 2,
         ClientError::Transport(e) if e.is_timeout() => 6,
         ClientError::Transport(_) => 3,
         ClientError::Api { status: 409, .. } => 7,
@@ -186,8 +188,24 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
         }
         _ => {}
     }
-    let client =
-        HpsClient::new(&args.endpoint, Duration::from_secs(args.timeout)).map_err(client_error)?;
+    let certificate = if let Some(path) = &args.ca_certificate {
+        let metadata = std::fs::metadata(path).map_err(|error| (2, error.to_string()))?;
+        if !metadata.is_file() || metadata.len() > 1024 * 1024 {
+            return Err((
+                2,
+                "CA bundle must be a regular file no larger than 1 MiB".into(),
+            ));
+        }
+        Some(std::fs::read(path).map_err(|error| (2, error.to_string()))?)
+    } else {
+        None
+    };
+    let client = HpsClient::with_ca(
+        &args.endpoint,
+        Duration::from_secs(args.timeout),
+        certificate.as_deref(),
+    )
+    .map_err(client_error)?;
     let value = match &args.command {
         Command::Status => serde_json::to_value(client.status().await.map_err(client_error)?),
         Command::Version => serde_json::to_value(client.version().await.map_err(client_error)?),
