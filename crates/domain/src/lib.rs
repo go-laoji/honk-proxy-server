@@ -432,3 +432,64 @@ pub struct ProbeResult {
     pub latency_ms: u64,
     pub checked_at: i64,
 }
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HealthProbeInput {
+    pub request_id: String,
+    #[serde(default)]
+    pub node_ids: Vec<String>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthRun {
+    pub id: i64,
+    pub node_id: String,
+    pub identity: String,
+    pub profile_fingerprint: String,
+    pub state: String,
+    pub created_at: i64,
+    pub started_at: Option<i64>,
+    pub finished_at: Option<i64>,
+    pub result: Option<ProbeResult>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthTask {
+    pub id: i64,
+    pub request_id: String,
+    pub trigger: String,
+    pub state: String,
+    pub created_at: i64,
+    pub total: u32,
+    pub completed: u32,
+    pub healthy: u32,
+    pub failed: u32,
+    pub skipped: u32,
+    pub merged: u32,
+    pub runs: Vec<HealthRun>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NodeHealth {
+    pub node_id: String,
+    pub provider_id: Option<String>,
+    pub protocol: String,
+    pub host: String,
+    pub port: u16,
+    pub enabled: bool,
+    pub remaining_secs: Option<u64>,
+    pub eligible: bool,
+    pub results: Vec<ProbeResult>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthOverview<C> {
+    pub configuration: C,
+    pub nodes: Vec<NodeHealth>,
+    pub next_after: Option<String>,
+    pub total_nodes: usize,
+    pub queued: u32,
+    pub probing: u32,
+    pub day_started_at: i64,
+    pub resets_at: i64,
+    pub used_probes: u32,
+    pub budget: u32,
+    pub tasks: Vec<HealthTask>,
+}
