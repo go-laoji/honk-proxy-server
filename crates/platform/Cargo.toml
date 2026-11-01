@@ -9,3 +9,9 @@ hps-domain.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+aya = "0.14"
+hps-ebpf-abi = {workspace = true,features = ["userspace"]}
+libc = "0.2"
+sha2 = "0.10"
