@@ -71,3 +71,29 @@ pub struct RouteSimulation {
     pub health_evaluated_at_unix: u64,
     pub notes: Vec<String>,
 }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RulesSimulationInput {
+    pub revision: Option<i64>,
+    pub context: RoutingContext,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuleCapabilities {
+    pub local_process_available: bool,
+    pub local_process_reason: String,
+    pub udp_data_plane_available: bool,
+    pub kernel_rule_revision: Option<i64>,
+    pub kernel_rules_ready: bool,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RulesOverview<C> {
+    pub running_revision: i64,
+    pub desired_revision: i64,
+    pub viewed_revision: i64,
+    pub configuration: C,
+    pub active_configuration: C,
+    pub candidates: Vec<crate::ConfigRevision>,
+    pub changes: Vec<crate::ConfigChange>,
+    pub other_configuration_changes: bool,
+    pub capabilities: RuleCapabilities,
+}

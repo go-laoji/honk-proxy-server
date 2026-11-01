@@ -49,6 +49,43 @@ pub struct RoutingConfig {
     pub default_action: RouteAction,
     pub use_dns_observations: bool,
 }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RulesSave {
+    pub configuration: RoutingConfig,
+    pub expected_revision: i64,
+    pub base_revision: Option<i64>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RuleUpsert {
+    pub rule: RuleConfig,
+    pub expected_revision: i64,
+    pub base_revision: Option<i64>,
+    pub index: Option<usize>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RuleDelete {
+    pub id: String,
+    pub expected_revision: i64,
+    pub base_revision: Option<i64>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RuleToggle {
+    pub id: String,
+    pub enabled: bool,
+    pub expected_revision: i64,
+    pub base_revision: Option<i64>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RuleOrder {
+    pub ids: Vec<String>,
+    pub expected_revision: i64,
+    pub base_revision: Option<i64>,
+}
 impl RoutingConfig {
     pub fn validate(&self, proxy: &ProxyConfig) -> Result<(), ConfigError> {
         let invalid = || {

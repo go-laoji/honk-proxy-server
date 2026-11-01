@@ -20,6 +20,7 @@ mod dns;
 mod groups;
 mod health;
 mod providers;
+mod rules;
 #[cfg(feature = "web-ui")]
 mod web;
 
@@ -151,6 +152,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .merge(health::router())
         .merge(dns::router())
         .merge(groups::router())
+        .merge(rules::router())
         .layer(axum::extract::DefaultBodyLimit::max(4 * 1024 * 1024));
     #[cfg(feature = "web-ui")]
     let router = router.fallback(web::serve);
@@ -273,6 +275,11 @@ fn application_error(error: ApplicationError) -> (StatusCode, Json<ApiError>) {
         }
         ApplicationError::ProviderUnavailable => (StatusCode::NOT_FOUND, "provider_unavailable"),
         ApplicationError::GroupUnavailable => (StatusCode::NOT_FOUND, "group_not_found"),
+        ApplicationError::RuleUnavailable => (StatusCode::NOT_FOUND, "rule_not_found"),
+        ApplicationError::RulesBase => (StatusCode::CONFLICT, "rules_candidate_base_changed"),
+        ApplicationError::RouteNodeUnavailable => {
+            (StatusCode::UNPROCESSABLE_ENTITY, "routing_node_unavailable")
+        }
         ApplicationError::Provider(error) => (StatusCode::BAD_GATEWAY, error.code),
         ApplicationError::Capture(_) => (
             StatusCode::UNPROCESSABLE_ENTITY,

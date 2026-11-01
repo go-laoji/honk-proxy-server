@@ -5,6 +5,7 @@ pub use dns::DnsOverview;
 mod groups;
 mod health;
 mod providers;
+mod rules;
 use arc_swap::ArcSwap;
 use hps_config::DaemonConfig;
 use hps_domain::{
@@ -21,6 +22,16 @@ use std::{
 
 #[derive(Debug, thiserror::Error)]
 pub enum ApplicationError {
+    #[error("rule not found")]
+    RuleUnavailable,
+    #[error(
+        "candidate includes changed settings outside routing; save its rules against the current version or use the configuration workspace"
+    )]
+    RulesBase,
+    #[error(
+        "routing references a missing or expired lease node; disable or remove that rule, or select a group"
+    )]
+    RouteNodeUnavailable,
     #[error("group not found")]
     GroupUnavailable,
     #[error(transparent)]
@@ -299,12 +310,28 @@ impl Supervisor {
         let current = self.current();
         let changes = changes(&current.config, &candidate);
         let restart_required = restart_fields(&current.base_config, &candidate);
+        if let Err(error) = self.validate_route_nodes(&candidate, &current) {
+            return ConfigValidation {
+                valid: false,
+                diagnostics: vec![diagnostic("proxy.routing", &error.to_string())],
+                changes,
+                restart_required,
+            };
+        }
         let result = tokio::task::spawn_blocking(move || prepare_engine(&candidate, None)).await;
         let diagnostics = match result {
             Ok(Ok(_)) => vec![],
-            _ => vec![diagnostic(
-                "tls_or_log_filter",
-                "certificate/key/CA or log filter validation failed",
+            Ok(Err(error)) => vec![diagnostic(
+                if matches!(error, ApplicationError::Engine(EngineError::Routing)) {
+                    "proxy.routing"
+                } else {
+                    "runtime_preparation"
+                },
+                &error.to_string(),
+            )],
+            Err(_) => vec![diagnostic(
+                "runtime_preparation",
+                "runtime preparation worker could not finish",
             )],
         };
         ConfigValidation {
@@ -355,6 +382,7 @@ impl Supervisor {
             .await
             .map_err(|diagnostics| parse_error(&diagnostics))?;
         let preparing = candidate.clone();
+        self.validate_route_nodes(&candidate, &self.current())?;
         tokio::task::spawn_blocking(move || prepare_engine(&preparing, None))
             .await
             .map_err(|_| ApplicationError::Worker)??;
@@ -391,6 +419,16 @@ impl Supervisor {
         }
         let target = self.store.revision(input.revision).await?;
         let current = self.current();
+        if let Err(error) = self.validate_route_nodes(&target.config, &current) {
+            self.store
+                .record_failure(
+                    input.revision,
+                    input.expected_revision,
+                    "routing_node_unavailable",
+                )
+                .await?;
+            return Err(error);
+        }
         let mut restart_required = restart_fields(&current.base_config, &target.config);
         let mut config = target.config.clone();
         self.overrides.apply(&mut config);
@@ -786,55 +824,7 @@ fn prepare_engine(
     let dns = dns::prepare(config, previous)?;
     let capture = dns_capture::PreparedCapture::prepare(config, previous)?;
     let engine = Engine::with_previous(config.proxy.clone(), previous.map(|p| &p.engine))?;
-    if config.dns.enabled {
-        engine.configure_resolver(Some(Arc::new(dns.clone())));
-    }
-    let health_profiles = if config.health.enabled {
-        config
-            .health
-            .profiles
-            .iter()
-            .filter(|p| p.enabled && p.transport == hps_domain::HealthTransport::Tcp)
-            .cloned()
-            .map(|profile| {
-                hps_health::PreparedProfile::prepare(profile).map(|profile| {
-                    if config.dns.enabled {
-                        profile.with_resolver(Arc::new(dns.clone()), dns.fingerprint())
-                    } else {
-                        profile
-                    }
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|_| ApplicationError::Invalid)?
-    } else {
-        vec![]
-    };
-    engine.configure_health(hps_engine::health::HealthPolicy {
-        enabled: config.health.enabled,
-        profiles: health_profiles
-            .iter()
-            .map(|p| (p.fingerprint.clone(), p.profile.transport, p.profile.family))
-            .collect(),
-        max_staleness_secs: config.health.max_staleness_secs,
-        traffic_failure_threshold: config.health.traffic_failure_threshold,
-    });
-    engine.set_provider_sources(
-        config
-            .providers
-            .iter()
-            .filter(|p| p.enabled)
-            .map(|p| (p.id.clone(), hps_provider::fingerprint(p)))
-            .collect(),
-    );
-    engine.set_provider_source_protocols(
-        config
-            .providers
-            .iter()
-            .filter(|p| p.enabled)
-            .map(|p| (p.id.clone(), p.protocol))
-            .collect(),
-    );
+    let health_profiles = prepare_network(config, &engine, &dns)?;
     if engine.status().inbounds.iter().any(|entry| {
         entry
             .certificate
@@ -950,4 +940,61 @@ fn changes(current: &DaemonConfig, target: &DaemonConfig) -> Vec<ConfigChange> {
         }
     }
     out
+}
+
+fn prepare_network(
+    config: &DaemonConfig,
+    engine: &Arc<Engine>,
+    dns: &hps_dns::Resolver,
+) -> Result<Vec<hps_health::PreparedProfile>, ApplicationError> {
+    if config.dns.enabled {
+        engine.configure_resolver(Some(Arc::new(dns.clone())));
+    }
+    let health_profiles = if config.health.enabled {
+        config
+            .health
+            .profiles
+            .iter()
+            .filter(|p| p.enabled && p.transport == hps_domain::HealthTransport::Tcp)
+            .cloned()
+            .map(|profile| {
+                hps_health::PreparedProfile::prepare(profile).map(|profile| {
+                    if config.dns.enabled {
+                        profile.with_resolver(Arc::new(dns.clone()), dns.fingerprint())
+                    } else {
+                        profile
+                    }
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| ApplicationError::Invalid)?
+    } else {
+        vec![]
+    };
+    engine.configure_health(hps_engine::health::HealthPolicy {
+        enabled: config.health.enabled,
+        profiles: health_profiles
+            .iter()
+            .map(|p| (p.fingerprint.clone(), p.profile.transport, p.profile.family))
+            .collect(),
+        max_staleness_secs: config.health.max_staleness_secs,
+        traffic_failure_threshold: config.health.traffic_failure_threshold,
+    });
+    engine.set_provider_sources(
+        config
+            .providers
+            .iter()
+            .filter(|p| p.enabled)
+            .map(|p| (p.id.clone(), hps_provider::fingerprint(p)))
+            .collect(),
+    );
+    engine.set_provider_source_protocols(
+        config
+            .providers
+            .iter()
+            .filter(|p| p.enabled)
+            .map(|p| (p.id.clone(), p.protocol))
+            .collect(),
+    );
+    Ok(health_profiles)
 }
