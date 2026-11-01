@@ -6,6 +6,8 @@
 - 上游核查基线：`daeuniverse/honk` 的 `54b2e1cfbe1e7f8a93dba3a0f64fabf2a9f88e38`，后文上游源码链接均固定到该提交。
 - 本地现状：Tauri 2 + React 19 + TypeScript + Rust 模板；Rust 入口只有示例 `greet` 命令，没有代理、节点池、同步或 eBPF 实现。已有模板文件在本次调研开始时均未被 Git 跟踪，本次仅新增本文档。
 
+后续技术决策已细化到[技术规划](technical-architecture-plan.md)与[控制台功能清单](console-feature-checklist.md)：后端全部 Rust，提供独立 CLI、Desktop 和 Daemon，Server/Desktop 共用 React + Tailwind CSS 真正 MPA 页面。本文保留前期可行性分析；技术栈和交付形态以这两份后续文档为准。
+
 ## 1. 结论与产品边界
 
 需求可实现。建议定位为“统一代理入口 + 多供应商节点池 + 规则与健康调度 + Linux eBPF 透明代理”的常驻服务，现有 Tauri 项目作为桌面管理端。
