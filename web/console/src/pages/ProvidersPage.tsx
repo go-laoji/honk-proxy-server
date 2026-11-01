@@ -92,10 +92,12 @@ const templates: Record<string, Partial<ProviderConfig>> = {
 export default function ProvidersPage({
   detailPage,
   serviceEndpoint,
+  serviceEpoch,
   refreshService,
 }: {
   detailPage: boolean;
   serviceEndpoint: string;
+  serviceEpoch: string;
   refreshService: () => Promise<void>;
 }) {
   const id = detailPage
@@ -511,6 +513,12 @@ export default function ProvidersPage({
                 <p className="mt-2 break-all text-xs">
                   request_id: {task.request_id}
                 </p>
+                <a
+                  className="mt-2 inline-flex text-xs text-blue-600"
+                  href={`./tasks.html?source_ref=provider:${task.id}&epoch=${encodeURIComponent(serviceEpoch)}`}
+                >
+                  查看统一任务与关联事件 →
+                </a>
                 <p className="mt-2">
                   新增 {task.added} · 拒收 {task.rejected} · 撤销 {task.removed}
                   {task.error_code ? ` · ${task.error_code}` : ""}
@@ -648,6 +656,12 @@ export default function ProvidersPage({
                       {date(item.started_at)}
                       {item.error_code ? ` · ${item.error_code}` : ""}
                     </span>
+                    <a
+                      className="text-xs text-blue-600"
+                      href={`./tasks.html?source_ref=provider:${item.id}&epoch=${encodeURIComponent(serviceEpoch)}`}
+                    >
+                      统一任务 →
+                    </a>
                   </li>
                 ))}
               </ul>

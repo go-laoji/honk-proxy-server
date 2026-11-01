@@ -47,8 +47,35 @@ export default function ConfigPage({
   const [pending, setPending] = useState("");
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
+  const [linkedRevision, setLinkedRevision] = useState<{
+    revision: number;
+    toml: string;
+  } | null>(null);
+  const [linkedError, setLinkedError] = useState("");
+  const link = new URLSearchParams(window.location.search);
+  const revisionLink = link.get("revision");
+  const epochLink = link.get("epoch");
   const mounted = useRef(true);
   const fileInput = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!revisionLink) return;
+    const controller = new AbortController();
+    if (!/^[1-9]\d*$/.test(revisionLink)) {
+      setLinkedError("关联配置版本 ID 无效");
+      return;
+    }
+    void getJson<{ revision: number; toml: string }>(
+      `api/v1/config/revisions/${revisionLink}${epochLink ? `?expected_epoch=${encodeURIComponent(epochLink)}` : ""}`,
+      controller.signal,
+    )
+      .then((value) => {
+        if (!controller.signal.aborted) setLinkedRevision(value);
+      })
+      .catch((cause) => {
+        if (!controller.signal.aborted) setLinkedError(message(cause));
+      });
+    return () => controller.abort();
+  }, [revisionLink, epochLink]);
   useEffect(() => {
     mounted.current = true;
     const controller = new AbortController();
@@ -159,6 +186,31 @@ export default function ConfigPage({
   );
   return (
     <>
+      {revisionLink && (
+        <section
+          className="panel mb-6 space-y-3 p-5"
+          aria-label="关联配置版本详情"
+        >
+          <h2 className="font-semibold">关联版本 r{revisionLink}</h2>
+          <p className="muted text-xs leading-6">
+            此处只读展示脱敏版本内容。编辑器保持共享草稿；保存候选与激活分别执行。
+          </p>
+          {linkedError ? (
+            <p role="alert" className="break-words text-sm text-red-600">
+              {linkedError}
+            </p>
+          ) : linkedRevision ? (
+            <pre className="max-h-96 overflow-auto rounded-lg bg-slate-950 p-4 text-xs text-slate-100">
+              {linkedRevision.toml}
+            </pre>
+          ) : (
+            <p className="muted text-sm">正在读取关联版本…</p>
+          )}
+          <a className="text-xs text-blue-600" href="./config.html">
+            清除版本关联 →
+          </a>
+        </section>
+      )}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Stat
           title="实际运行版本"
