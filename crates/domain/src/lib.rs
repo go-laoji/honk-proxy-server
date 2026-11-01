@@ -351,6 +351,8 @@ pub struct ProviderControllerStatus {
     pub max_nodes: u32,
     pub current_inventory: u32,
     pub projected_inventory: u32,
+    #[serde(default)]
+    pub pending_health_nodes: u32,
     pub inflight_nodes: u32,
     pub demand_active: bool,
     pub refilling: bool,

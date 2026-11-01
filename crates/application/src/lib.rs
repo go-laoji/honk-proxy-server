@@ -1,4 +1,5 @@
 mod controller;
+mod health;
 mod providers;
 use arc_swap::ArcSwap;
 use hps_config::DaemonConfig;
@@ -65,6 +66,7 @@ pub struct RuntimeSnapshot {
     pub config: DaemonConfig,
     pub engine: Arc<Engine>,
     pub management_tls: Option<hps_engine::tls::PreparedServer>,
+    pub health_profiles: Vec<hps_health::PreparedProfile>,
     base_config: DaemonConfig,
 }
 pub struct Supervisor {
@@ -80,6 +82,7 @@ pub struct Supervisor {
     provider_cancel: tokio_util::sync::CancellationToken,
     provider_slots: Arc<tokio::sync::Semaphore>,
     controller_started: std::sync::atomic::AtomicBool,
+    health: health::HealthRuntime,
 }
 impl Supervisor {
     pub async fn boot(
@@ -112,6 +115,7 @@ impl Supervisor {
                 base_config,
                 engine,
                 management_tls: prepared.management_tls,
+                health_profiles: prepared.health_profiles,
             }),
             operation: tokio::sync::Mutex::new(()),
             retired: Mutex::new(vec![]),
@@ -123,7 +127,9 @@ impl Supervisor {
             provider_cancel: tokio_util::sync::CancellationToken::new(),
             provider_slots: Arc::new(tokio::sync::Semaphore::new(8)),
             controller_started: std::sync::atomic::AtomicBool::new(false),
+            health: Default::default(),
         });
+        service.load_health().await?;
         service.refresh_pool().await?;
         Ok(service)
     }
@@ -135,6 +141,7 @@ impl Supervisor {
             .mark_applied(self.current().revision, None)
             .await?;
         self.prune().await?;
+        self.start_health_scheduler();
         self.start_pool_controller();
         Ok(())
     }
@@ -416,6 +423,15 @@ impl Supervisor {
                 .map_err(|_| ApplicationError::Invalid)?
                 == serde_json::to_value(&target.config.providers)
                     .map_err(|_| ApplicationError::Invalid)?
+            && current
+                .health_profiles
+                .iter()
+                .map(|p| &p.fingerprint)
+                .eq(prepared.health_profiles.iter().map(|p| &p.fingerprint))
+            && serde_json::to_value(&current.base_config.health)
+                .map_err(|_| ApplicationError::Invalid)?
+                == serde_json::to_value(&target.config.health)
+                    .map_err(|_| ApplicationError::Invalid)?
         {
             let activation_id = self
                 .store
@@ -427,6 +443,7 @@ impl Supervisor {
                 base_config: target.config,
                 engine: current.engine.clone(),
                 management_tls: prepared.management_tls,
+                health_profiles: prepared.health_profiles,
             }));
             *self.pending_restart.lock().unwrap() = None;
             self.store
@@ -481,6 +498,7 @@ impl Supervisor {
             base_config: target.config,
             engine: candidate,
             management_tls: prepared.management_tls,
+            health_profiles: prepared.health_profiles,
         }));
         self.refresh_pool().await?;
         self.retired.lock().unwrap().push(current.engine.clone());
@@ -616,6 +634,7 @@ fn export(config: &DaemonConfig) -> Result<String, ApplicationError> {
         .map_err(|_| ApplicationError::Invalid)
 }
 struct PreparedRuntime {
+    health_profiles: Vec<hps_health::PreparedProfile>,
     engine: Arc<Engine>,
     management_tls: Option<hps_engine::tls::PreparedServer>,
 }
@@ -636,6 +655,28 @@ fn prepare_engine(
         None
     };
     let engine = Engine::with_previous(config.proxy.clone(), previous)?;
+    let health_profiles = if config.health.enabled {
+        config
+            .health
+            .profiles
+            .iter()
+            .filter(|p| p.enabled && p.transport == hps_domain::HealthTransport::Tcp)
+            .cloned()
+            .map(hps_health::PreparedProfile::prepare)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| ApplicationError::Invalid)?
+    } else {
+        vec![]
+    };
+    engine.configure_health(hps_engine::health::HealthPolicy {
+        enabled: config.health.enabled,
+        profiles: health_profiles
+            .iter()
+            .map(|p| (p.fingerprint.clone(), p.profile.transport, p.profile.family))
+            .collect(),
+        max_staleness_secs: config.health.max_staleness_secs,
+        traffic_failure_threshold: config.health.traffic_failure_threshold,
+    });
     engine.set_provider_sources(
         config
             .providers
@@ -653,6 +694,7 @@ fn prepare_engine(
         return Err(ApplicationError::Invalid);
     }
     Ok(PreparedRuntime {
+        health_profiles,
         engine,
         management_tls,
     })

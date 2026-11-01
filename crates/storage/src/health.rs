@@ -204,3 +204,29 @@ impl Store {
         self.call(|c|{let day=super::controller::budget_day(c,unix_now())?;let (queued,probing)=c.query_row("SELECT coalesce(sum(state='queued'),0),coalesce(sum(state='probing'),0) FROM health_runs WHERE state IN ('queued','probing')",[],|r|Ok((r.get(0)?,r.get(1)?)))?;let used=c.query_row("SELECT probes FROM health_daily_usage WHERE day=?1",[day],|r|r.get(0)).optional()?.unwrap_or(0);Ok(HealthUsage{queued,probing,day,used})}).await
     }
 }
+impl Store {
+    pub async fn invalidate_health(&self, state: HealthState) -> Result<(), StorageError> {
+        self.call(move|c|{let result=state.result;let doc=serde_json::to_string(&result).map_err(|_|StorageError::Invalid)?;c.execute("UPDATE health_state SET result=?3,checked_at=?4,failures=max(failures,?5),next_due_at=?6 WHERE identity=?1 AND profile_fingerprint=?2 AND checked_at<=?4",params![result.identity,result.profile_fingerprint,doc,result.checked_at,state.failures,state.next_due_at])?;Ok(())}).await
+    }
+}
+impl Store {
+    pub async fn pending_health_runs(&self) -> Result<Vec<HealthRun>, StorageError> {
+        self.call(|c|Ok(c.prepare(&format!("SELECT {RUN_COLUMNS} FROM health_runs WHERE state IN ('queued','probing') ORDER BY id LIMIT 10000"))?.query_map([],run)?.collect::<Result<Vec<_>,_>>()?)).await
+    }
+    pub async fn health_task_by_request(
+        &self,
+        request: String,
+    ) -> Result<Option<HealthTask>, StorageError> {
+        self.call(move |c| {
+            c.query_row(
+                "SELECT id FROM health_tasks WHERE request_id=?1",
+                [request],
+                |r| r.get(0),
+            )
+            .optional()?
+            .map(|id| task(c, id))
+            .transpose()
+        })
+        .await
+    }
+}

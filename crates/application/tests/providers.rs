@@ -45,6 +45,10 @@ async fn extraction_server(
 }
 fn config(endpoint: std::net::SocketAddr) -> DaemonConfig {
     DaemonConfig {
+        health: hps_config::HealthConfig {
+            enabled: false,
+            ..Default::default()
+        },
         providers: vec![ProviderConfig {
             id: "vendor".into(),
             name: "vendor".into(),

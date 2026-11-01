@@ -89,6 +89,9 @@ impl PreparedProfile {
             resolved: Arc::new(tokio::sync::Mutex::new(None)),
         })
     }
+    pub async fn bootstrap_ready(&self) -> bool {
+        self.resolve().await.is_ok()
+    }
     async fn resolve(&self) -> Result<Target, &'static str> {
         let mut cached = self.resolved.lock().await;
         if let Some(cached) = cached.as_ref()

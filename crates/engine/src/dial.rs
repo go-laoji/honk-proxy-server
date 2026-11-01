@@ -194,6 +194,12 @@ impl Dialer {
         self.upstreams
             .iter()
             .chain(dynamic.iter())
+            .filter(|upstream| {
+                upstream
+                    .source
+                    .as_ref()
+                    .is_none_or(|(id, fp)| self.sources.read().unwrap().get(id) == Some(fp))
+            })
             .map(|upstream| ProbePlan {
                 dialer: self.clone(),
                 upstream: upstream.clone(),

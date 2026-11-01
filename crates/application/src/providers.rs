@@ -86,7 +86,21 @@ impl Supervisor {
                 configuration: config.redacted(),
                 active_leases: active,
                 latest_task: tasks.into_iter().next(),
-                health_state: "unverified_until_probe".into(),
+                health_state: if !config.enabled {
+                    "disabled"
+                } else if !current.config.health.enabled {
+                    "checking_disabled"
+                } else if current.engine.probe_plans().iter().any(|p| {
+                    p.provider_id() == Some(config.id.as_str())
+                        && current.engine.health_usable(p.identity())
+                }) {
+                    "healthy"
+                } else if active == 0 {
+                    "empty"
+                } else {
+                    "awaiting_healthy_node"
+                }
+                .into(),
             });
         }
         Ok(providers)

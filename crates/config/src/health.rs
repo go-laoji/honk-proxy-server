@@ -146,3 +146,10 @@ impl HealthConfig {
         Ok(())
     }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HealthSave {
+    pub configuration: HealthConfig,
+    pub expected_revision: i64,
+}
