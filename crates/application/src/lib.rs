@@ -1,3 +1,4 @@
+mod connections;
 mod controller;
 mod dns;
 mod dns_capture;
@@ -24,6 +25,20 @@ use std::{
 
 #[derive(Debug, thiserror::Error)]
 pub enum ApplicationError {
+    #[error("too many concurrent connection observation operations")]
+    ConnectionCapacity,
+    #[error("connection observation instance changed; reload the current instance snapshot")]
+    ConnectionEpoch,
+    #[error("connection snapshot or disconnect preview expired; review a fresh snapshot")]
+    ConnectionSnapshot,
+    #[error("connection snapshot filters changed; request a new snapshot")]
+    ConnectionFilters,
+    #[error("connection is no longer in the bounded active or recent observation records")]
+    ConnectionUnavailable,
+    #[error(
+        "disconnect scope exceeds 500 active records; narrow the filter or select explicit IDs"
+    )]
+    ConnectionScope,
     #[error("too many concurrent node inventory operations")]
     NodeCapacity,
     #[error("rule not found")]
@@ -114,6 +129,7 @@ pub struct Supervisor {
     provider_slots: Arc<tokio::sync::Semaphore>,
     rule_diagnostics: Arc<tokio::sync::Semaphore>,
     node_operations: Arc<tokio::sync::Semaphore>,
+    observations: connections::ConnectionRuntime,
     controller_started: std::sync::atomic::AtomicBool,
     health: health::HealthRuntime,
 }
@@ -170,6 +186,7 @@ impl Supervisor {
             provider_slots: Arc::new(tokio::sync::Semaphore::new(8)),
             rule_diagnostics: Arc::new(tokio::sync::Semaphore::new(4)),
             node_operations: Arc::new(tokio::sync::Semaphore::new(4)),
+            observations: Default::default(),
             controller_started: std::sync::atomic::AtomicBool::new(false),
             health: Default::default(),
         });

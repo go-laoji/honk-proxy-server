@@ -804,6 +804,7 @@ dependencies = [
  "hyper",
  "hyper-util",
  "if-addrs",
+ "ipnet",
  "rcgen",
  "reqwest",
  "rusqlite",

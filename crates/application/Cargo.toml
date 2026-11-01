@@ -25,6 +25,7 @@ toml.workspace = true
 thiserror.workspace = true
 tracing-subscriber.workspace = true
 arc-swap = "1.9"
+ipnet = "2.12.2"
 
 [dev-dependencies]
 hickory-proto = "0.26.3"

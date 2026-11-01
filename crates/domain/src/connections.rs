@@ -62,3 +62,131 @@ pub struct ConnectionStatistics {
     pub bytes_down: u64,
     pub errors: std::collections::BTreeMap<String, u64>,
 }
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct ConnectionQuery {
+    pub snapshot: Option<String>,
+    pub expected_epoch: Option<String>,
+    pub id: Option<String>,
+    pub source: Option<String>,
+    pub source_port: Option<u16>,
+    pub destination: Option<String>,
+    pub destination_port: Option<u16>,
+    pub inbound: Option<String>,
+    pub protocol: Option<String>,
+    pub transport: Option<String>,
+    pub origin: Option<String>,
+    pub node: Option<String>,
+    pub provider: Option<String>,
+    pub group: Option<String>,
+    pub rule: Option<String>,
+    pub state: Option<String>,
+    pub error: Option<String>,
+    pub created_after_unix_ms: Option<u64>,
+    pub sort: Option<String>,
+    pub offset: u32,
+    pub limit: Option<u32>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConnectionsOverview {
+    pub running_revision: i64,
+    pub epoch: String,
+    pub snapshot: String,
+    pub snapshot_created_at_unix_ms: u64,
+    pub snapshot_expires_at_unix_ms: u64,
+    pub statistics: ConnectionStatistics,
+    pub filtered_total: usize,
+    pub offset: u32,
+    pub next_offset: Option<u32>,
+    pub records: Vec<ConnectionInfo>,
+    pub inbounds: Vec<String>,
+    pub groups: Vec<String>,
+    pub providers: Vec<String>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ConnectionDisconnectInput {
+    pub id: String,
+    pub expected_epoch: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ConnectionDisconnectPreviewInput {
+    pub snapshot: String,
+    pub expected_epoch: String,
+    /// Empty means all active records in this frozen, filtered snapshot, at most 500.
+    #[serde(default)]
+    pub ids: Vec<String>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConnectionDisconnectTarget {
+    pub id: String,
+    pub source_ip: Option<std::net::IpAddr>,
+    pub source_port: Option<u16>,
+    pub inbound: Option<String>,
+    pub destination_host: String,
+    pub destination_port: u16,
+    pub node_id: Option<String>,
+    pub configuration_revision: i64,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConnectionDisconnectPreview {
+    pub token: String,
+    pub epoch: String,
+    pub created_at_unix_ms: u64,
+    pub expires_at_unix_ms: u64,
+    pub targets: Vec<ConnectionDisconnectTarget>,
+    pub active_untracked_in_instance: usize,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ConnectionDisconnectConfirm {
+    pub token: String,
+    pub expected_epoch: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConnectionDisconnectResult {
+    pub epoch: String,
+    pub token: Option<String>,
+    pub requested: usize,
+    pub already_ended: usize,
+    pub matched: usize,
+    pub requested_at_unix_ms: u64,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConnectionAttention {
+    pub kind: String,
+    pub code: String,
+    pub severity: String,
+    pub resource_id: Option<String>,
+    pub observed_at_unix_ms: u64,
+    pub href: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConnectionSummary {
+    pub running_revision: i64,
+    pub evaluated_at_unix_ms: u64,
+    pub statistics: ConnectionStatistics,
+    pub proxy: crate::ProxyStatus,
+    pub attention: Vec<ConnectionAttention>,
+}
+/// Structural validation only; matching the live epoch remains the service's responsibility.
+pub fn valid_connection_epoch(epoch: &str) -> bool {
+    epoch.len() == 36
+        && epoch.bytes().enumerate().all(|(i, b)| {
+            if [8, 13, 18, 23].contains(&i) {
+                b == b'-'
+            } else {
+                b.is_ascii_digit() || (b'a'..=b'f').contains(&b)
+            }
+        })
+}
+pub fn valid_connection_id(id: &str) -> bool {
+    id.split_once(':').is_some_and(|(epoch, n)| {
+        valid_connection_epoch(epoch)
+            && n.len() == 20
+            && n.parse::<u64>()
+                .is_ok_and(|number| number > 0 && format!("{number:020}") == n)
+    })
+}

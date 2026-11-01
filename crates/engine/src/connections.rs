@@ -88,6 +88,31 @@ impl Default for ObservationRuntime {
         }
     }
 }
+impl ObservationRuntime {
+    fn statistics(&self, state: &State) -> ConnectionStatistics {
+        let totals = &self.totals;
+        ConnectionStatistics {
+            epoch: self.epoch.clone(),
+            started_at_unix_ms: self.started_at,
+            elapsed_ms: millis(self.origin.elapsed()),
+            active: state.active,
+            active_tracked: state.records.len(),
+            active_untracked: state.untracked,
+            active_record_limit: MAX_ACTIVE_RECORDS,
+            recent_record_limit: MAX_RECENT_RECORDS,
+            started: state.next,
+            opened: state.opened,
+            closed: state.closed,
+            failed: state.failed,
+            rejected: state.rejected,
+            disconnected: state.disconnected,
+            untracked_total: state.untracked_total,
+            bytes_up: totals.bytes_up.load(Ordering::Relaxed),
+            bytes_down: totals.bytes_down.load(Ordering::Relaxed),
+            errors: state.errors.clone(),
+        }
+    }
+}
 #[derive(Default, Clone)]
 struct Outcome {
     opened: bool,
@@ -360,6 +385,12 @@ impl NodeRegistry {
             node: Mutex::new(None),
         })))
     }
+    pub fn connection_statistics(&self) -> ConnectionStatistics {
+        let runtime = self.observations();
+        let mut state = runtime.state.lock().unwrap();
+        state.prune();
+        runtime.statistics(&state)
+    }
     pub fn connection_records(
         &self,
         include_recent: bool,
@@ -375,27 +406,7 @@ impl NodeRegistry {
         if include_recent {
             records.extend(state.recent.iter().map(|(_, r)| r.clone()));
         }
-        let totals = &runtime.totals;
-        let stats = ConnectionStatistics {
-            epoch: runtime.epoch.clone(),
-            started_at_unix_ms: runtime.started_at,
-            elapsed_ms: millis(runtime.origin.elapsed()),
-            active: state.active,
-            active_tracked: state.records.len(),
-            active_untracked: state.untracked,
-            active_record_limit: MAX_ACTIVE_RECORDS,
-            recent_record_limit: MAX_RECENT_RECORDS,
-            started: state.next,
-            opened: state.opened,
-            closed: state.closed,
-            failed: state.failed,
-            rejected: state.rejected,
-            disconnected: state.disconnected,
-            untracked_total: state.untracked_total,
-            bytes_up: totals.bytes_up.load(Ordering::Relaxed),
-            bytes_down: totals.bytes_down.load(Ordering::Relaxed),
-            errors: state.errors.clone(),
-        };
+        let stats = runtime.statistics(&state);
         (stats, records)
     }
     /// IDs are qualified by the process epoch. A stale instance can never target a new flow.
