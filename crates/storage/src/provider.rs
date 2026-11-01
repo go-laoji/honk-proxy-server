@@ -511,4 +511,32 @@ mod tests {
         assert_eq!(store.active_leases().await.unwrap().len(), 1);
         store.close().await.unwrap();
     }
+    #[tokio::test]
+    async fn source_lease_pages_do_not_include_other_provider_history() {
+        let store = Store::open(None, DaemonConfig::default()).unwrap();
+        let mut a = config();
+        a.id = "first-source".into();
+        let mut b = config();
+        b.id = "second-source".into();
+        for c in [&a, &b] {
+            let task = next(&store, c, "one").await;
+            store
+                .finish_extraction(task.id, c.clone(), nodes(1), true)
+                .await
+                .unwrap();
+        }
+        let a_rows = store
+            .provider_leases(Some(a.id.clone()), None, 50)
+            .await
+            .unwrap();
+        assert_eq!(a_rows.len(), 1);
+        assert_eq!(a_rows[0].provider_id, a.id);
+        let b_rows = store
+            .provider_leases(Some(b.id.clone()), None, 50)
+            .await
+            .unwrap();
+        assert_eq!(b_rows.len(), 1);
+        assert_eq!(b_rows[0].provider_id, b.id);
+        store.close().await.unwrap();
+    }
 }
