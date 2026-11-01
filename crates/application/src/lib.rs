@@ -1,3 +1,4 @@
+mod providers;
 use arc_swap::ArcSwap;
 use hps_config::DaemonConfig;
 use hps_domain::{
@@ -24,6 +25,10 @@ pub enum ApplicationError {
     GenerationBudget,
     #[error("runtime preparation could not finish")]
     Worker,
+    #[error("provider not found or disabled")]
+    ProviderUnavailable,
+    #[error("provider operation failed: {0}")]
+    Provider(#[from] hps_provider::FetchError),
 }
 #[derive(Default, Clone)]
 pub struct StartupOverrides {
@@ -66,6 +71,9 @@ pub struct Supervisor {
     path_base: PathBuf,
     closed: std::sync::atomic::AtomicBool,
     pending_restart: Mutex<Option<(i64, Vec<String>)>>,
+    provider_tasks: tokio_util::task::TaskTracker,
+    provider_cancel: tokio_util::sync::CancellationToken,
+    provider_slots: Arc<tokio::sync::Semaphore>,
 }
 impl Supervisor {
     pub async fn boot(
@@ -90,7 +98,7 @@ impl Supervisor {
             .and_then(|path| path.parent())
             .map(PathBuf::from)
             .unwrap_or(std::env::current_dir().map_err(|_| ApplicationError::Worker)?);
-        Ok(Arc::new(Self {
+        let service = Arc::new(Self {
             store,
             current: ArcSwap::from_pointee(RuntimeSnapshot {
                 revision: workspace.desired.revision.id,
@@ -105,7 +113,12 @@ impl Supervisor {
             path_base,
             closed: std::sync::atomic::AtomicBool::new(false),
             pending_restart: Mutex::new(None),
-        }))
+            provider_tasks: tokio_util::task::TaskTracker::new(),
+            provider_cancel: tokio_util::sync::CancellationToken::new(),
+            provider_slots: Arc::new(tokio::sync::Semaphore::new(8)),
+        });
+        service.refresh_pool().await?;
+        Ok(service)
     }
     pub fn current(&self) -> Arc<RuntimeSnapshot> {
         self.current.load_full()
@@ -279,6 +292,9 @@ impl Supervisor {
         input: ConfigInput,
     ) -> Result<ConfigRevision, ApplicationError> {
         let _operation = self.operation.lock().await;
+        if self.closed.load(std::sync::atomic::Ordering::Acquire) {
+            return Err(EngineError::ShuttingDown.into());
+        }
         let workspace = self.store.workspace().await?;
         if workspace.desired.revision.id != input.expected_revision
             || input
@@ -319,6 +335,9 @@ impl Supervisor {
         input: ConfigActivate,
     ) -> Result<ConfigActivationResult, ApplicationError> {
         let _operation = self.operation.lock().await;
+        if self.closed.load(std::sync::atomic::Ordering::Acquire) {
+            return Err(EngineError::ShuttingDown.into());
+        }
         let workspace = self.store.workspace().await?;
         if workspace.desired.revision.id != input.expected_revision {
             return Err(StorageError::Conflict.into());
@@ -385,6 +404,10 @@ impl Supervisor {
         if serde_json::to_value(&current.base_config.proxy)
             .map_err(|_| ApplicationError::Invalid)?
             == serde_json::to_value(&target.config.proxy).map_err(|_| ApplicationError::Invalid)?
+            && serde_json::to_value(&current.base_config.providers)
+                .map_err(|_| ApplicationError::Invalid)?
+                == serde_json::to_value(&target.config.providers)
+                    .map_err(|_| ApplicationError::Invalid)?
         {
             let activation_id = self
                 .store
@@ -451,6 +474,7 @@ impl Supervisor {
             engine: candidate,
             management_tls: prepared.management_tls,
         }));
+        self.refresh_pool().await?;
         self.retired.lock().unwrap().push(current.engine.clone());
         *self.pending_restart.lock().unwrap() = None;
         self.store
@@ -524,6 +548,10 @@ impl Supervisor {
         if self.closed.swap(true, std::sync::atomic::Ordering::AcqRel) {
             return Ok(());
         }
+        self.provider_cancel.cancel();
+        drop(_operation);
+        self.provider_tasks.close();
+        self.provider_tasks.wait().await;
         self.current().engine.shutdown().await;
         let retired = std::mem::take(&mut *self.retired.lock().unwrap());
         for engine in retired {
@@ -591,6 +619,14 @@ fn prepare_engine(
         None
     };
     let engine = Engine::with_previous(config.proxy.clone(), previous)?;
+    engine.set_provider_sources(
+        config
+            .providers
+            .iter()
+            .filter(|p| p.enabled)
+            .map(|p| (p.id.clone(), hps_provider::fingerprint(p)))
+            .collect(),
+    );
     if engine.status().inbounds.iter().any(|entry| {
         entry
             .certificate
@@ -673,6 +709,20 @@ fn changes(current: &DaemonConfig, target: &DaemonConfig) -> Vec<ConfigChange> {
                 path: format!("proxy.upstreams.{}.credentials", upstream.id),
                 before: serde_json::Value::String("[REDACTED]".into()),
                 after: serde_json::Value::String("[REDACTED: changed]".into()),
+                apply_mode: "live".into(),
+            });
+        }
+    }
+    for provider in &target.providers {
+        if let Some(old) = current.providers.iter().find(|old| old.id == provider.id)
+            && hps_provider::fingerprint(old) != hps_provider::fingerprint(provider)
+            && serde_json::to_value(old.redacted()).unwrap()
+                == serde_json::to_value(provider.redacted()).unwrap()
+        {
+            out.push(ConfigChange {
+                path: format!("providers.{}.credentials", provider.id),
+                before: serde_json::json!("[REDACTED]"),
+                after: serde_json::json!("[REDACTED: changed]"),
                 apply_mode: "live".into(),
             });
         }

@@ -317,3 +317,20 @@ pub struct LeaseInfo {
 pub struct ExtractionInput {
     pub request_id: String,
 }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderView<T> {
+    pub configuration: T,
+    pub active_leases: usize,
+    pub latest_task: Option<ExtractionTask>,
+    pub health_state: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderDetail<T> {
+    pub provider: ProviderView<T>,
+    pub tasks: Vec<ExtractionTask>,
+    pub leases: Vec<LeaseInfo>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExpectedRevision {
+    pub expected_revision: i64,
+}

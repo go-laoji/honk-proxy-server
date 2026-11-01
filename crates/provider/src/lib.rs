@@ -52,9 +52,18 @@ impl FetchError {
 }
 pub fn fingerprint(config: &ProviderConfig) -> String {
     // Do not publish the fingerprint input or use raw credentials as identifiers.
+    let mut provenance = config.clone();
+    provenance.name.clear();
+    provenance.enabled = false;
+    provenance.count = 1;
+    provenance.min_interval_secs = 1;
+    provenance.min_remaining_secs = 0;
+    provenance.mode = hps_config::LeaseMode::AppendLeases;
+    provenance.full_snapshot = false;
+    provenance.minimum_snapshot_percent = 0;
     format!(
         "{:x}",
-        Sha256::digest(serde_json::to_vec(config).expect("provider serialization"))
+        Sha256::digest(serde_json::to_vec(&provenance).expect("provider serialization"))
     )
 }
 pub fn sign(method: &str, path: &str, params: &BTreeMap<String, String>, key: &str) -> String {

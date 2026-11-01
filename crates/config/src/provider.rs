@@ -363,3 +363,10 @@ fn sensitive_parameter(key: &str) -> bool {
     .iter()
     .any(|part| key.contains(part))
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProviderSave {
+    pub configuration: ProviderConfig,
+    pub expected_revision: i64,
+}

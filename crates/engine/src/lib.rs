@@ -2,6 +2,7 @@
 mod capacity;
 pub mod dial;
 mod http_proxy;
+pub mod pool;
 pub mod runtime;
 mod socks;
 pub mod target;
