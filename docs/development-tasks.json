@@ -200,7 +200,7 @@
       "acceptance": "不能越过固定或回退范围；UDP排除TCP-only；到期/禁用不选；已有连接不承诺迁移；入口共享选择。",
       "issue": 15,
       "url": "https://github.com/go-laoji/honk-proxy-server/issues/15",
-      "status": "in_progress"
+      "status": "completed"
     },
     {
       "id": "T11",
@@ -247,7 +247,7 @@
       "acceptance": "URL恢复筛选；批次归属不误删；过期与健康分开；敏感数据脱敏；界面不是静态演示数据。",
       "issue": 17,
       "url": "https://github.com/go-laoji/honk-proxy-server/issues/17",
-      "status": "in_progress"
+      "status": "completed"
     },
     {
       "id": "T13",

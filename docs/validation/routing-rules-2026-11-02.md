@@ -12,7 +12,7 @@
 | React / 18 个 HTML 入口 | 类型检查与生产构建通过，共用组件和资源清单 |
 | Chromium 完整回归 | 14 passed，包含候选/排序/激活和实际业务 HTTP 字节 |
 | CLI | 真实独立 Daemon 上 CRUD、启停、排序、运行/候选模拟、显式 apply、过期版本退出码 7 通过 |
-| Native bridge | 最新桥测试与独立 `.app` 构建通过，实际窗口仍待 Mac 解锁 |
+| Native bridge | 独立构建及实际窗口候选保存/模拟/显式激活和真实流量通过 |
 
 新增引擎测试在 HTTP、HTTPS、SOCKS5 三入口使用同一规则顺序，实际经过指定节点/组或明确直连访问本地 HTTP/HTTPS 目标，检查字节返回；拒绝和直连阶段没有代理池采购需求。指定节点不可用不改用无关健康节点，全匹配拒绝会遮住默认直连。Direct 使用共享 business DNS，保留 HTTP Host；原有 3×3 出入口协议、取消和不重放测试继续通过。
 
@@ -24,10 +24,12 @@
 
 端到端发现并修复手动入口状态在规则热更新时丢失的问题：`enabled` 未变化时保留手动启停覆盖及端口；显式修改 `enabled` 清除覆盖，重启按持久配置恢复。单独的持久重启测试与浏览器同端口实际流量都通过。
 
-## Desktop 与 Linux 剩余验收
+## Desktop 实际验收与 Linux 剩余门槛
 
-DNS/分组的独立 `HPS DNS Validation.app` 与 17995 验收实例仍保留，用户原 `.app` / 17900 实例没有被覆盖或重启。新的 `HPS Feature Validation.app` 已使用独立 `dev.hps.feature-validation` 构建完成，对应 17996 临时验收实例。CLI 与服务确认共享 build ID 为 `f9c83fae4ff7d758bcd5de2c4cb9676b4ab988ecac6715effe7cb43d1804979a`。实际窗口仍待解锁，不能用编译代替窗口操作。
+此前 DNS/分组的独立 `HPS DNS Validation.app` 与 17995 验收实例及 `HPS Feature Validation.app`（`dev.hps.feature-validation`、17996）均已构建。后者 CLI 与服务确认共享 build ID 为 `f9c83fae4ff7d758bcd5de2c4cb9676b4ab988ecac6715effe7cb43d1804979a`，当时窗口受锁屏阻挡；后续实际验收如下。
+
+2026-11-02 解锁后，在 `HPS Connection Validation.app` 连接 17999 隔离服务，窗口新建启用规则 native-reject-fixture，仅匹配目标端口 56529，动作 reject。保存后明确显示“候选 r5 / 运行 r4”；真实 CONNECT 到 56529 仍返回 200。窗口模拟候选显示 r5 首条命中该规则、动作拒绝且没有副作用。点击显式激活后显示 applied / 实际 r5，新 CONNECT 返回 403，已经建立的 56528 隧道继续回显；后续连接详情仍显示原 r4。原生窗口门槛已满足，原用户 17900 未变动。
 
 `local_process_available=false`、`kernel_rule_revision=null`、`kernel_rules_ready=false` 都是当前实际状态。T15 必须提供真实 Linux 本机进程来源、透明流量上下文和原子规则代际证明后，才能关闭 T11。DNS 捕获成功不作为这些规则能力的替代证明。
 
-T14 还需统一配置候选预备任务的所有权：客户端取消不能让仍在运行的预备工作绕开运行队列/并发预算。规则模拟已独立处理这一边界，其他长任务会随统一任务模块接续审查。
+T14 已统一配置预备与规则诊断等任务的服务所有权。受控阻塞预检、调用方取消、工作容量和关闭等待回归通过，客户端离开不会提前释放仍在执行的操作锁或许可。

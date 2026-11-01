@@ -1,6 +1,6 @@
 # T13 业务连接与流量验收
 
-Issue：[#18](https://github.com/go-laoji/honk-proxy-server/issues/18)。核心、API、CLI 和共享 MPA 已通过 macOS/Linux 及真实代理验证。独立原生窗口仍受计算机工具锁屏报告阻断，Issue 保持开放。Linux 透明流的进程与内核代际继续由 T15 联合验收。
+Issue：[#18](https://github.com/go-laoji/honk-proxy-server/issues/18)。核心、API、CLI、共享 MPA 和实际独立原生窗口已通过显式代理验证。依赖 T11 的 Linux 进程/内核代际仍由 T15 联合验收，Issue 保持开放。
 
 ## 已验证的实际行为
 
@@ -32,8 +32,14 @@ Linux 在独立源码快照、Rust 1.98.1 Alpine、单构建任务及独立 Carg
 
 首次新增浏览器夹具将测试凭据写成顶层 upstream 字段，严格配置校验拒绝该请求；改用实际的 `credentials` 表后通过。完整格式检查也发现既有 rules 浏览器测试格式不一致，已单独格式提交并重跑通过。
 
-## 独立桌面与剩余门槛
+## 独立桌面实际验收与剩余依赖
 
 `HPS Connection Validation.app`，bundle ID `dev.hps.connection-validation`，独立连接偏好；隔离服务 `127.0.0.1:17999` 无供应商且入口默认关闭。API、共享生产产物与打包应用对应 `web_build_id=169275ac5ccde608668c35ad9b695ced253ca58ed2a8c5093b87e18cd1468837`。原用户 `17900` 服务、原 `.app` 和用户连接偏好保持不动。
 
-用户确认解锁后，本次 `cua.getApp` 仍返回 `The Mac is locked and automatic unlock could not unlock it`，没有成功执行原生窗口动作。桥测试与打包不能代替窗口实际验收，未据此关闭 Issue。
+2026-11-02 解锁后，通过实际窗口启动入口、从节点详情跳转连接列表，显示真实两条隧道、源端口和每方向 66 B。窗口排空节点只阻止新连接；旧隧道继续传输。候选规则保存不改变流量，激活 r5 后，新请求被拒绝，旧 r4 隧道继续工作。
+
+窗口发现连接 ID 的冒号被前端编码为 `%3A` 后，原生接口白名单没有解码，详情显示 unsupported API path。修复提交 `333a06b` 在校验前解码单个路径段，并测试拒绝注入额外参数和编码斜线。重打包独立 `HPS Final Validation.app`（`dev.hps.final-validation`），最终 build ID `5aeeffb9c6138494acb0136b50bab2f9503daae555157e024e368467da085bbb`；原生 7 项测试、Clippy 和构建通过。
+
+修复后实际窗口暂停自动刷新，打开连接 `2dc1ec89-447b-44cd-a6b8-936706395a56:00000000000000000004`：源端口 64123、目标 56528、入口 validation-http、组 validation、固定节点、规则默认 r4，而当前运行参考版本为 r5；详情实际显示上传/下载各 183 B。点击断开后先显示包含唯一连接 ID 的确认范围；确认后显示主动断开、management_disconnect、活动数 0，测试客户端也收到实际 EOF。窗口布局已经检查，没有用 API 成功代替窗口操作。
+
+显式代理的窗口门槛已满足。依赖 #16 的 Linux 进程归属、透明连接与内核/用户态代际尚未完成，待 T15 #20 联合验证后再关闭本 Issue。
