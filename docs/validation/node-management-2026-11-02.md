@@ -29,6 +29,8 @@ Linux 忽略项为需要特权内核环境的 DNS 核心/应用验收及子进�
 
 浏览器此前 15 项完整集全部通过（`/tmp/hps-t12-browser-all.log`）。新增来源水位夹具时遗漏通用提取必需的 `count_parameter`，该轮 14 通过、1 失败；补齐后节点用例通过（`/tmp/hps-t12-release-node-browser.log`）。最终针对实际详情 MPA 导航重跑 console+nodes 6 项全通过，覆盖独立文档、嵌入字节一致、真实代理 200→禁用 503→恢复 200、过期 CAS、URL 恢复、来源水位与健康跳转。390px 截图 `/tmp/hps-t12-nodes-mobile.png` 已实际检查，无横向溢出。未将夹具失败隐藏为产品成功。
 
+后续 T13 的完整 `pnpm typecheck` 发现节点浏览器测试跨 composite 项目导入 Web 类型，触发 TS6307；已将测试需要的消费契约保留在 Node 测试项目内，不改变产品 DTO 或页面。Web 与 Node 两个 TypeScript 项目检查重新通过，日志 `/tmp/hps-t13-platform-typecheck.log`。
+
 CLI 可复现：先构建 `hps-cli`/`hps-daemon`，运行 `python3 tests/cli/nodes.py`。使用随机端口、唯一实例名和临时内存库，清理自身子进程和目录；不启动桌面、不调用供应商。
 
 ## 桌面及未关闭门槛

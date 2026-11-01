@@ -1,7 +1,11 @@
 import { test, expect } from "@playwright/test";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
-import type { NodesOverview } from "../../web/console/src/nodes";
+type NodesOverview = {
+  running_revision: number;
+  summary: { inventory: number };
+  nodes: { id: string; protocol: string; operation: { version: number } }[];
+};
 
 async function throughProxy(port: number): Promise<number> {
   return new Promise((resolve, reject) => {
