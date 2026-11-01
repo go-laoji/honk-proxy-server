@@ -1,6 +1,6 @@
 # T09 Linux DNS 捕获核心验收切片
 
-这是 Issue #14 的内核切片。共享 DNS 解析、API/CLI/MPA 已实现，DNS 捕获的 Daemon 配置接入还在开发；本记录不代表完整 T09 或 T15 已完成。
+这是 Issue #14 的实际内核记录。共享 DNS 解析、API/CLI/MPA 与 Daemon 配置接入已实现；完整跨平台验收见 [DNS 验收](dns-2026-11-02.md)。本记录不代表完整 T15 已完成。
 
 实际运行同一份自有 Rust 对象 `c308612ca777c19a1f61323132707f9901476cf386e2d260b2a3c11fb1867051`：
 
@@ -29,3 +29,9 @@ python3 tests/linux/ebpf/verify-dns-report.py kernel.log --kernel-prefix 7.0
 6.12 驱动沿用 `tests/linux/ebpf/Dockerfile`，执行脚本时指定 `HPS_DNS_TEST` 为实际 musl 测试二进制，`HPS_EBPF_OBJECT` 为同一对象。脚本将其带入真实 initramfs，不将宿主内核结果当作 6.12 结果。
 
 这里仅接管所配置 cgroup 的本机应用 DNS。网关 TC 接管、完整透明 TCP/UDP、连接路由仍属于 T15。外部 DoH/DoT 不自动解密，未知或多候选域名仍按 IP/未知处理。
+
+## Daemon 服务级复验（2026-11-02）
+
+最终工作区代码在两套实际内核再次通过 `hps-application` 的 `real_dns_capture`：Supervisor 启动、双栈 TCP/UDP 53、同 capture 热更新保留 8 个 program ID、关闭 capture 进入 pending_restart、撤销待重启配置、无效 ELF 和端口占用保持旧 head、shutdown 后重新取得对象所有权。每族真实重定向及回复恢复均有计数，所有阶段结束回收 program/map/自有路由/cgroup。
+
+原始记录：[Linux 7.0 服务级](linux-dns-application-kernel7-2026-11-02.json)、[Linux 6.12 服务级](linux-dns-application-kernel612-2026-11-02.json)。复现使用 `hps-application --test dns_capture` 的实际测试二进制，并为验证器加 `--application`，不能仅用核心 loader 测试代替服务配置验收。

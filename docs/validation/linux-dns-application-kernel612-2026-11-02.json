@@ -4,20 +4,20 @@
   "capture": {
     "allocated_slots": 4,
     "attached": true,
-    "cgroup": "/sys/fs/cgroup/hps-dns-test-app-361",
+    "cgroup": "/sys/fs/cgroup/hps-dns-test-app-360",
     "ipv4_alias_prefix": "127.77.0.0/16",
     "ipv6_alias_prefix": "fd77:6870:7300::/112",
     "map_ids": [
-      12,
-      13,
+      14,
       15,
       16,
+      17,
       19
     ],
     "netns_cookie": 1,
     "object_sha256": "c308612ca777c19a1f61323132707f9901476cf386e2d260b2a3c11fb1867051",
     "peers": 4,
-    "port": 34865,
+    "port": 39511,
     "program_ids": [
       13,
       14,

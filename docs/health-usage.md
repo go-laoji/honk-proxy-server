@@ -37,7 +37,7 @@ url = "https://www.baidu.com/"
 
 `max_parallel` 最大 64，队列最多 10000；每天预留次数最大 1000000。超时为 100–60000 ms，周期与最长证据年龄不超过一天，最长年龄不得小于周期。失败按指数退避到 `retry_max_secs`。周期重检期间仍可使用尚未失效的成功证据；过期或失败后不会用旧绿灯补齐可用数量。
 
-每个 TCP/UDP 与 IPv4/IPv6 组合最多一个配置。当前 UDP 数据通道尚未交付，两个 UDP 维度固定报告 `unsupported`，启用 UDP 探测会校验失败。它们不会继承 TCP 成功状态。目标是字面 IP 时，地址族必须与配置一致；域名探测在本地按所需地址族解析，保留目标 Host 与 TLS 名称。该引导解析使用 60 秒成功/5 秒失败的本地缓存，不宣称它是 DNS TTL，也没有替代 T09 的共享 DNS 模块。
+每个 TCP/UDP 与 IPv4/IPv6 组合最多一个配置。当前 UDP 数据通道尚未交付，两个 UDP 维度固定报告 `unsupported`，启用 UDP 探测会校验失败。它们不会继承 TCP 成功状态。目标是字面 IP 时，地址族必须与配置一致；域名探测通过共享 DNS 按所需地址族解析，保留目标 Host 与 TLS 名称。System 结果没有 wire TTL，不缓存；wire 上游遵守实际 TTL。健康目标引导状态每 5 秒预检，这是调度周期，不是 DNS TTL；DNS 策略变化后重新确认目标再允许自动购买。详见 [DNS 使用说明](dns-usage.md)。
 
 URL 不接受账号、查询参数或 fragment。自定义 `ca_certificate` 和 `tls_server_name` 只用于 HTTPS；CA 路径按配置路径规则解析，文件内容参与策略指纹。HTTP 探测目标没有 TLS 身份验证，界面仍分别显示端点、认证、隧道和 HTTP 响应，不能把 HTTP 返回值视为密码学身份保证。
 

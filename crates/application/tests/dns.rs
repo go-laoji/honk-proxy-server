@@ -176,7 +176,9 @@ async fn dns_static_egress_cannot_reenter_its_own_proxy_inlet() {
     let store = hps_storage::Store::open(None, config).unwrap();
     assert!(matches!(
         Supervisor::boot(store, StartupOverrides::default()).await,
-        Err(hps_application::ApplicationError::Invalid)
+        Err(hps_application::ApplicationError::Dns(
+            hps_dns::DnsError::Loop
+        ))
     ));
     let _unused = TcpListener::bind(inlet).await.unwrap();
 }

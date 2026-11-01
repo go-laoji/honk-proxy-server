@@ -278,7 +278,7 @@ fn application_error(error: ApplicationError) -> (StatusCode, Json<ApiError>) {
         ApplicationError::Dns(error) => {
             use hps_dns::DnsError;
             match error {
-                DnsError::InvalidQuery | DnsError::Configuration => {
+                DnsError::InvalidQuery | DnsError::Configuration | DnsError::Loop => {
                     (StatusCode::UNPROCESSABLE_ENTITY, "dns_invalid_input")
                 }
                 DnsError::Disabled => (StatusCode::CONFLICT, "dns_disabled"),

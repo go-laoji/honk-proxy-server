@@ -148,7 +148,7 @@ fn reject_local_loops(config: &DaemonConfig) -> Result<(), ApplicationError> {
                 .iter()
                 .any(|target| listener_owns(listen, *target, &local))
         }) {
-            return Err(ApplicationError::Invalid);
+            return Err(hps_dns::DnsError::Loop.into());
         }
         if let Some(id) = &upstream.proxy_id {
             let proxy = config
@@ -171,7 +171,7 @@ fn reject_local_loops(config: &DaemonConfig) -> Result<(), ApplicationError> {
                     .iter()
                     .any(|inlet| inlet.enabled && listener_owns(inlet.listen, target, &local))
                 {
-                    return Err(ApplicationError::Invalid);
+                    return Err(hps_dns::DnsError::Loop.into());
                 }
             }
         }

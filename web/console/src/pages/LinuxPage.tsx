@@ -71,7 +71,13 @@ export default function LinuxPage({ data }: { data: ServiceData }) {
             ["完整透明接管就绪", ebpf.ready ? "是" : "否"],
           ]}
         />
-        <p className="muted px-6 pb-5 text-xs leading-6">本机应用的 UDP/TCP 53 端口 DNS 捕获可单独启用，运行状态及内核证据在 <a href="./dns.html" className="text-blue-600 hover:underline">DNS 设置</a> 中查看。</p>
+        <p className="muted px-6 pb-5 text-xs leading-6">
+          本机应用的 UDP/TCP 53 端口 DNS 捕获可单独启用，运行状态及内核证据在{" "}
+          <a href="./dns.html" className="text-blue-600 hover:underline">
+            DNS 设置
+          </a>{" "}
+          中查看。
+        </p>
       </section>
       <section className="panel overflow-hidden" aria-label="Linux 环境预检">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-5 dark:border-slate-800">

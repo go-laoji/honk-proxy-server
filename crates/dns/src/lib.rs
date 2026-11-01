@@ -28,6 +28,8 @@ pub enum DnsError {
     Configuration,
     #[error("DNS service is disabled")]
     Disabled,
+    #[error("DNS upstream or static egress points back to this daemon's listener")]
+    Loop,
     #[error("DNS accepts one standard IN query with a supported record type")]
     InvalidQuery,
     #[error("upstream DNS response does not match the request or exceeds limits")]
