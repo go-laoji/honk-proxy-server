@@ -1,6 +1,6 @@
 # T13 业务连接与流量验收
 
-Issue：[#18](https://github.com/go-laoji/honk-proxy-server/issues/18)。核心、API、CLI 和共享 MPA 已通过本机及真实代理验证。独立原生窗口仍受计算机工具锁屏报告阻断；Linux 全量回归正在执行，Issue 保持开放。Linux 透明流的进程与内核代际继续由 T15 联合验收。
+Issue：[#18](https://github.com/go-laoji/honk-proxy-server/issues/18)。核心、API、CLI 和共享 MPA 已通过 macOS/Linux 及真实代理验证。独立原生窗口仍受计算机工具锁屏报告阻断，Issue 保持开放。Linux 透明流的进程与内核代际继续由 T15 联合验收。
 
 ## 已验证的实际行为
 
@@ -17,6 +17,7 @@ Issue：[#18](https://github.com/go-laoji/honk-proxy-server/issues/18)。核心�
 | --- | --- | --- |
 | macOS aarch64 workspace tests | 140 passed / 0 failed / 0 ignored | `/tmp/hps-t13-release-macos-tests.log` |
 | macOS all-target Clippy `-D warnings` | 通过 | `/tmp/hps-t13-release-macos-clippy.log` |
+| Linux aarch64 workspace tests + all-target Clippy | 139 passed / 0 failed / 4 ignored，Clippy 通过 | `/tmp/hps-t13-release-linux-tests.log`、`/tmp/hps-t13-release-linux-clippy.log` |
 | 全部共享控制台浏览器测试 | 16 passed | `/tmp/hps-t13-browser-all.log` |
 | React 与 Node TypeScript 项目 | 通过 | `/tmp/hps-t13-browser-typecheck.log` |
 | 完整前端格式检查 | 通过 | `/tmp/hps-t13-release-format.log` |
@@ -26,6 +27,8 @@ Issue：[#18](https://github.com/go-laoji/honk-proxy-server/issues/18)。核心�
 | 独立 macOS `.app` 打包 | 通过，43.34 MiB | `/tmp/hps-t13-release-native-build.log` |
 
 可复现：`cargo test --workspace --locked`、`cargo clippy --workspace --all-targets --locked -- -D warnings`、`pnpm typecheck`、`pnpm build`、`pnpm exec playwright test`；构建 headless 二进制后运行 `python3 tests/cli/connections.py`。前端产物更新必须与读取嵌入资源的 Rust 编译分开执行。
+
+Linux 在独立源码快照、Rust 1.98.1 Alpine、单构建任务及独立 Cargo 卷中运行。4 个忽略项是特权 DNS/eBPF 核心/应用及其子进程门槛，本轮不计为执行；此前实际 6.12/7.0 内核证据保持有效，完整透明 TCP/UDP 与进程归属待 T15。
 
 首次新增浏览器夹具将测试凭据写成顶层 upstream 字段，严格配置校验拒绝该请求；改用实际的 `credentials` 表后通过。完整格式检查也发现既有 rules 浏览器测试格式不一致，已单独格式提交并重跑通过。
 
