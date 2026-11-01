@@ -14,3 +14,7 @@
 当前可用的 Docker Linux 为 aarch64 `7.0.14-linuxkit`，BTF 可读，特权隔离容器中 cgroup v2 可创建并清理子目录，已作实际验证。该检查尚未加载程序。初始目标还包括 6.12 LTS；其实际验证需单独的真实 6.12 内核环境，不能以编译兼容或当前内核结果代替。对任何未实际运行的内核如实标记未验证。
 
 参考 [Aya 开发环境](https://aya-rs.dev/book/start/development/)、[Aya 0.14 CgroupSockAddr](https://docs.rs/aya/latest/aya/programs/cgroup_sock_addr/struct.CgroupSockAddr.html)、[官方 bpf-linker 构建方式](https://github.com/aya-rs/bpf-linker)。使用 Rust nightly 与独立目标构建 `core`；标准服务仍固定仓库稳定工具链。验证时只为本项目测试进程使用隔离容器的权限，不改变 macOS 系统代理或其他服务。
+
+## 验收状态
+
+四个切片已完成。6.12.115 QEMU 实际内核和 7.0.14-linuxkit 的程序、map 更新、真实连接/拒绝及卸载回收均通过；参见 [实际内核证据](validation/linux-ebpf-core-2026-11-01.md)。完整透明出口仍由 T15 交付。

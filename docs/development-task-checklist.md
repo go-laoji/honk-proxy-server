@@ -25,7 +25,7 @@ T05 配置基础后推进 T06/T07 短效 API 与补池。T08–T14 逐步闭合�
 | --- | --- | --- | --- | --- |
 | T01 | P0 | [#6](https://github.com/go-laoji/honk-proxy-server/issues/6) Rust 工作区与独立 CLI/Daemon 基础 | 无 | 已完成基础交付 |
 | T02 | P0 | [#7](https://github.com/go-laoji/honk-proxy-server/issues/7) 共享 React Tailwind MPA 与 Desktop 桥骨架 | T01 | 已完成基础验收 |
-| T03 | P0 | [#8](https://github.com/go-laoji/honk-proxy-server/issues/8) 自研 Rust 核心与 Linux eBPF 前置验证 | T01 | 只读预检已验收，真实 eBPF 待实现 |
+| T03 | P0 | [#8](https://github.com/go-laoji/honk-proxy-server/issues/8) 自研 Rust 核心与 Linux eBPF 前置验证 | T01 | 已完成，实际 6.12/7.0 内核已验收 |
 | T04 | P0 | [#9](https://github.com/go-laoji/honk-proxy-server/issues/9) HTTP HTTPS SOCKS5 核心代理与资源控制 | T01 | 已完成显式代理验收 |
 | T05 | P0 | [#10](https://github.com/go-laoji/honk-proxy-server/issues/10) SQLite 配置版本、校验、激活与回滚 | T01 | 已完成持久化与三端验收 |
 | T06 | P0 | [#11](https://github.com/go-laoji/honk-proxy-server/issues/11) 短效提取 API、批次租约与安全重试 | T05 | 已完成契约、租约和三端验收 |
@@ -221,3 +221,5 @@ T02 随后接管现有模板：共享页面清单、Tailwind 布局与 API trans
 - 2026-11-01：T07 按需/维护补池、滞回水位、退休预测、统一持久预算、冷却/暂停/确认恢复、API/CLI/共享控制台完成。macOS/Linux 各 64 项 Rust 测试、9 项浏览器 E2E、独立 CLI 持久重启与 Desktop 桥/打包通过；见 [补池验收](validation/replenishment-2026-11-01.md)。T08 接续健康筛选与真实反馈。
 
 - 2026-11-01：T08 统一健康、分维度实际探测、真实反馈、持久任务/预算、补池待检预留和 CLI/共享 MPA/Desktop 完成。macOS/Linux 各 82 项 Rust 测试、完整 10 项浏览器 E2E、实际 Desktop 探测/策略保存与 CLI 幂等/冲突验证通过；见 [健康验收](validation/health-2026-11-01.md)。T03 继续交付真实 eBPF，再推进依赖它的 T09 DNS。
+
+- 2026-11-01：T03 自研 Rust eBPF hook/ABI/loader 完成。实际 aarch64 Linux 7.0.14 与 QEMU 启动的 6.12.115 LTS 均验证 IPv4/IPv6 连接、map 策略拒绝、卸载后恢复及程序/map/cgroup 回收；见 [真实内核验收](validation/linux-ebpf-core-2026-11-01.md)。透明转发继续由 T15 交付，继续 T09 DNS。

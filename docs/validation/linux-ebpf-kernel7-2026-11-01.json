@@ -1,0 +1,83 @@
+{
+  "abi_version": 1,
+  "cgroup_removed": true,
+  "connectivity_restored_after_detach": true,
+  "datapath_ready": false,
+  "kernel_release": "7.0.14-linuxkit",
+  "map_update_enforced": true,
+  "maps": [
+    36,
+    37,
+    38
+  ],
+  "maps_removed": true,
+  "object_sha256": "691ecabc5217e50f0c3079a270c544b0c17a4da583611f8db26c9e06c462f3ea",
+  "observations": [
+    {
+      "cgroup_id": 4187,
+      "command": "hps",
+      "destination": "::1",
+      "family": "ipv6",
+      "port": 37235,
+      "process_id": 63194,
+      "protocol": 6,
+      "socket_cookie": 20481,
+      "thread_id": 63194
+    },
+    {
+      "cgroup_id": 4187,
+      "command": "hps",
+      "destination": "127.0.0.1",
+      "family": "ipv4",
+      "port": 42853,
+      "process_id": 63224,
+      "protocol": 6,
+      "socket_cookie": 16386,
+      "thread_id": 63224
+    },
+    {
+      "cgroup_id": 4187,
+      "command": "hps",
+      "destination": "127.0.0.1",
+      "family": "ipv4",
+      "port": 42853,
+      "process_id": 63179,
+      "protocol": 6,
+      "socket_cookie": 16385,
+      "thread_id": 63179
+    },
+    {
+      "cgroup_id": 4187,
+      "command": "hps",
+      "destination": "127.0.0.1",
+      "family": "ipv4",
+      "port": 42853,
+      "process_id": 63209,
+      "protocol": 6,
+      "socket_cookie": 8194,
+      "thread_id": 63209
+    }
+  ],
+  "programs": [
+    104,
+    105
+  ],
+  "programs_removed": true,
+  "scope": "isolated_connect_hooks",
+  "stats": [
+    {
+      "allowed": 2,
+      "connects": 3,
+      "denied": 1,
+      "errors": 0,
+      "family": "ipv4"
+    },
+    {
+      "allowed": 1,
+      "connects": 1,
+      "denied": 0,
+      "errors": 0,
+      "family": "ipv6"
+    }
+  ]
+}
