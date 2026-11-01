@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, path::Path};
 
+mod health;
+pub use health::*;
 mod provider;
 pub use provider::*;
 mod proxy;
@@ -16,6 +18,7 @@ pub struct DaemonConfig {
     pub retention: RetentionConfig,
     pub proxy: ProxyConfig,
     pub providers: Vec<ProviderConfig>,
+    pub health: HealthConfig,
 }
 
 impl Default for DaemonConfig {
@@ -28,6 +31,7 @@ impl Default for DaemonConfig {
             retention: RetentionConfig::default(),
             proxy: ProxyConfig::default(),
             providers: vec![],
+            health: HealthConfig::default(),
         }
     }
 }
@@ -62,6 +66,13 @@ impl DaemonConfig {
     }
 
     pub fn resolve_paths(&mut self, parent: &Path) {
+        for profile in &mut self.health.profiles {
+            if let Some(path) = &mut profile.ca_certificate
+                && path.is_relative()
+            {
+                *path = parent.join(&*path);
+            }
+        }
         if let Some(tls) = &mut self.management_tls {
             if tls.certificate.is_relative() {
                 tls.certificate = parent.join(&tls.certificate);
@@ -155,6 +166,7 @@ impl DaemonConfig {
             }
         }
         self.proxy.validate()?;
+        self.health.validate()?;
         Ok(())
     }
 

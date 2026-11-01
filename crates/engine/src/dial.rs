@@ -1,7 +1,9 @@
 use crate::{BoxIo, ProxyError, target::Target, tls};
 use base64::Engine;
 use hps_config::{ProxyConfig, ProxyProtocol, UpstreamConfig};
+use hps_domain::ProbePhase;
 use http::HeaderValue;
+use sha2::{Digest, Sha256};
 use std::{
     sync::{
         Arc,
@@ -20,6 +22,7 @@ use tokio_rustls::{
 
 pub(crate) struct Upstream {
     pub(crate) config: UpstreamConfig,
+    pub(crate) identity: String,
     tls: Option<Arc<ClientConfig>>,
     pub(crate) source: Option<(String, String)>,
     pub(crate) deadline: Option<std::time::Instant>,
@@ -27,13 +30,25 @@ pub(crate) struct Upstream {
 }
 impl Upstream {
     pub(crate) fn prepare(config: UpstreamConfig) -> Result<Self, ProxyError> {
-        let tls = if config.protocol == ProxyProtocol::Https {
-            Some(tls::client(&config)?)
+        let (tls, ca_fingerprint) = if config.protocol == ProxyProtocol::Https {
+            let (tls, fp) = tls::client_with_fingerprint(&config)?;
+            (Some(tls), fp)
         } else {
-            None
+            (None, None)
         };
+        let mut canonical = config.clone();
+        canonical.id.clear();
+        canonical.enabled = true;
+        canonical.expires_at_unix = None;
+        let mut hash = Sha256::new();
+        hash.update(serde_json::to_vec(&canonical).map_err(|_| ProxyError::TlsConfig)?);
+        if let Some(fp) = ca_fingerprint {
+            hash.update(fp.as_bytes());
+        }
+        let identity = format!("{:x}", hash.finalize());
         Ok(Self {
             config,
+            identity,
             tls,
             source: None,
             deadline: None,
@@ -45,15 +60,112 @@ pub struct Dialer {
     upstreams: Vec<Arc<Upstream>>,
     pub(crate) pool: Arc<crate::pool::DynamicPool>,
     pub(crate) demand: Arc<crate::demand::Demand>,
+    pub(crate) health: Arc<crate::health::HealthRegistry>,
+    policy: std::sync::RwLock<crate::health::HealthPolicy>,
     sources: std::sync::RwLock<std::collections::HashMap<String, String>>,
     cursor: AtomicUsize,
     timeout: Duration,
     min_lifetime: u64,
     max_header: usize,
 }
+#[derive(Debug)]
+pub struct DialFailure {
+    pub error: ProxyError,
+    pub phase: ProbePhase,
+    pub endpoint_reachable: bool,
+}
+struct Progress {
+    phase: std::sync::Mutex<ProbePhase>,
+    endpoint: std::sync::atomic::AtomicBool,
+}
+impl Progress {
+    fn new() -> Self {
+        Self {
+            phase: std::sync::Mutex::new(ProbePhase::EndpointConnect),
+            endpoint: std::sync::atomic::AtomicBool::new(false),
+        }
+    }
+    fn stage(&self, phase: ProbePhase) {
+        *self.phase.lock().unwrap() = phase;
+    }
+    fn failure(&self, error: ProxyError) -> DialFailure {
+        DialFailure {
+            error,
+            phase: *self.phase.lock().unwrap(),
+            endpoint_reachable: self.endpoint.load(Ordering::Relaxed),
+        }
+    }
+}
+#[derive(Clone)]
+pub struct ProbePlan {
+    dialer: Arc<Dialer>,
+    upstream: Arc<Upstream>,
+}
+impl ProbePlan {
+    pub fn config(&self) -> &UpstreamConfig {
+        &self.upstream.config
+    }
+    pub fn identity(&self) -> &str {
+        &self.upstream.identity
+    }
+    pub fn provider_id(&self) -> Option<&str> {
+        self.upstream.source.as_ref().map(|(id, _)| id.as_str())
+    }
+    pub fn minimum_lifetime(&self) -> u64 {
+        self.dialer.min_lifetime.max(self.upstream.minimum_lifetime)
+    }
+    pub fn remaining(&self) -> Option<Duration> {
+        let wall = self.upstream.config.expires_at_unix.map(|expiry| {
+            std::time::UNIX_EPOCH
+                .checked_add(Duration::from_secs(expiry))
+                .and_then(|date| date.duration_since(SystemTime::now()).ok())
+                .unwrap_or(Duration::ZERO)
+        });
+        match (wall, self.upstream.deadline) {
+            (Some(wall), Some(deadline)) => {
+                Some(wall.min(deadline.saturating_duration_since(std::time::Instant::now())))
+            }
+            (wall, None) => wall,
+            (None, Some(deadline)) => {
+                Some(deadline.saturating_duration_since(std::time::Instant::now()))
+            }
+        }
+    }
+    /// Bypasses selection/health and production demand, preserving prepared trust roots.
+    pub async fn connect(
+        &self,
+        target: &Target,
+        http_forward: bool,
+    ) -> Result<Connected, DialFailure> {
+        self.connect_until(
+            target,
+            http_forward,
+            tokio::time::Instant::now() + self.dialer.timeout,
+        )
+        .await
+    }
+    pub async fn connect_until(
+        &self,
+        target: &Target,
+        http_forward: bool,
+        deadline: tokio::time::Instant,
+    ) -> Result<Connected, DialFailure> {
+        let progress = Progress::new();
+        let deadline = deadline.min(tokio::time::Instant::now() + self.dialer.timeout);
+        tokio::time::timeout_at(
+            deadline,
+            self.dialer
+                .connect_selected(&self.upstream, target, http_forward, &progress),
+        )
+        .await
+        .map_err(|_| progress.failure(ProxyError::Timeout))?
+        .map_err(|e| progress.failure(e))
+    }
+}
 pub struct Connected {
     pub io: BoxIo,
     pub upstream_id: String,
+    pub identity: String,
     pub absolute_form: bool,
     pub proxy_authorization: Option<HeaderValue>,
 }
@@ -68,12 +180,49 @@ impl Dialer {
             upstreams,
             pool: Arc::new(crate::pool::DynamicPool::default()),
             demand: Arc::new(crate::demand::Demand::default()),
+            health: Arc::new(crate::health::HealthRegistry::default()),
+            policy: Default::default(),
             sources: std::sync::RwLock::new(std::collections::HashMap::new()),
             cursor: AtomicUsize::new(0),
             timeout: Duration::from_millis(config.limits.connect_timeout_ms),
             min_lifetime: config.limits.min_remaining_lifetime_secs,
             max_header: config.limits.max_header_bytes,
         })
+    }
+    pub fn probe_plans(self: &Arc<Self>) -> Vec<ProbePlan> {
+        let dynamic = self.pool.snapshot();
+        self.upstreams
+            .iter()
+            .chain(dynamic.iter())
+            .map(|upstream| ProbePlan {
+                dialer: self.clone(),
+                upstream: upstream.clone(),
+            })
+            .collect()
+    }
+    pub fn configure_health(&self, policy: crate::health::HealthPolicy) {
+        *self.policy.write().unwrap() = policy;
+    }
+    pub fn health_usable(&self, identity: &str, family: Option<hps_domain::IpFamily>) -> bool {
+        self.health
+            .usable(identity, &self.policy.read().unwrap(), family)
+    }
+    pub fn traffic_feedback(
+        &self,
+        node_id: &str,
+        identity: &str,
+        phase: ProbePhase,
+        code: &str,
+        global: bool,
+    ) {
+        self.health.traffic(
+            node_id,
+            identity,
+            phase,
+            code,
+            global,
+            self.policy.read().unwrap().traffic_failure_threshold,
+        );
     }
     pub fn set_sources(&self, sources: std::collections::HashMap<String, String>) {
         *self.sources.write().unwrap() = sources;
@@ -106,7 +255,7 @@ impl Dialer {
         self.upstreams
             .iter()
             .chain(dynamic.iter())
-            .filter(|s| self.eligible(s))
+            .filter(|s| self.eligible(s) && self.health_usable(&s.identity, None))
             .count()
     }
     /// Select exactly once. Neither failed handshakes nor business data are retried.
@@ -131,31 +280,67 @@ impl Dialer {
                     &dynamic[index - self.upstreams.len()]
                 }
             })
-            .find(|s| self.eligible(s))
+            .find(|s| {
+                self.eligible(s)
+                    && self.health_usable(
+                        &s.identity,
+                        match target.host.parse::<std::net::IpAddr>() {
+                            Ok(std::net::IpAddr::V4(_)) => Some(hps_domain::IpFamily::Ipv4),
+                            Ok(std::net::IpAddr::V6(_)) => Some(hps_domain::IpFamily::Ipv6),
+                            Err(_) => None,
+                        },
+                    )
+            })
             .ok_or(ProxyError::NoUpstream)?;
-        tokio::time::timeout(
+        let progress = Progress::new();
+        let outcome = tokio::time::timeout(
             self.timeout,
-            self.connect_selected(upstream, target, http_forward),
+            self.connect_selected(upstream, target, http_forward, &progress),
         )
         .await
-        .map_err(|_| ProxyError::Timeout)?
-        .map(|mut connected| {
+        .unwrap_or(Err(ProxyError::Timeout));
+        if let Err(error) = &outcome {
+            let phase = *progress.phase.lock().unwrap();
+            let (code, global) = match error {
+                ProxyError::Endpoint => ("endpoint_connect_failed", true),
+                ProxyError::UpstreamTls => ("upstream_tls_failed", true),
+                ProxyError::Authentication => ("upstream_authentication_failed", true),
+                ProxyError::Timeout => (
+                    "proxy_handshake_timeout",
+                    matches!(
+                        phase,
+                        ProbePhase::EndpointConnect
+                            | ProbePhase::UpstreamTls
+                            | ProbePhase::Authentication
+                    ),
+                ),
+                ProxyError::Policy(_) => ("proxy_target_policy", false),
+                ProxyError::TargetConnect => ("proxy_target_connect_failed", false),
+                _ => ("proxy_protocol_failed", false),
+            };
+            self.traffic_feedback(&upstream.config.id, &upstream.identity, phase, code, global);
+        }
+        outcome.map(|mut connected| {
             connected.io = demand.wrap(connected.io);
             connected
         })
     }
+
     async fn connect_selected(
         &self,
         upstream: &Upstream,
         target: &Target,
         http_forward: bool,
+        progress: &Progress,
     ) -> Result<Connected, ProxyError> {
         let config = &upstream.config;
         let tcp = TcpStream::connect((config.host.as_str(), config.port))
             .await
-            .map_err(|_| ProxyError::Upstream)?;
+            .map_err(|_| ProxyError::Endpoint)?;
+        progress.endpoint.store(true, Ordering::Relaxed);
         tcp.set_nodelay(true)?;
         let mut io: BoxIo = if let Some(tls) = &upstream.tls {
+            progress.stage(ProbePhase::UpstreamTls);
             let name = ServerName::try_from(
                 config
                     .tls_server_name
@@ -168,7 +353,7 @@ impl Dialer {
                 TlsConnector::from(tls.clone())
                     .connect(name, tcp)
                     .await
-                    .map_err(|_| ProxyError::Upstream)?,
+                    .map_err(|_| ProxyError::UpstreamTls)?,
             )
         } else {
             Box::new(tcp)
@@ -188,6 +373,7 @@ impl Dialer {
                     value
                 });
                 if !absolute_form {
+                    progress.stage(ProbePhase::ProxyTunnel);
                     let mut head = format!(
                         "CONNECT {} HTTP/1.1\r\nHost: {}\r\n",
                         target.authority(),
@@ -204,16 +390,24 @@ impl Dialer {
                     let (head, stream) = read_head(io, self.max_header).await?;
                     let mut headers = [httparse::EMPTY_HEADER; 128];
                     let mut response = httparse::Response::new(&mut headers);
-                    if !response.parse(&head).is_ok_and(|s| s.is_complete())
-                        || !response.code.is_some_and(|code| (200..300).contains(&code))
-                    {
+                    if !response.parse(&head).is_ok_and(|s| s.is_complete()) {
                         return Err(ProxyError::Upstream);
+                    }
+                    match response.code {
+                        Some(200..=299) => {}
+                        Some(407) => {
+                            progress.stage(ProbePhase::Authentication);
+                            return Err(ProxyError::Authentication);
+                        }
+                        Some(code) => return Err(ProxyError::Policy(code)),
+                        None => return Err(ProxyError::Upstream),
                     }
                     io = stream;
                     auth = None;
                 }
             }
             ProxyProtocol::Socks5 => {
+                progress.stage(ProbePhase::Authentication);
                 let methods: &[u8] = if config.credentials.is_some() {
                     &[5, 2, 0, 2]
                 } else {
@@ -224,7 +418,10 @@ impl Dialer {
                 let mut choice = [0; 2];
                 io.read_exact(&mut choice).await?;
                 if choice == [5, 2] {
-                    let c = config.credentials.as_ref().ok_or(ProxyError::Upstream)?;
+                    let c = config
+                        .credentials
+                        .as_ref()
+                        .ok_or(ProxyError::Authentication)?;
                     let mut auth = vec![1, c.username.len() as u8];
                     auth.extend(c.username.as_bytes());
                     auth.push(c.password.len() as u8);
@@ -233,11 +430,12 @@ impl Dialer {
                     io.flush().await?;
                     io.read_exact(&mut choice).await?;
                     if choice != [1, 0] {
-                        return Err(ProxyError::Upstream);
+                        return Err(ProxyError::Authentication);
                     }
                 } else if choice != [5, 0] {
-                    return Err(ProxyError::Upstream);
+                    return Err(ProxyError::Authentication);
                 }
+                progress.stage(ProbePhase::ProxyTunnel);
                 let mut request = vec![5, 1, 0];
                 request.extend(target.socks_bytes());
                 io.write_all(&request).await?;
@@ -245,7 +443,7 @@ impl Dialer {
                 let mut reply = [0; 4];
                 io.read_exact(&mut reply).await?;
                 if reply[0..3] != [5, 0, 0] {
-                    return Err(ProxyError::Upstream);
+                    return Err(ProxyError::TargetConnect);
                 }
                 let len = match reply[3] {
                     1 => 4,
@@ -263,6 +461,7 @@ impl Dialer {
         Ok(Connected {
             io,
             upstream_id: config.id.clone(),
+            identity: upstream.identity.clone(),
             absolute_form,
             proxy_authorization: auth,
         })

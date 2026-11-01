@@ -274,7 +274,11 @@ impl ProviderConfig {
             }
         }
         // Prevent accidental empty/invalid hosts hidden inside a URL parse edge case.
-        if !valid_host(url.host_str().unwrap_or_default()) {
+        if !match url.host() {
+            Some(url::Host::Domain(host)) => valid_host(host),
+            Some(url::Host::Ipv4(_) | url::Host::Ipv6(_)) => true,
+            None => false,
+        } {
             return Err(invalid());
         }
         Ok(())

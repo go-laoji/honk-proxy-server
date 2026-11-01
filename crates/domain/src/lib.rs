@@ -373,3 +373,62 @@ pub struct ControllerEvaluation {
     pub status: ProviderControllerStatus,
     pub task: Option<ExtractionTask>,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HealthTransport {
+    Tcp,
+    Udp,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IpFamily {
+    Ipv4,
+    Ipv6,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HealthVerdict {
+    Unknown,
+    Queued,
+    Probing,
+    Healthy,
+    Degraded,
+    Failed,
+    Unsupported,
+    Expired,
+    Skipped,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProbePhase {
+    TargetResolve,
+    EndpointConnect,
+    UpstreamTls,
+    Authentication,
+    ProxyTunnel,
+    TargetTls,
+    TargetHttp,
+    Complete,
+    Admission,
+    Local,
+    Unsupported,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProbeResult {
+    pub node_id: String,
+    pub identity: String,
+    pub profile_fingerprint: String,
+    pub transport: HealthTransport,
+    pub family: IpFamily,
+    pub verdict: HealthVerdict,
+    pub phase: ProbePhase,
+    pub error_code: Option<String>,
+    pub endpoint_reachable: bool,
+    pub authenticated: Option<bool>,
+    pub tunnel_established: bool,
+    pub http_status: Option<u16>,
+    pub target_ok: Option<bool>,
+    pub latency_ms: u64,
+    pub checked_at: i64,
+}

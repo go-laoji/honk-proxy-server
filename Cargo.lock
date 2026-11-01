@@ -827,6 +827,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "hps-health"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "hps-config",
+ "hps-domain",
+ "hps-engine",
+ "http",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "rcgen",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tokio",
+ "tokio-rustls",
+ "url",
+]
+
+[[package]]
 name = "hps-platform"
 version = "0.1.0"
 dependencies = [

@@ -119,6 +119,7 @@ impl Engine {
         if let Some(old) = previous {
             dialer.pool = old.dialer.pool.clone();
             dialer.demand = old.dialer.demand.clone();
+            dialer.health = old.dialer.health.clone();
         }
         let dialer = Arc::new(dialer);
         let mut entries = BTreeMap::new();
@@ -179,6 +180,18 @@ impl Engine {
             cancel: CancellationToken::new(),
             generation: std::sync::atomic::AtomicI64::new(0),
         }))
+    }
+    pub fn health_registry(&self) -> Arc<crate::health::HealthRegistry> {
+        self.dialer.health.clone()
+    }
+    pub fn configure_health(&self, policy: crate::health::HealthPolicy) {
+        self.dialer.configure_health(policy);
+    }
+    pub fn health_usable(&self, identity: &str) -> bool {
+        self.dialer.health_usable(identity, None)
+    }
+    pub fn probe_plans(&self) -> Vec<crate::dial::ProbePlan> {
+        self.dialer.probe_plans()
     }
     pub fn has_active_demand(&self) -> bool {
         self.dialer.demand.active()

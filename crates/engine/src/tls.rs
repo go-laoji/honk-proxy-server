@@ -91,9 +91,16 @@ pub fn server(config: &ServerTls) -> Result<(Arc<ServerConfig>, CertificateInfo)
 }
 
 pub fn client(config: &UpstreamConfig) -> Result<Arc<ClientConfig>, ProxyError> {
+    client_with_fingerprint(config).map(|(client, _)| client)
+}
+pub fn client_with_fingerprint(
+    config: &UpstreamConfig,
+) -> Result<(Arc<ClientConfig>, Option<String>), ProxyError> {
+    let mut fingerprint = None;
     let mut roots = RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
     if let Some(path) = &config.ca_certificate {
         let bytes = read_pem(path)?;
+        fingerprint = Some(format!("{:x}", Sha256::digest(&bytes)));
         let mut reader = BufReader::new(bytes.as_slice());
         let certs = rustls_pemfile::certs(&mut reader);
         let mut count = 0;
@@ -113,5 +120,5 @@ pub fn client(config: &UpstreamConfig) -> Result<Arc<ClientConfig>, ProxyError> 
         .with_root_certificates(roots)
         .with_no_client_auth();
     client.alpn_protocols = vec![b"http/1.1".to_vec()];
-    Ok(Arc::new(client))
+    Ok((Arc::new(client), fingerprint))
 }

@@ -7,6 +7,7 @@ rust-version.workspace = true
 [dependencies]
 hps-config.workspace = true
 hps-domain.workspace = true
+serde_json.workspace = true
 tokio.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
@@ -30,4 +31,3 @@ sha2 = "0.10"
 rcgen = "0.14"
 tempfile = "3"
 reqwest = { workspace = true, features = ["socks"] }
-serde_json.workspace = true
