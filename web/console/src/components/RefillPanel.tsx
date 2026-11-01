@@ -12,6 +12,10 @@ const reasons: Record<string, string> = {
   watermark_capacity: "达到最大可准入库存",
   refill_needed: "需要补充库存",
   paused: "来源提取已暂停",
+  health_pending: "库存正在检测，已预留名额",
+  health_target_unavailable: "检测目标解析不可用，等待恢复",
+  health_budget_exhausted: "健康检测预算不足，暂停自动提取",
+  health_source_configuration: "代理认证或检测配置异常，暂停自动提取",
   clock_rollback: "系统时钟回拨，暂停提取",
 };
 export default function RefillPanel({
@@ -37,11 +41,12 @@ export default function RefillPanel({
             : "自动补池停用"}
         </Badge>
       </div>
-      <div className="grid grid-cols-3 divide-x divide-slate-100 py-5 text-center dark:divide-slate-800">
+      <div className="grid grid-cols-2 gap-y-4 divide-x sm:grid-cols-4 divide-slate-100 py-5 text-center dark:divide-slate-800">
         {[
           ["当前准入库存", value.current_inventory],
           ["预测窗口后库存", value.projected_inventory],
           ["在途预留数量", value.inflight_nodes],
+          ["等待健康检测", value.pending_health_nodes ?? 0],
         ].map(([label, count]) => (
           <div key={label} className="px-2">
             <p className="muted text-xs">{label}</p>

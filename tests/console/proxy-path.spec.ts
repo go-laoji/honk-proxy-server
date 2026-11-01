@@ -74,7 +74,7 @@ test("Chromium without proxy credentials reaches an unresolvable origin through 
   const config = join(directory, "hps.toml");
   await writeFile(
     config,
-    `management_listen="127.0.0.1:${managementPort}"\n[[proxy.inbounds]]\nid="browser"\nprotocol="http"\nlisten="127.0.0.1:0"\n[[proxy.upstreams]]\nid="supplier"\nprotocol="http"\nhost="127.0.0.1"\nport=${supplierPort}\n[proxy.upstreams.credentials]\nusername="supplier"\npassword="fixture-secret"\n`,
+    `management_listen="127.0.0.1:${managementPort}"\n[health]\nenabled=false\n[[proxy.inbounds]]\nid="browser"\nprotocol="http"\nlisten="127.0.0.1:0"\n[[proxy.upstreams]]\nid="supplier"\nprotocol="http"\nhost="127.0.0.1"\nport=${supplierPort}\n[proxy.upstreams.credentials]\nusername="supplier"\npassword="fixture-secret"\n`,
     { mode: 0o600 },
   );
   const environment = { ...process.env };
