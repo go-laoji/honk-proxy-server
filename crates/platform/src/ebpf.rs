@@ -20,7 +20,7 @@ use std::{
 fn context(label: &str, error: impl std::fmt::Display) -> String {
     format!("{label}: {error}")
 }
-fn cgroup_v2(path: &Path) -> Result<PathBuf, String> {
+pub(super) fn cgroup_v2(path: &Path) -> Result<PathBuf, String> {
     use std::os::unix::ffi::OsStrExt;
     let path = path.canonicalize().map_err(|e| context("cgroup path", e))?;
     let name =

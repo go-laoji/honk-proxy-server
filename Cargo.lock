@@ -982,7 +982,9 @@ dependencies = [
 name = "hps-net"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "serde",
+ "socket2",
  "thiserror",
  "tokio",
 ]
@@ -992,11 +994,17 @@ name = "hps-platform"
 version = "0.1.0"
 dependencies = [
  "aya",
+ "fs2",
+ "hickory-proto",
+ "hps-config",
+ "hps-dns",
  "hps-domain",
  "hps-ebpf-abi",
+ "hps-net",
  "libc",
  "serde_json",
  "sha2",
+ "tokio",
 ]
 
 [[package]]

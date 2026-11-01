@@ -253,6 +253,8 @@ mod tests {
 }
 
 #[cfg(target_os = "linux")]
+pub mod dns_capture;
+#[cfg(target_os = "linux")]
 pub mod ebpf;
 #[cfg(not(target_os = "linux"))]
 pub mod ebpf {

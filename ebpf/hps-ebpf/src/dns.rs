@@ -1,6 +1,7 @@
 use aya_ebpf::{
     EbpfContext,
-    helpers::{bpf_get_current_pid_tgid, bpf_get_netns_cookie},
+    bindings::bpf_pidns_info,
+    helpers::{bpf_get_netns_cookie, bpf_get_ns_current_pid_tgid},
     macros::{cgroup_sock_addr, map},
     maps::{Array, HashMap, PerCpuArray},
     programs::SockAddrContext,
@@ -60,7 +61,19 @@ fn policy(ctx: &SockAddrContext) -> Option<DnsPolicy> {
     if policy.abi_version != DNS_ABI_VERSION || policy.flags & DNS_ENABLED == 0 {
         return None;
     }
-    if (bpf_get_current_pid_tgid() >> 32) as u32 == policy.excluded_tgid {
+    let mut process = bpf_pidns_info { pid: 0, tgid: 0 };
+    // Compare in the daemon's PID namespace, including container deployments.
+    // bpf_get_current_pid_tgid returns init-namespace IDs and cannot match getpid
+    // inside an isolated PID namespace. This helper is available here on Linux >=6.10.
+    let known = unsafe {
+        bpf_get_ns_current_pid_tgid(
+            policy.pidns_device,
+            policy.pidns_inode,
+            &mut process,
+            core::mem::size_of::<bpf_pidns_info>() as u32,
+        )
+    } == 0;
+    if known && process.tgid == policy.excluded_tgid {
         return None;
     }
     // SAFETY: kernel-provided sock_addr context; this helper identifies its socket's netns.
@@ -77,13 +90,16 @@ fn redirect(ctx: SockAddrContext, family: u32) -> i32 {
     if u16::from_be(raw.user_port as u16) != 53 || (raw.protocol != 6 && raw.protocol != 17) {
         return 1;
     }
-    let Some(policy) = policy(&ctx) else { return 1 };
     let index = if family == 4 { 0 } else { 1 };
     let Some(stats) = HPS_DNS_STATS.get_ptr_mut(index) else {
         return 0;
     };
     // SAFETY: fixed per-CPU value, non-sleepable hook, pointer never escapes.
     let stats = unsafe { &mut *stats };
+    let Some(policy) = policy(&ctx) else {
+        stats.bypassed = stats.bypassed.wrapping_add(1);
+        return 1;
+    };
     let peer = DnsPeer {
         family,
         address: if family == 4 {

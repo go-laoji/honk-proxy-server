@@ -14,6 +14,8 @@ pub struct DnsPolicy {
     pub alias4_prefix: u32,
     pub reserved: u32,
     pub alias6_prefix: [u32; 4],
+    pub pidns_device: u64,
+    pub pidns_inode: u64,
 }
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
@@ -36,7 +38,7 @@ pub struct DnsStats {
     pub error_code: i64,
     pub error_phase: u64,
 }
-const _: () = assert!(core::mem::size_of::<DnsPolicy>() == 48);
+const _: () = assert!(core::mem::size_of::<DnsPolicy>() == 64);
 const _: () = assert!(core::mem::size_of::<DnsPeer>() == 20);
 const _: () = assert!(core::mem::size_of::<DnsStats>() == 48);
 #[cfg(feature = "userspace")]
@@ -49,5 +51,5 @@ unsafe impl aya::Pod for DnsPeer {}
 // SAFETY: repr(C), one u64 field.
 unsafe impl aya::Pod for DnsAllocation {}
 #[cfg(feature = "userspace")]
-// SAFETY: repr(C), four u64 fields.
+// SAFETY: repr(C), six 64-bit integer fields and no padding.
 unsafe impl aya::Pod for DnsStats {}

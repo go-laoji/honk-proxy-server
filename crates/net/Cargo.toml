@@ -8,3 +8,7 @@ rust-version.workspace = true
 tokio.workspace = true
 serde.workspace = true
 thiserror.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
+socket2 = {version="0.6",features=["all"]}

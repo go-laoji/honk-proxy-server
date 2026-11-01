@@ -1,4 +1,6 @@
 //! Transport contracts shared by DNS and the proxy engine, without a dependency cycle.
+#[cfg(target_os = "linux")]
+pub mod packet_info;
 use serde::{Deserialize, Serialize};
 use std::{
     future::Future,

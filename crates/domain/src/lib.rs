@@ -3,6 +3,33 @@ use serde::{Deserialize, Serialize};
 pub const API_VERSION: &str = "v1";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DnsCaptureStats {
+    pub family: String,
+    pub redirected: u64,
+    pub restored: u64,
+    pub errors: u64,
+    pub bypassed: u64,
+    pub error_code: i64,
+    pub error_phase: u64,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DnsCaptureStatus {
+    pub scope: String,
+    pub attached: bool,
+    pub object_sha256: String,
+    pub cgroup: String,
+    pub port: u16,
+    pub ipv4_alias_prefix: String,
+    pub ipv6_alias_prefix: String,
+    pub netns_cookie: u64,
+    pub program_ids: Vec<u32>,
+    pub map_ids: Vec<u32>,
+    pub peers: usize,
+    pub allocated_slots: u64,
+    pub stats: Vec<DnsCaptureStats>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VersionInfo {
     pub service: String,
     pub version: String,

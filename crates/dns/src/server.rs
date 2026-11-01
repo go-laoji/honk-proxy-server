@@ -40,6 +40,37 @@ impl DnsServer {
         let tcp = TcpListener::bind(address).await?;
         let local = tcp.local_addr()?;
         let udp = UdpSocket::bind(local).await?;
+        #[cfg(target_os = "linux")]
+        hps_net::packet_info::enable(&udp)?;
+        Ok(Arc::new(Self {
+            configured: address,
+            local,
+            sockets: Mutex::new(Some((tcp, udp))),
+            resolver: RwLock::new(resolver),
+            stop_accepting: CancellationToken::new(),
+            stop_connections: CancellationToken::new(),
+            tasks: TaskTracker::new(),
+        }))
+    }
+    #[cfg(target_os = "linux")]
+    pub async fn bind_capture(
+        address: SocketAddr,
+        resolver: Resolver,
+    ) -> std::io::Result<Arc<Self>> {
+        if resolver
+            .configuration()
+            .upstreams
+            .iter()
+            .any(|u| u.protocol == hps_config::DnsProtocol::System)
+        {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "DNS capture requires explicit wire upstreams",
+            ));
+        }
+        let tcp = hps_net::packet_info::bind_capture_tcp(address)?;
+        let local = tcp.local_addr()?;
+        let udp = hps_net::packet_info::bind_capture_udp(local)?;
         Ok(Arc::new(Self {
             configured: address,
             local,
@@ -86,8 +117,12 @@ impl DnsServer {
             let mut buffer = vec![0; 65535];
             loop {
                 let received = tokio::select! {biased;_=service.stop_accepting.cancelled()=>break,
-                result=socket.recv_from(&mut buffer)=>result};
-                let Ok((len, peer)) = received else { break };
+                result=recv_packet(&socket,&mut buffer)=>result};
+                let (len, peer, metadata) = match received {
+                    Ok(packet) => packet,
+                    Err(e) if e.kind() == std::io::ErrorKind::InvalidData => continue,
+                    Err(_) => break,
+                };
                 if len > 4096 {
                     continue;
                 }
@@ -118,7 +153,7 @@ impl DnsServer {
                         truncated.additionals.clear();
                         data = truncated.to_vec().unwrap_or_default();
                     }
-                    let _ = socket.send_to(&data, peer).await;
+                    let _ = send_packet(&socket, &data, peer, metadata).await;
                 });
             }
         });
@@ -133,6 +168,41 @@ impl DnsServer {
             self.stop_connections.cancel();
             self.tasks.wait().await;
         }
+    }
+}
+#[cfg(target_os = "linux")]
+type PacketMetadata = hps_net::packet_info::PacketInfo;
+#[cfg(not(target_os = "linux"))]
+type PacketMetadata = ();
+async fn recv_packet(
+    socket: &UdpSocket,
+    buffer: &mut [u8],
+) -> std::io::Result<(usize, SocketAddr, PacketMetadata)> {
+    #[cfg(target_os = "linux")]
+    {
+        hps_net::packet_info::recv(socket, buffer).await
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        socket
+            .recv_from(buffer)
+            .await
+            .map(|(len, peer)| (len, peer, ()))
+    }
+}
+async fn send_packet(
+    socket: &UdpSocket,
+    buffer: &[u8],
+    peer: SocketAddr,
+    _metadata: PacketMetadata,
+) -> std::io::Result<usize> {
+    #[cfg(target_os = "linux")]
+    {
+        hps_net::packet_info::send(socket, buffer, peer, _metadata).await
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        socket.send_to(buffer, peer).await
     }
 }
 impl Drop for DnsServer {
