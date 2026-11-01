@@ -79,6 +79,7 @@ fn supported_nodes_get(path: &str) -> bool {
                     && match key.as_ref() {
                         "id" => hps_config::valid_node_id(&value),
                         "search" => value.len() <= 256,
+                        "provider" if value == "@static" => true,
                         "provider" | "group" => {
                             hps_config::valid_node_id(&value) && !value.contains(':')
                         }
@@ -164,6 +165,7 @@ fn supported_health_get(path: &str) -> bool {
                 keys.insert(key.to_string())
                     && match key.as_ref() {
                         "limit" => value.parse::<u32>().is_ok_and(|n| (1..=200).contains(&n)),
+                        "node" => hps_config::valid_node_id(&value),
                         "after" => {
                             !value.is_empty()
                                 && value.len() <= 128

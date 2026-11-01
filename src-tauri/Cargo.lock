@@ -1536,6 +1536,7 @@ name = "hps-desktop"
 version = "0.1.0"
 dependencies = [
  "hps-client",
+ "hps-config",
  "hps-web-assets",
  "serde",
  "serde_json",

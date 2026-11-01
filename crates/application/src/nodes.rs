@@ -134,7 +134,9 @@ impl Supervisor {
                 if let Ok(controls) = service.store.node_controls().await {
                     registry.reconcile(controls);
                 }
+                let pool_refreshed = service.refresh_pool().await.is_ok();
                 Ok(NodeActionResult {
+                    pool_refreshed,
                     running_revision: current.revision,
                     control: Some(control),
                     configuration_activation: None,
@@ -151,7 +153,7 @@ fn validate_query(q: &NodeQuery) -> Result<(), ApplicationError> {
         || q.search.as_ref().is_some_and(|s| s.len() > 256)
         || q.provider
             .as_ref()
-            .is_some_and(|s| s != "static" && !valid_id(s))
+            .is_some_and(|s| s != "@static" && !valid_id(s))
         || q.group.as_ref().is_some_and(|s| !valid_id(s))
         || q.protocol
             .as_ref()
@@ -242,7 +244,7 @@ fn inventory(
                 !node.id.to_lowercase().contains(s) && !node.host.to_lowercase().contains(s)
             })
             || q.provider.as_ref().is_some_and(|p| {
-                if p == "static" {
+                if p == "@static" {
                     node.provider_id.is_some()
                 } else {
                     node.provider_id.as_ref() != Some(p)
@@ -312,6 +314,20 @@ fn inventory(
         evaluated_at_unix: now,
         summary,
         inventory_truncated: truncated,
+        providers: current
+            .config
+            .providers
+            .iter()
+            .map(|p| p.id.clone())
+            .collect(),
+        groups: current
+            .config
+            .proxy
+            .selection
+            .groups
+            .iter()
+            .map(|g| g.id.clone())
+            .collect(),
         filtered_total: total,
         offset: q.offset,
         next_offset: (offset + limit < total).then_some((offset + limit) as u32),
@@ -653,6 +669,22 @@ mod tests {
             .await
             .unwrap();
         assert!(other.nodes[0].eligible);
+        assert_eq!(
+            service
+                .provider_controller("vendor-a")
+                .await
+                .unwrap()
+                .current_inventory,
+            0
+        );
+        assert_eq!(
+            service
+                .provider_controller("vendor-b")
+                .await
+                .unwrap()
+                .current_inventory,
+            1
+        );
         assert!(
             service
                 .nodes(NodeQuery {

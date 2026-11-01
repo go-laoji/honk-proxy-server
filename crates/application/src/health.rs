@@ -508,12 +508,24 @@ impl Supervisor {
         after: Option<String>,
         limit: u32,
     ) -> Result<HealthOverview<hps_config::HealthConfig>, ApplicationError> {
+        self.health_overview_for(after, limit, None).await
+    }
+    pub async fn health_overview_for(
+        &self,
+        after: Option<String>,
+        limit: u32,
+        node: Option<String>,
+    ) -> Result<HealthOverview<hps_config::HealthConfig>, ApplicationError> {
+        if node.as_ref().is_some_and(|n| !hps_config::valid_node_id(n)) {
+            return Err(ApplicationError::Invalid);
+        }
         let current = self.current();
         let mut plans = current.engine.probe_plans();
         plans.sort_by(|a, b| a.config().id.cmp(&b.config().id));
         let total = plans.len();
         let mut selected = plans
             .into_iter()
+            .filter(|p| node.as_ref().is_none_or(|n| p.config().id == *n))
             .filter(|p| after.as_ref().is_none_or(|after| p.config().id > *after))
             .take(limit.clamp(1, 200) as usize + 1)
             .collect::<Vec<_>>();

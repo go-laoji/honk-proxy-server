@@ -101,6 +101,8 @@ pub struct NodesOverview {
     pub evaluated_at_unix: i64,
     pub summary: NodeSummary,
     pub inventory_truncated: bool,
+    pub providers: Vec<String>,
+    pub groups: Vec<String>,
     pub filtered_total: usize,
     pub offset: u32,
     pub next_offset: Option<u32>,
@@ -119,6 +121,7 @@ pub struct NodeActionInput {
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeActionResult {
+    pub pool_refreshed: bool,
     pub running_revision: i64,
     pub control: Option<NodeControl>,
     pub configuration_activation: Option<crate::ConfigActivationResult>,
