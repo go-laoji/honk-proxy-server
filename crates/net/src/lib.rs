@@ -27,6 +27,34 @@ pub struct NetworkError(pub &'static str);
 
 pub trait NameResolver: Send + Sync {
     fn lookup(&self, host: String, purpose: ResolvePurpose) -> NetworkFuture<'_, Vec<IpAddr>>;
+    fn lookup_family(
+        &self,
+        host: String,
+        purpose: ResolvePurpose,
+        family: AddressFamily,
+    ) -> NetworkFuture<'_, Vec<IpAddr>> {
+        let pending = self.lookup(host, purpose);
+        Box::pin(async move {
+            Ok(pending
+                .await?
+                .into_iter()
+                .filter(|ip| family.matches(*ip))
+                .collect())
+        })
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AddressFamily {
+    Ipv4,
+    Ipv6,
+}
+impl AddressFamily {
+    pub fn matches(self, ip: IpAddr) -> bool {
+        matches!(
+            (self, ip),
+            (Self::Ipv4, IpAddr::V4(_)) | (Self::Ipv6, IpAddr::V6(_))
+        )
+    }
 }
 
 /// A fixed static egress. Implementations must not select/buy a pool node or resolve

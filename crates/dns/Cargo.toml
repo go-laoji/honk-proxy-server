@@ -22,8 +22,10 @@ tokio-rustls = { version = "0.26", default-features = false, features = ["ring",
 rustls-pemfile = "2"
 webpki-roots = "1"
 tokio-util = { version = "0.7", features = ["rt"] }
+libc = "0.2"
 
 [dev-dependencies]
+hps-engine.workspace = true
 rcgen = "0.14"
 tempfile = "3"
 hyper = { version = "1", features = ["server"] }
