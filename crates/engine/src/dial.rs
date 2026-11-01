@@ -313,14 +313,14 @@ impl Dialer {
     ) {
         *self.source_protocols.write().unwrap() = protocols;
     }
-    pub fn source_demand(&self, id: &str) -> (bool, Option<Duration>) {
+    pub fn source_demand(&self, id: &str, inbound: &str) -> (bool, Option<Duration>) {
         self.sources
             .read()
             .unwrap()
             .get(id)
             .map_or((false, None), |fp| {
                 self.demand
-                    .source(id, &format!("{fp}:{}", self.refill_fingerprint))
+                    .source(id, &format!("{fp}:{}:{inbound}", self.refill_fingerprint))
             })
     }
     pub fn eligible_count(&self) -> usize {
@@ -550,7 +550,16 @@ impl Dialer {
                     self.selector
                         .allows_refill(&query, id, protocols.get(*id).copied())
                 })
-                .map(|(id, fp)| (id.clone(), format!("{fp}:{}", self.refill_fingerprint)))
+                .map(|(id, fp)| {
+                    (
+                        id.clone(),
+                        format!(
+                            "{fp}:{}:{}",
+                            self.refill_fingerprint,
+                            query.inbound.as_deref().unwrap_or("@unbound")
+                        ),
+                    )
+                })
                 .collect()
         };
         let demand = self.demand.begin(refill_sources);

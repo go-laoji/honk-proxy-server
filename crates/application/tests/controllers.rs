@@ -205,6 +205,15 @@ async fn group_and_rule_demand_only_refills_sources_that_can_supply_future_candi
         assert_eq!(state.used_requests, 0);
     }
     assert_eq!(unrelated.mock.calls.load(Ordering::Relaxed), 0);
+    group_app.stop_inbound("http").await.unwrap();
+    assert!(
+        !group_app
+            .provider_controller("source")
+            .await
+            .unwrap()
+            .demand_active
+    );
+    group_app.start_inbound("http").await.unwrap();
     let mut changed = group_app.current().config.clone();
     changed.proxy.routing.default_action = hps_domain::RouteAction::Direct;
     let before = group_app.current().revision;

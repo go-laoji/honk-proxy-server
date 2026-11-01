@@ -51,6 +51,7 @@ pub struct Engine {
 }
 struct Entry {
     config: InboundConfig,
+    runtime_override: Mutex<Option<bool>>,
     tls: Option<TlsAcceptor>,
     certificate: Option<CertificateStatus>,
     control: tokio::sync::Mutex<Option<Run>>,
@@ -160,7 +161,11 @@ impl Engine {
                 }
                 None => (None, None),
             };
+            let runtime_override = old
+                .filter(|old| old.config.enabled == config.enabled)
+                .and_then(|old| *old.runtime_override.lock().unwrap());
             let entry = Entry {
+                runtime_override: Mutex::new(runtime_override),
                 capacity: old
                     .map_or_else(|| Arc::new(Capacity::default()), |old| old.capacity.clone()),
                 bandwidth: old
@@ -241,7 +246,20 @@ impl Engine {
         self.dialer.demand.age()
     }
     pub fn source_demand(&self, id: &str) -> (bool, Option<Duration>) {
-        self.dialer.source_demand(id)
+        let mut active = false;
+        let mut age: Option<Duration> = None;
+        for entry in self
+            .entries
+            .values()
+            .filter(|e| e.running.load(Ordering::Acquire))
+        {
+            let (current, time) = self.dialer.source_demand(id, &entry.config.id);
+            active |= current;
+            if let Some(time) = time {
+                age = Some(age.map_or(time, |old| old.min(time)));
+            }
+        }
+        (active, age)
     }
     pub fn set_provider_source_protocols(
         &self,
@@ -256,8 +274,8 @@ impl Engine {
         self.dialer.set_sources(sources);
     }
     pub async fn start_enabled(self: &Arc<Self>) -> Result<(), EngineError> {
-        for entry in self.entries.values().filter(|entry| entry.config.enabled) {
-            if let Err(error) = self.start(&entry.config.id).await {
+        for entry in self.entries.values().filter(|entry| entry.should_start()) {
+            if let Err(error) = self.start_entry(&entry.config.id).await {
                 self.shutdown().await;
                 return Err(error);
             }
@@ -267,7 +285,7 @@ impl Engine {
     /// Bind all new sockets without accepting traffic. Existing sockets can be
     /// shared during a generation handoff, including an unchanged ephemeral ID.
     pub async fn prepare_enabled(&self, previous: Option<&Arc<Self>>) -> Result<(), EngineError> {
-        for entry in self.entries.values().filter(|entry| entry.config.enabled) {
+        for entry in self.entries.values().filter(|entry| entry.should_start()) {
             let existing = previous.and_then(|previous| {
                 previous.entries.values().find_map(|old| {
                     let same = old.config.listen == entry.config.listen
@@ -316,6 +334,11 @@ impl Engine {
         self.generation.load(Ordering::Acquire)
     }
     pub async fn start(self: &Arc<Self>, id: &str) -> Result<InboundStatus, EngineError> {
+        let entry = self.entries.get(id).ok_or(EngineError::NotFound)?;
+        *entry.runtime_override.lock().unwrap() = Some(true);
+        self.start_entry(id).await
+    }
+    async fn start_entry(self: &Arc<Self>, id: &str) -> Result<InboundStatus, EngineError> {
         let entry = self.entries.get(id).ok_or(EngineError::NotFound)?.clone();
         let mut control = entry.control.lock().await;
         if self.cancel.is_cancelled() {
@@ -396,6 +419,7 @@ impl Engine {
     }
     pub async fn stop(&self, id: &str) -> Result<InboundStatus, EngineError> {
         let entry = self.entries.get(id).ok_or(EngineError::NotFound)?;
+        *entry.runtime_override.lock().unwrap() = Some(false);
         let mut control = entry.control.lock().await;
         if let Some(cancel) = control.take() {
             cancel.accept.cancel();
@@ -438,6 +462,12 @@ impl Engine {
     }
 }
 impl Entry {
+    fn should_start(&self) -> bool {
+        self.runtime_override
+            .lock()
+            .unwrap()
+            .unwrap_or(self.config.enabled)
+    }
     fn status(&self) -> InboundStatus {
         let mut certificate = self.certificate.clone();
         if let Some(info) = &mut certificate {
@@ -452,6 +482,7 @@ impl Entry {
             protocol: format!("{:?}", self.config.protocol).to_lowercase(),
             configured_listen: self.config.listen.to_string(),
             configured_enabled: self.config.enabled,
+            runtime_override: *self.runtime_override.lock().unwrap(),
             listen: self
                 .address
                 .lock()

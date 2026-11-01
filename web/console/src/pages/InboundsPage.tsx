@@ -55,9 +55,9 @@ export default function InboundsPage({
           icon={Activity}
         />
         <Stat
-          title="可准入上游"
+          title="默认选择可用上游"
           value={String(proxy.eligible_upstreams)}
-          detail="按启用与有效期筛选，未代表健康探测通过"
+          detail="遵守组范围、健康策略与剩余寿命；直连另由规则决定"
           icon={Gauge}
         />
         <Stat
@@ -70,13 +70,13 @@ export default function InboundsPage({
       <div className="panel mt-6 flex items-start gap-3 p-5 text-sm leading-7">
         <CircleHelp size={19} className="mt-1 shrink-0 text-blue-600" />
         <p className="muted">
-          入口、上游与资源限制通过启动 TOML 配置，调整后重启 Daemon
-          生效。此页启停立即生效；停止入口会断开该入口的现有连接。重启后按文件中的启用状态恢复。
+          入口、上游与资源限制可通过配置工作台校验并激活版本。此页启停立即生效，停止会断开该入口的现有连接。
+          热更新在 enabled 未变化时保留手动启停；Daemon 重启按已持久化配置恢复。
         </p>
       </div>
       {!proxy.eligible_upstreams && (
         <p className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-7 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-          没有可准入的上游节点。入口可以监听，但转发会返回无可用出口；请配置并启用有效上游。
+          默认选择当前没有合格的代理池节点。规则可以明确直连或选择其他组，其余目标按规则处理；直连需要明确配置。
         </p>
       )}
       {error && (
@@ -133,6 +133,14 @@ export default function InboundsPage({
                 ["配置监听", <code>{entry.configured_listen}</code>],
                 ["实际监听", <code>{entry.listen ?? "未监听"}</code>],
                 ["启动时启用", entry.configured_enabled ? "是" : "否"],
+                [
+                  "手动运行覆盖",
+                  entry.runtime_override == null
+                    ? "未设置"
+                    : entry.runtime_override
+                      ? "启动"
+                      : "停止",
+                ],
                 [
                   "连接使用",
                   `${entry.active_connections} / ${entry.max_connections}`,
