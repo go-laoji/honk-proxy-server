@@ -132,7 +132,11 @@ export default function GroupsPage({
         if (mounted.current && request === sequence.current) setData(value);
       })
       .catch((cause) => {
-        if (!controller.signal.aborted && mounted.current)
+        if (
+          !controller.signal.aborted &&
+          mounted.current &&
+          request === sequence.current
+        )
           setError(message(cause));
       });
     return () => {
@@ -187,7 +191,13 @@ export default function GroupsPage({
     setInfo(
       `${label} · ${result.state} · 运行版本 r${result.running_revision}`,
     );
-    await Promise.all([refresh(), refreshService()]);
+    const [value] = await Promise.all([refresh(), refreshService()]);
+    if (
+      mounted.current &&
+      group &&
+      !value.configuration.groups.some((g) => g.id === group)
+    )
+      chooseGroup("");
   }
   async function save() {
     if (!editor) return;
@@ -231,6 +241,13 @@ export default function GroupsPage({
     }
   }
   const selectedGroup = data?.configuration.groups.find((g) => g.id === group);
+  function chooseGroup(id: string) {
+    const selected = data?.configuration.groups.find((g) => g.id === id);
+    setGroup(id);
+    setPin(selected?.pinned_node ?? "");
+    setFallback(selected?.fallback_nodes.join(", ") ?? "");
+    setDecision(undefined);
+  }
   return (
     <div className="space-y-6">
       {error && (
@@ -413,10 +430,7 @@ export default function GroupsPage({
                 className="btn"
                 disabled={busy}
                 onClick={() => {
-                  setGroup(item.id);
-                  setPin(item.pinned_node ?? "");
-                  setFallback(item.fallback_nodes.join(", "));
-                  setDecision(undefined);
+                  chooseGroup(item.id);
                 }}
               >
                 选择此组
@@ -467,8 +481,7 @@ export default function GroupsPage({
               className="input mt-2 w-full"
               value={group}
               onChange={(event) => {
-                setGroup(event.target.value);
-                setDecision(undefined);
+                chooseGroup(event.target.value);
               }}
             >
               <option value="">默认 / 按入口绑定</option>
