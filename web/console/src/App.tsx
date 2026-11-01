@@ -35,6 +35,7 @@ import LinuxPage from "./pages/LinuxPage";
 import InboundsPage from "./pages/InboundsPage";
 const ProvidersPage = lazy(() => import("./pages/ProvidersPage"));
 const HealthPage = lazy(() => import("./pages/HealthPage"));
+const DnsPage = lazy(() => import("./pages/DnsPage"));
 const ConfigPage = lazy(() => import("./pages/ConfigPage"));
 
 const icons: Record<
@@ -257,6 +258,10 @@ export default function App() {
                   serviceEndpoint={service.data.endpoint}
                   refreshService={service.refresh}
                 />
+              </Suspense>
+            ) : current.id === "dns" ? (
+              <Suspense fallback={<p className="muted">正在读取 DNS…</p>}>
+                <DnsPage refreshService={service.refresh} />
               </Suspense>
             ) : current.id === "settings" ? (
               <SettingsPage data={service.data} />
