@@ -83,6 +83,16 @@ fn reversible_empty_schema_and_newer_schema_rejection() {
         .execute_batch(include_str!("../migrations/0004_lease_clock.up.sql"))
         .unwrap();
     connection
+        .execute_batch(include_str!(
+            "../migrations/0005_provider_controller.up.sql"
+        ))
+        .unwrap();
+    connection
+        .execute_batch(include_str!(
+            "../migrations/0005_provider_controller.down.sql"
+        ))
+        .unwrap();
+    connection
         .execute_batch(include_str!("../migrations/0004_lease_clock.down.sql"))
         .unwrap();
     connection

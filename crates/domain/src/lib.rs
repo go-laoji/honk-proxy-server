@@ -283,6 +283,8 @@ pub struct ConfigActivationResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExtractionTask {
     pub id: i64,
+    #[serde(default = "manual_trigger")]
+    pub trigger: String,
     pub provider_id: String,
     pub request_id: String,
     pub config_fingerprint: String,
@@ -333,4 +335,8 @@ pub struct ProviderDetail<T> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExpectedRevision {
     pub expected_revision: i64,
+}
+
+fn manual_trigger() -> String {
+    "manual".into()
 }
