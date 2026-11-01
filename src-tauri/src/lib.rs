@@ -123,7 +123,12 @@ fn supported_connections_get(path: &str) -> bool {
         return query.is_none();
     }
     if let Some(id) = base.strip_prefix("api/v1/connections/") {
-        return query.is_none() && hps_domain::valid_connection_id(id);
+        let encoded = format!("id={id}");
+        let pairs = url::form_urlencoded::parse(encoded.as_bytes()).collect::<Vec<_>>();
+        return query.is_none()
+            && pairs.len() == 1
+            && pairs[0].0 == "id"
+            && hps_domain::valid_connection_id(&pairs[0].1);
     }
     if base != "api/v1/connections" {
         return false;
@@ -549,6 +554,14 @@ mod tests {
     #[test]
     fn transport_accepts_implemented_api_only() {
         assert!(supported_api("api/v1/status"));
+        let connection = "12345678-1234-4321-8234-123456789abc%3A00000000000000000001";
+        assert!(supported_api(&format!("api/v1/connections/{connection}")));
+        assert!(!supported_api(&format!(
+            "api/v1/connections/{connection}&id=other"
+        )));
+        assert!(!supported_api(
+            "api/v1/connections/12345678-1234-4321-8234-123456789abc%2F00000000000000000001"
+        ));
         assert!(supported_api("api/v1/groups"));
         assert!(supported_api("api/v1/rules"));
         assert!(supported_api(
