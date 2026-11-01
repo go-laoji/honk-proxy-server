@@ -128,6 +128,7 @@ fn valid_task_query(q: &TaskQuery) -> bool {
 }
 
 /// Only safe metadata is accepted. Input bodies and credentials are never retained here.
+#[derive(Clone)]
 pub struct WorkInput {
     pub kind: &'static str,
     pub resource_kind: Option<String>,
@@ -135,6 +136,45 @@ pub struct WorkInput {
     pub request_id: String,
     pub input_fingerprint: String,
     pub configuration_revision: Option<i64>,
+}
+fn validate_work(input: &WorkInput) -> Result<(), StorageError> {
+    if !TASK_KINDS.contains(&input.kind)
+        || matches!(input.kind, "provider" | "health" | "activation")
+        || !text(&input.resource_kind, 32)
+        || !text(&input.resource_id, 128)
+        || !identifier(&input.request_id, 64)
+        || input.input_fingerprint.len() != 64
+        || !input
+            .input_fingerprint
+            .bytes()
+            .all(|b| b.is_ascii_hexdigit())
+        || input.configuration_revision.is_some_and(|n| n <= 0)
+    {
+        return Err(StorageError::Invalid);
+    }
+    Ok(())
+}
+fn work_scope(input: &WorkInput) -> String {
+    if input.resource_kind.as_deref() == Some("configuration") {
+        "configuration".to_owned()
+    } else {
+        format!(
+            "{}:{}",
+            input.resource_kind.as_deref().unwrap_or(""),
+            input.resource_id.as_deref().unwrap_or("")
+        )
+    }
+}
+fn existing_work(c: &Connection, input: &WorkInput) -> Result<Option<TaskInfo>, StorageError> {
+    let record=c.query_row("SELECT id,input_fingerprint,kind,scope FROM task_records WHERE source_ref IS NULL AND request_id=?1",[&input.request_id],|r|Ok((r.get::<_,i64>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,String>(3)?))).optional()?;
+    record
+        .map(|(id, fp, kind, scope)| {
+            if fp != input.input_fingerprint || kind != input.kind || scope != work_scope(input) {
+                return Err(StorageError::Conflict);
+            }
+            read_task(c, id)
+        })
+        .transpose()
 }
 pub struct WorkResult {
     pub state: &'static str,
@@ -201,28 +241,16 @@ impl Store {
             Ok(TasksOverview {epoch, observed_at_unix_ms:unix_ms(),next_before:if more {records.last().map(|t|t.id)} else {None},records,terminal_retention_limit:TASK_RETENTION})
         }).await
     }
+    pub async fn existing_work(&self, input: WorkInput) -> Result<Option<TaskInfo>, StorageError> {
+        validate_work(&input)?;
+        self.call(move |c| existing_work(c, &input)).await
+    }
     pub async fn begin_work(&self, input: WorkInput) -> Result<(TaskInfo, bool), StorageError> {
-        if !TASK_KINDS.contains(&input.kind)
-            || matches!(input.kind, "provider" | "health" | "activation")
-            || !text(&input.resource_kind, 32)
-            || !text(&input.resource_id, 128)
-            || !identifier(&input.request_id, 64)
-            || input.input_fingerprint.len() != 64
-            || !input
-                .input_fingerprint
-                .bytes()
-                .all(|b| b.is_ascii_hexdigit())
-            || input.configuration_revision.is_some_and(|n| n <= 0)
-        {
-            return Err(StorageError::Invalid);
-        }
+        validate_work(&input)?;
         self.call(move |c| {
             let tx=c.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-            let scope=format!("{}:{}",input.resource_kind.as_deref().unwrap_or(""),input.resource_id.as_deref().unwrap_or(""));
-            if let Some((id,fingerprint))=tx.query_row("SELECT id,input_fingerprint FROM task_records WHERE source_ref IS NULL AND kind=?1 AND scope=?2 AND request_id=?3",params![input.kind,scope,input.request_id],|r|Ok((r.get::<_,i64>(0)?,r.get::<_,String>(1)?))).optional()? {
-                if fingerprint!=input.input_fingerprint {return Err(StorageError::Conflict);}
-                return Ok((read_task(&tx,id)?,false));
-            }
+            let scope=work_scope(&input);
+            if let Some(task)=existing_work(&tx,&input)? { return Ok((task,false)); }
             let active:u32=tx.query_row("SELECT count(*) FROM task_records WHERE source_ref IS NULL AND terminal=0",[],|r|r.get(0))?;
             if active>=64 {return Err(StorageError::TaskCapacity);}
             let now=unix_ms() as i64;

@@ -22,7 +22,7 @@ CREATE TABLE task_records (
 CREATE INDEX task_records_history ON task_records(kind,state,id DESC);
 CREATE INDEX task_records_terminal ON task_records(terminal,id DESC);
 CREATE INDEX task_records_request ON task_records(request_id,id DESC);
-CREATE UNIQUE INDEX task_work_idempotency ON task_records(kind,scope,request_id) WHERE source_ref IS NULL AND request_id IS NOT NULL;
+CREATE UNIQUE INDEX task_work_idempotency ON task_records(request_id) WHERE source_ref IS NULL AND request_id IS NOT NULL;
 CREATE TABLE event_context (singleton INTEGER PRIMARY KEY CHECK(singleton=1), epoch TEXT NOT NULL);
 INSERT INTO event_context VALUES(1,'00000000-0000-0000-0000-000000000000');
 CREATE TABLE service_events (

@@ -38,12 +38,10 @@ async fn resolve(
     Json(input): Json<LookupInput>,
 ) -> ApiResult<LookupResult> {
     application(&state)?
-        .current()
-        .dns
-        .diagnose(input)
+        .diagnose_dns(input)
         .await
         .map(Json)
-        .map_err(|e| application_error(e.into()))
+        .map_err(application_error)
 }
 #[derive(serde::Serialize)]
 struct ClearResult {

@@ -54,6 +54,24 @@ pub struct TasksOverview {
     pub terminal_retention_limit: u32,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TaskSubmission {
+    pub request_id: String,
+    pub operation: TaskOperation,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    content = "input",
+    rename_all = "snake_case",
+    deny_unknown_fields
+)]
+pub enum TaskOperation {
+    ConfigurationValidate(crate::ConfigInput),
+    ConfigurationPrepare(crate::ConfigInput),
+}
+
 /// Structured metadata only: there is deliberately no arbitrary message/body/URL field.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceEvent {

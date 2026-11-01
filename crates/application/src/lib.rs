@@ -9,6 +9,7 @@ mod node_import;
 mod nodes;
 mod providers;
 mod rules;
+mod tasks;
 use arc_swap::ArcSwap;
 use hps_config::DaemonConfig;
 use hps_domain::{
@@ -25,6 +26,20 @@ use std::{
 
 #[derive(Debug, thiserror::Error)]
 pub enum ApplicationError {
+    #[error("invalid background task or event query")]
+    TaskInput,
+    #[error("background task observation instance changed; request a new snapshot")]
+    TaskEpoch,
+    #[error("background task is outside the retained history")]
+    TaskUnavailable,
+    #[error("background task {0} is already accepted; inspect its persistent result")]
+    TaskExisting(i64),
+    #[error("too many accepted background operations or event streams")]
+    TaskCapacity,
+    #[error(
+        "work may have completed but its task result could not be persisted; inspect state before retrying"
+    )]
+    TaskPersistence,
     #[error("invalid connection query, snapshot identifier or disconnect scope")]
     ConnectionInput,
     #[error("too many concurrent connection observation operations")]
@@ -132,6 +147,9 @@ pub struct Supervisor {
     rule_diagnostics: Arc<tokio::sync::Semaphore>,
     node_operations: Arc<tokio::sync::Semaphore>,
     observations: connections::ConnectionRuntime,
+    work_slots: Arc<tokio::sync::Semaphore>,
+    event_stream_slots: Arc<tokio::sync::Semaphore>,
+    work_registration: Mutex<()>,
     controller_started: std::sync::atomic::AtomicBool,
     health: health::HealthRuntime,
 }
@@ -189,6 +207,9 @@ impl Supervisor {
             rule_diagnostics: Arc::new(tokio::sync::Semaphore::new(4)),
             node_operations: Arc::new(tokio::sync::Semaphore::new(4)),
             observations: Default::default(),
+            work_slots: Arc::new(tokio::sync::Semaphore::new(16)),
+            event_stream_slots: Arc::new(tokio::sync::Semaphore::new(16)),
+            work_registration: Mutex::new(()),
             controller_started: std::sync::atomic::AtomicBool::new(false),
             health: Default::default(),
         });
@@ -327,7 +348,18 @@ impl Supervisor {
         config.resolve_paths(&self.path_base);
         Ok(config)
     }
-    pub async fn validate(&self, input: ConfigInput) -> ConfigValidation {
+    pub async fn validate(self: &Arc<Self>, input: ConfigInput) -> ConfigValidation {
+        match self.validate_owned(input).await {
+            Ok(value) => value,
+            Err(error) => ConfigValidation {
+                valid: false,
+                diagnostics: vec![diagnostic("background_work", &error.to_string())],
+                changes: vec![],
+                restart_required: vec![],
+            },
+        }
+    }
+    async fn validate_inner(&self, input: ConfigInput) -> ConfigValidation {
         let candidate = match self.parse(&input).await {
             Ok(candidate) => candidate,
             Err(diagnostics) => {
@@ -394,6 +426,12 @@ impl Supervisor {
         })
     }
     pub async fn create_revision(
+        self: &Arc<Self>,
+        input: ConfigInput,
+    ) -> Result<ConfigRevision, ApplicationError> {
+        self.create_revision_owned(input).await
+    }
+    async fn create_revision_inner(
         &self,
         input: ConfigInput,
     ) -> Result<ConfigRevision, ApplicationError> {
@@ -430,12 +468,8 @@ impl Supervisor {
         self: &Arc<Self>,
         input: ConfigActivate,
     ) -> Result<ConfigActivationResult, ApplicationError> {
-        // A caller disconnecting must not abandon a committed head halfway
-        // through a generation handoff. The activation history is recoverable.
-        let service = self.clone();
-        tokio::spawn(async move { service.activate_inner(input).await })
+        self.tracked(move |service| async move { service.activate_inner(input).await })
             .await
-            .map_err(|_| ApplicationError::Worker)?
     }
     async fn activate_inner(
         &self,
@@ -752,12 +786,15 @@ impl Supervisor {
     }
     pub async fn shutdown(&self) -> Result<(), ApplicationError> {
         let _operation = self.operation.lock().await;
-        if self.closed.swap(true, std::sync::atomic::Ordering::AcqRel) {
-            return Ok(());
+        {
+            let _registration = self.work_registration.lock().unwrap();
+            if self.closed.swap(true, std::sync::atomic::Ordering::AcqRel) {
+                return Ok(());
+            }
+            self.provider_tasks.close();
         }
         self.provider_cancel.cancel();
         drop(_operation);
-        self.provider_tasks.close();
         self.provider_tasks.wait().await;
         self.current().dns.shutdown().await;
         let retired_dns = std::mem::take(&mut *self.retired_dns.lock().unwrap());

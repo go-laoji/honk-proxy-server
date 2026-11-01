@@ -31,41 +31,38 @@ impl Supervisor {
             .clone()
             .try_acquire_owned()
             .map_err(|_| ApplicationError::NodeCapacity)?;
-        let service = self.clone();
-        self.provider_tasks
-            .spawn(async move {
-                let _permit = permit;
-                let current = service.current();
-                let snapshot = current.clone();
-                let ((preview, nodes), checksum) = tokio::task::spawn_blocking(move || {
-                    parse_import(&snapshot, &input).map(|p| (p, input.preview_checksum))
-                })
-                .await
-                .map_err(|_| ApplicationError::Worker)??;
-                if !preview.applicable || checksum.as_deref() != Some(preview.checksum.as_str()) {
-                    return Err(ApplicationError::Invalid);
-                }
-                let mut config = current.base_config.clone();
-                config.proxy.upstreams.extend(nodes);
-                let revision = service
-                    .create_revision(ConfigInput {
-                        toml: toml::to_string(&config).map_err(|_| ApplicationError::Invalid)?,
-                        expected_revision: current.revision,
-                        expected_draft_version: None,
-                        note: "Manual node import".into(),
-                        use_draft_credentials: false,
-                    })
-                    .await?;
-                service
-                    .activate(ConfigActivate {
-                        revision: revision.id,
-                        expected_revision: current.revision,
-                        defer_until_restart: false,
-                    })
-                    .await
+        self.tracked(move |service| async move {
+            let _permit = permit;
+            let current = service.current();
+            let snapshot = current.clone();
+            let ((preview, nodes), checksum) = tokio::task::spawn_blocking(move || {
+                parse_import(&snapshot, &input).map(|p| (p, input.preview_checksum))
             })
             .await
-            .map_err(|_| ApplicationError::Worker)?
+            .map_err(|_| ApplicationError::Worker)??;
+            if !preview.applicable || checksum.as_deref() != Some(preview.checksum.as_str()) {
+                return Err(ApplicationError::Invalid);
+            }
+            let mut config = current.base_config.clone();
+            config.proxy.upstreams.extend(nodes);
+            let revision = service
+                .create_revision(ConfigInput {
+                    toml: toml::to_string(&config).map_err(|_| ApplicationError::Invalid)?,
+                    expected_revision: current.revision,
+                    expected_draft_version: None,
+                    note: "Manual node import".into(),
+                    use_draft_credentials: false,
+                })
+                .await?;
+            service
+                .activate(ConfigActivate {
+                    revision: revision.id,
+                    expected_revision: current.revision,
+                    defer_until_restart: false,
+                })
+                .await
+        })
+        .await
     }
 }
 fn parse_import(
