@@ -433,3 +433,68 @@ async fn management_audit_uses_real_peer_decoded_resources_and_owned_request_cor
     }
     fixture.service.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn shared_rust_client_stream_outlives_normal_request_timeout_and_uses_complete_cursors() {
+    let fixture = new_fixture().await;
+    let client = hps_client::HpsClient::new(&fixture.endpoint, Duration::from_millis(100)).unwrap();
+    let first = client.events(&EventQuery::default()).await.unwrap();
+    let mut subscription = client
+        .subscribe_events(&EventQuery {
+            cursor: Some(first.cursor),
+            module: Some("configuration".into()),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    assert!(matches!(
+        subscription.next().await.unwrap(),
+        Some(hps_domain::EventFrame::Checkpoint(_))
+    ));
+    let task = client.submit_task(&submission()).await.unwrap();
+    let frame = tokio::time::timeout(Duration::from_secs(4), subscription.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let hps_domain::EventFrame::Events(page) = frame else {
+        panic!("expected incremental task events");
+    };
+    assert!(
+        page.records
+            .iter()
+            .any(|e| e.task_id == Some(task.id) && e.code == "task_completed")
+    );
+    assert_eq!(subscription.cursor(), Some(page.cursor.as_str()));
+    assert_eq!(
+        client.task(task.id, Some(&page.epoch)).await.unwrap().state,
+        "completed"
+    );
+    assert_eq!(
+        client
+            .tasks(&TaskQuery {
+                request_id: Some("http-prepare-one".into()),
+                ..Default::default()
+            })
+            .await
+            .unwrap()
+            .records
+            .len(),
+        1
+    );
+    assert!(matches!(
+        client.task(0, None).await,
+        Err(hps_client::ClientError::InvalidTaskId)
+    ));
+    assert!(matches!(
+        client
+            .events(&EventQuery {
+                cursor: Some("bad".into()),
+                ..Default::default()
+            })
+            .await,
+        Err(hps_client::ClientError::InvalidEventCursor)
+    ));
+    drop(subscription);
+    fixture.service.shutdown().await.unwrap();
+}

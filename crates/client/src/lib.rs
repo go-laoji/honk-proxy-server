@@ -2,9 +2,17 @@ use hps_domain::{ApiError, Capabilities, ServiceStatus, VersionInfo};
 use reqwest::{Client, Url};
 use serde::de::DeserializeOwned;
 use std::time::Duration;
+mod events;
+pub use events::EventSubscription;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ClientError {
+    #[error("invalid background task ID or epoch")]
+    InvalidTaskId,
+    #[error("invalid event cursor")]
+    InvalidEventCursor,
+    #[error("event stream returned an invalid, oversized or out-of-order frame")]
+    EventProtocol,
     #[error("invalid connection observation ID")]
     InvalidConnectionId,
     #[error("endpoint must be an HTTP(S) URL without credentials, query or fragment")]
@@ -20,6 +28,7 @@ pub enum ClientError {
 #[derive(Clone)]
 pub struct HpsClient {
     http: Client,
+    stream_http: Client,
     endpoint: Url,
 }
 
@@ -50,6 +59,12 @@ impl HpsClient {
             .redirect(reqwest::redirect::Policy::none())
             .retry(reqwest::retry::never())
             .no_proxy();
+        let mut stream_http = Client::builder()
+            .connect_timeout(timeout)
+            .read_timeout(Duration::from_secs(30))
+            .redirect(reqwest::redirect::Policy::none())
+            .retry(reqwest::retry::never())
+            .no_proxy();
         if let Some(certificate) = certificate {
             let certificates = reqwest::Certificate::from_pem_bundle(certificate)
                 .map_err(|_| ClientError::InvalidCertificate)?;
@@ -57,11 +72,17 @@ impl HpsClient {
                 return Err(ClientError::InvalidCertificate);
             }
             for certificate in certificates {
+                stream_http = stream_http.add_root_certificate(certificate.clone());
                 http = http.add_root_certificate(certificate);
             }
         }
         let http = http.build()?;
-        Ok(Self { http, endpoint })
+        let stream_http = stream_http.build()?;
+        Ok(Self {
+            http,
+            stream_http,
+            endpoint,
+        })
     }
 
     pub fn endpoint(&self) -> &Url {

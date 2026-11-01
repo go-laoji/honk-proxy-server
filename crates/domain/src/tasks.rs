@@ -121,6 +121,16 @@ pub struct EventsOverview {
     pub retention_limit: u32,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "data", rename_all = "snake_case")]
+pub enum EventFrame {
+    Snapshot(EventsOverview),
+    Events(EventsOverview),
+    Checkpoint(EventsOverview),
+    Reset(EventsOverview),
+    Unavailable { code: String },
+}
+
 pub const TASK_KINDS: &[&str] = &[
     "provider",
     "health",

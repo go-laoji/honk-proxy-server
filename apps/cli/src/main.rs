@@ -632,7 +632,10 @@ fn client_error(error: ClientError) -> (u8, String) {
     let code = match &error {
         ClientError::InvalidEndpoint
         | ClientError::InvalidCertificate
-        | ClientError::InvalidConnectionId => 2,
+        | ClientError::InvalidConnectionId
+        | ClientError::InvalidTaskId
+        | ClientError::InvalidEventCursor => 2,
+        ClientError::EventProtocol => 5,
         ClientError::Transport(e) if e.is_timeout() => 6,
         ClientError::Transport(_) => 3,
         ClientError::Api { status: 409, .. } => 7,
