@@ -1,0 +1,28 @@
+id = "kuaidaili"
+name = "快代理私密代理"
+enabled = false
+kind = "kuaidaili"
+endpoint = "https://dps.kdlapi.com/api/getdps"
+protocol = "http"
+count = 10
+# Some order types do not support getdpsvalidtime. For those orders set false,
+# then supply ttl_secs from the purchased order's conservative lifetime guarantee.
+query_valid_time = true
+min_remaining_secs = 30
+min_interval_secs = 60
+timeout_ms = 10000
+mode = "append_leases"
+
+[auth]
+type = "hmac_sha1"
+secret_id = "REPLACE_WITH_ORDER_SECRET_ID"
+secret_key = "REPLACE_WITH_ORDER_SECRET_KEY"
+
+[params]
+# area = "成都"
+# dedup = "1"
+
+# Set these only if the provider uses proxy username/password instead of whitelist.
+# [upstream_credentials]
+# username = "REPLACE_WITH_PROXY_USERNAME"
+# password = "REPLACE_WITH_PROXY_PASSWORD"

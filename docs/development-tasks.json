@@ -115,10 +115,10 @@
         "PROV-12"
       ],
       "scope": "适配真实供应商与可复现测试服务；配置提取参数/签名、TTL起算、增量批次/快照、凭据/白名单/配额；持久记录结果不确定，提供API/CLI/页面。",
-      "acceptance": "新批次不误删有效旧节点；到期不延长；损坏/空结果不清池；响应丢失不盲目重复消耗额度；真实供应商验收需其API契约。",
+      "acceptance": "新批次不误删有效旧节点；到期不延长；损坏/空结果不清池；响应丢失不盲目重复消耗额度。按用户提供的快代理官方契约验收，免费源实际获取/解析；没有采购时明确付费调用未验证，不要求采购。",
       "issue": 11,
       "url": "https://github.com/go-laoji/honk-proxy-server/issues/11",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "T07",
@@ -361,7 +361,7 @@
       ],
       "features": [],
       "scope": "独立headless/desktop流水线、嵌入相同web产物、文档/安装包/锁定依赖；端到端、故障注入、压测和升级回退。",
-      "acceptance": "80个适用P0验收证据，真实Linux eBPF和真实供应商必需；无桌面安装与18页一致；不把mock或骨架称为正式功能版本。",
+      "acceptance": "80个适用P0验收证据，真实Linux eBPF必需；供应商按用户授权的快代理文档契约加免费源实测，付费账号调用明确未验证，不要求采购；无桌面安装与18页一致；不把mock或骨架称为正式功能版本。",
       "issue": 22,
       "url": "https://github.com/go-laoji/honk-proxy-server/issues/22",
       "status": "pending"

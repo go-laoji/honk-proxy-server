@@ -101,6 +101,7 @@ export default function ProvidersPage({
   const [providers, setProviders] = useState<ProviderView[]>([]);
   const [detail, setDetail] = useState<ProviderDetail | null>(null);
   const [head, setHead] = useState(0);
+  const [loaded, setLoaded] = useState(false);
   const [editor, setEditor] = useState("");
   const [editingId, setEditingId] = useState("");
   const [task, setTask] = useState<ExtractionTask | null>(null);
@@ -126,6 +127,7 @@ export default function ProvidersPage({
     ]);
     if (!mounted.current || signal?.aborted) return;
     setProviders(items);
+    setLoaded(true);
     setHead(workspace.desired_revision);
     if (item) {
       setDetail(item);
@@ -246,6 +248,24 @@ export default function ProvidersPage({
       await load();
     }
   }
+  if (!loaded && !error)
+    return (
+      <div className="panel p-8 text-sm text-slate-500">
+        正在读取供应商配置…
+      </div>
+    );
+  if (!loaded)
+    return (
+      <div role="alert" className="panel p-5 text-sm text-red-700">
+        {error}
+        <button
+          className="btn ml-3"
+          onClick={() => void act("reload", () => load(undefined, true))}
+        >
+          重新读取服务
+        </button>
+      </div>
+    );
   const current = detail?.provider.configuration;
   return (
     <div className="space-y-6">

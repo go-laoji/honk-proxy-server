@@ -172,7 +172,7 @@ impl Store {
             }
             let mut rejected=result.rejected;
             let nodes=result.nodes.into_iter().filter(|node|{let valid=node.expires_at>now.saturating_add(config.min_remaining_secs as i64);if !valid {rejected+=1;} valid}).collect::<Vec<_>>();
-            let old:i64=tx.query_row("SELECT count(*) FROM provider_leases WHERE provider_id=?1 AND state='active' AND expires_at>?2",params![config.id,now],|r|r.get(0))?;
+            let old:i64=tx.query_row("SELECT count(DISTINCT json_extract(document,'$.upstream.protocol') || '|' || json_extract(document,'$.upstream.host') || '|' || json_extract(document,'$.upstream.port')) FROM provider_leases WHERE provider_id=?1 AND state='active' AND expires_at>?2",params![config.id,now],|r|r.get(0))?;
             if nodes.is_empty() || (config.mode==LeaseMode::ReplaceSnapshot && nodes.len()*100<(old as usize)*usize::from(config.minimum_snapshot_percent)) {
                 tx.execute("UPDATE provider_tasks SET state='failed',finished_at=?2,error_code='snapshot_or_empty_result_protection',rejected=?3 WHERE id=?1",params![id,now,rejected as i64])?;
                 let result=get_task(&tx,id)?;tx.commit()?;return Ok(result);
@@ -182,7 +182,7 @@ impl Store {
             let added=nodes.len();
             for mut node in nodes {
                 tx.execute("INSERT INTO provider_leases(batch_id,provider_id,fingerprint,document,received_at,expires_at,state) VALUES(?1,?2,?3,'{}',?4,?5,'active')",params![id,config.id,accepted.config_fingerprint,now,node.expires_at])?;
-                let lease_id=tx.last_insert_rowid();node.upstream.id=format!("lease-{lease_id}");
+                let lease_id=tx.last_insert_rowid();node.upstream.id=format!("lease:{lease_id}");
                 let document=serde_json::to_string(&node).map_err(|_|StorageError::Invalid)?;
                 tx.execute("UPDATE provider_leases SET document=?2 WHERE id=?1",params![lease_id,document])?;
             }
@@ -442,5 +442,30 @@ mod tests {
             "revoked"
         );
         restored.close().await.unwrap();
+    }
+    #[tokio::test]
+    async fn snapshot_protection_counts_unique_endpoints_instead_of_repeated_leases() {
+        let store = Store::open(None, DaemonConfig::default()).unwrap();
+        let mut c = config();
+        for key in ["a", "b", "c"] {
+            let task = next(&store, &c, key).await;
+            store
+                .finish_extraction(task.id, c.clone(), nodes(1), true)
+                .await
+                .unwrap();
+        }
+        assert_eq!(store.active_leases().await.unwrap().len(), 3);
+        c.mode = LeaseMode::ReplaceSnapshot;
+        c.full_snapshot = true;
+        c.minimum_snapshot_percent = 100;
+        let task = next(&store, &c, "snapshot").await;
+        let result = store
+            .finish_extraction(task.id, c, nodes(1), true)
+            .await
+            .unwrap();
+        assert_eq!(result.state, "succeeded");
+        assert_eq!(result.removed, 3);
+        assert_eq!(store.active_leases().await.unwrap().len(), 1);
+        store.close().await.unwrap();
     }
 }
