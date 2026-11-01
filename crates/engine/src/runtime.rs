@@ -80,6 +80,7 @@ pub(crate) struct Session {
     pub activity: Activity,
     pub cancel: CancellationToken,
     pub tracker: TaskTracker,
+    pub selection_context: hps_domain::SelectionQuery,
     entry: Arc<Entry>,
     _admission: Arc<Admission>,
 }
@@ -206,6 +207,12 @@ impl Engine {
     pub fn probe_plans(&self) -> Vec<crate::dial::ProbePlan> {
         self.dialer.probe_plans()
     }
+    pub fn selection(&self, query: &hps_domain::SelectionQuery) -> hps_domain::SelectionDecision {
+        self.dialer.selection(query)
+    }
+    pub fn group_last_choices(&self) -> std::collections::HashMap<String, String> {
+        self.dialer.group_last_choices()
+    }
     pub fn has_active_demand(&self) -> bool {
         self.dialer.demand.active()
     }
@@ -322,7 +329,7 @@ impl Engine {
         entry.tracker.spawn(async move {
             loop {
                 let accepted=tokio::select! { biased; _=cancel.cancelled()=>break, accepted=listener.accept()=>accepted };
-                let (tcp,_)=match accepted {
+                let (tcp,peer)=match accepted {
                     Ok(accepted)=>accepted,
                     Err(_)=>{*run.last_error.lock().unwrap()=Some("accept_failed".into());cancel.cancel();break;}
                 };
@@ -330,7 +337,7 @@ impl Engine {
                 let inbound=match run.capacity.acquire(run.config.max_connections) { Some(permit)=>permit,None=>{run.inbound_rejected.fetch_add(1,Ordering::Relaxed);continue;} };
                 run.accepted.fetch_add(1,Ordering::Relaxed);
                 let activity=Activity::new();
-                let session=Session { dialer:engine.dialer.clone(),limits:engine.limits.clone(),budget:Budget::new(engine.bandwidth.clone(),run.bandwidth.clone(),activity.clone()),activity,cancel:sessions.child_token(),tracker:run.tracker.clone(),entry:run.clone(),_admission:Arc::new(Admission { _global:global,_inbound:inbound }) };
+                let session=Session { dialer:engine.dialer.clone(),limits:engine.limits.clone(),budget:Budget::new(engine.bandwidth.clone(),run.bandwidth.clone(),activity.clone()),activity,cancel:sessions.child_token(),tracker:run.tracker.clone(),entry:run.clone(),selection_context:hps_domain::SelectionQuery {inbound:Some(run.config.id.clone()),source_ip:Some(peer.ip()),..Default::default()},_admission:Arc::new(Admission { _global:global,_inbound:inbound }) };
                 let acceptor=run.tls.clone(); let protocol=run.config.protocol; let child=session.clone();
                 session.spawn_io(async move {
                     let _=tcp.set_nodelay(true);
@@ -384,9 +391,16 @@ impl Engine {
     }
     pub fn ready(&self) -> bool {
         !self.cancel.is_cancelled()
-            && self.dialer.eligible_count() > 0
             && self.entries.values().any(|entry| {
                 entry.running.load(Ordering::Acquire)
+                    && self
+                        .dialer
+                        .selection(&hps_domain::SelectionQuery {
+                            inbound: Some(entry.config.id.clone()),
+                            ..Default::default()
+                        })
+                        .eligible
+                        > 0
                     && entry
                         .status()
                         .certificate

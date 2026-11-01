@@ -6,6 +6,7 @@ pub mod health;
 mod http_proxy;
 pub mod pool;
 pub mod runtime;
+mod selection;
 mod socks;
 pub mod target;
 pub mod tls;

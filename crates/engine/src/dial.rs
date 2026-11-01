@@ -5,11 +5,8 @@ use hps_domain::ProbePhase;
 use http::HeaderValue;
 use sha2::{Digest, Sha256};
 use std::{
-    sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    },
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    sync::{Arc, atomic::Ordering},
+    time::{Duration, SystemTime},
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt, BufReader},
@@ -63,7 +60,7 @@ pub struct Dialer {
     pub(crate) health: Arc<crate::health::HealthRegistry>,
     policy: std::sync::RwLock<crate::health::HealthPolicy>,
     sources: std::sync::RwLock<std::collections::HashMap<String, String>>,
-    cursor: AtomicUsize,
+    selector: crate::selection::Selector,
     timeout: Duration,
     min_lifetime: u64,
     max_header: usize,
@@ -116,21 +113,7 @@ impl ProbePlan {
         self.dialer.min_lifetime.max(self.upstream.minimum_lifetime)
     }
     pub fn remaining(&self) -> Option<Duration> {
-        let wall = self.upstream.config.expires_at_unix.map(|expiry| {
-            std::time::UNIX_EPOCH
-                .checked_add(Duration::from_secs(expiry))
-                .and_then(|date| date.duration_since(SystemTime::now()).ok())
-                .unwrap_or(Duration::ZERO)
-        });
-        match (wall, self.upstream.deadline) {
-            (Some(wall), Some(deadline)) => {
-                Some(wall.min(deadline.saturating_duration_since(std::time::Instant::now())))
-            }
-            (wall, None) => wall,
-            (None, Some(deadline)) => {
-                Some(deadline.saturating_duration_since(std::time::Instant::now()))
-            }
-        }
+        remaining(&self.upstream)
     }
     /// Bypasses selection/health and production demand, preserving prepared trust roots.
     pub async fn connect(
@@ -163,6 +146,23 @@ impl ProbePlan {
         .map_err(|e| progress.failure(e))
     }
 }
+fn remaining(upstream: &Upstream) -> Option<Duration> {
+    let wall = upstream.config.expires_at_unix.map(|expiry| {
+        std::time::UNIX_EPOCH
+            .checked_add(Duration::from_secs(expiry))
+            .and_then(|date| date.duration_since(SystemTime::now()).ok())
+            .unwrap_or(Duration::ZERO)
+    });
+    match (wall, upstream.deadline) {
+        (Some(wall), Some(deadline)) => {
+            Some(wall.min(deadline.saturating_duration_since(std::time::Instant::now())))
+        }
+        (wall, None) => wall,
+        (None, Some(deadline)) => {
+            Some(deadline.saturating_duration_since(std::time::Instant::now()))
+        }
+    }
+}
 pub struct Connected {
     pub io: BoxIo,
     pub upstream_id: String,
@@ -184,7 +184,7 @@ impl Dialer {
             health: Arc::new(crate::health::HealthRegistry::default()),
             policy: Default::default(),
             sources: std::sync::RwLock::new(std::collections::HashMap::new()),
-            cursor: AtomicUsize::new(0),
+            selector: crate::selection::Selector::new(config.selection.clone()),
             timeout: Duration::from_millis(config.limits.connect_timeout_ms),
             min_lifetime: config.limits.min_remaining_lifetime_secs,
             max_header: config.limits.max_header_bytes,
@@ -245,36 +245,79 @@ impl Dialer {
     pub fn set_sources(&self, sources: std::collections::HashMap<String, String>) {
         *self.sources.write().unwrap() = sources;
     }
-    fn eligible(&self, upstream: &Upstream) -> bool {
-        let config = &upstream.config;
-        let minimum = self.min_lifetime.max(upstream.minimum_lifetime);
-        if upstream
-            .source
-            .as_ref()
-            .is_some_and(|(id, fp)| self.sources.read().unwrap().get(id) != Some(fp))
-            || upstream.deadline.is_some_and(|deadline| {
-                deadline.saturating_duration_since(std::time::Instant::now())
-                    <= Duration::from_secs(minimum)
-            })
-        {
-            return false;
-        }
-        config.enabled
-            && config.expires_at_unix.is_none_or(|expiry| {
-                UNIX_EPOCH
-                    .checked_add(Duration::from_secs(expiry))
-                    .and_then(|expires| expires.duration_since(SystemTime::now()).ok())
-                    .is_some_and(|remaining| remaining > Duration::from_secs(minimum))
-            })
-    }
-
     pub fn eligible_count(&self) -> usize {
+        self.selection(&hps_domain::SelectionQuery::default())
+            .eligible
+    }
+    pub fn group_last_choices(&self) -> std::collections::HashMap<String, String> {
+        self.selector.last()
+    }
+    pub fn selection(&self, query: &hps_domain::SelectionQuery) -> hps_domain::SelectionDecision {
+        self.select(query, false).0
+    }
+    fn select(
+        &self,
+        query: &hps_domain::SelectionQuery,
+        commit: bool,
+    ) -> (hps_domain::SelectionDecision, Option<Arc<Upstream>>) {
         let dynamic = self.pool.snapshot();
-        self.upstreams
+        let family = query
+            .destination_host
+            .as_ref()
+            .and_then(|host| host.parse::<std::net::IpAddr>().ok())
+            .map(|ip| {
+                if ip.is_ipv4() {
+                    hps_domain::IpFamily::Ipv4
+                } else {
+                    hps_domain::IpFamily::Ipv6
+                }
+            });
+        let policy = self.policy.read().unwrap().clone();
+        let choices = self
+            .upstreams
             .iter()
             .chain(dynamic.iter())
-            .filter(|s| self.eligible(s) && self.health_usable(&s.identity, None))
-            .count()
+            .map(|upstream| {
+                let sampled = std::time::Instant::now();
+                let remaining = remaining(upstream);
+                let mut reasons = vec![];
+                if !upstream.config.enabled {
+                    reasons.push("disabled".into());
+                }
+                if upstream
+                    .source
+                    .as_ref()
+                    .is_some_and(|(id, fp)| self.sources.read().unwrap().get(id) != Some(fp))
+                {
+                    reasons.push("source_reconfigured".into());
+                }
+                let minimum = self.min_lifetime.max(upstream.minimum_lifetime);
+                if let Some(time) = remaining
+                    && time <= Duration::from_secs(minimum)
+                {
+                    reasons.push(
+                        if time.is_zero() {
+                            "expired"
+                        } else {
+                            "insufficient_lifetime"
+                        }
+                        .into(),
+                    );
+                }
+                if !self.health.usable(&upstream.identity, &policy, family) {
+                    reasons.push("health_unavailable".into());
+                }
+                crate::selection::Choice {
+                    upstream: upstream.clone(),
+                    reasons,
+                    remaining,
+                    minimum_lifetime: minimum,
+                    sampled,
+                    latency: self.health.latency(&upstream.identity, &policy, family),
+                }
+            })
+            .collect();
+        self.selector.decide(choices, query, commit)
     }
     /// Select exactly once. Neither failed handshakes nor business data are retried.
     pub async fn connect(
@@ -282,38 +325,25 @@ impl Dialer {
         target: &Target,
         http_forward: bool,
     ) -> Result<Connected, ProxyError> {
+        self.connect_context(target, http_forward, &hps_domain::SelectionQuery::default())
+            .await
+    }
+    pub async fn connect_context(
+        &self,
+        target: &Target,
+        http_forward: bool,
+        context: &hps_domain::SelectionQuery,
+    ) -> Result<Connected, ProxyError> {
         let demand = self.demand.begin();
-        let dynamic = self.pool.snapshot();
-        let total = self.upstreams.len() + dynamic.len();
-        if total == 0 {
-            return Err(ProxyError::NoUpstream);
-        }
-        let start = self.cursor.fetch_add(1, Ordering::Relaxed) % total;
-        let upstream = (0..total)
-            .map(|n| {
-                let index = (start + n) % total;
-                if index < self.upstreams.len() {
-                    &self.upstreams[index]
-                } else {
-                    &dynamic[index - self.upstreams.len()]
-                }
-            })
-            .find(|s| {
-                self.eligible(s)
-                    && self.health_usable(
-                        &s.identity,
-                        match target.host.parse::<std::net::IpAddr>() {
-                            Ok(std::net::IpAddr::V4(_)) => Some(hps_domain::IpFamily::Ipv4),
-                            Ok(std::net::IpAddr::V6(_)) => Some(hps_domain::IpFamily::Ipv6),
-                            Err(_) => None,
-                        },
-                    )
-            })
-            .ok_or(ProxyError::NoUpstream)?;
+        let mut query = context.clone();
+        query.destination_host = Some(target.host.clone());
+        query.destination_port = Some(target.port);
+        let (_, upstream) = self.select(&query, true);
+        let upstream = upstream.ok_or(ProxyError::NoUpstream)?;
         let progress = Progress::new();
         let outcome = tokio::time::timeout(
             self.timeout,
-            self.connect_selected(upstream, target, http_forward, &progress),
+            self.connect_selected(&upstream, target, http_forward, &progress),
         )
         .await
         .unwrap_or(Err(ProxyError::Timeout));
