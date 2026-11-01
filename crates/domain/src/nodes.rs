@@ -103,10 +103,28 @@ pub struct NodesOverview {
     pub inventory_truncated: bool,
     pub providers: Vec<String>,
     pub groups: Vec<String>,
+    pub sources: Vec<ProviderNodeSummary>,
     pub filtered_total: usize,
     pub offset: u32,
     pub next_offset: Option<u32>,
     pub nodes: Vec<NodeView>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderNodeSummary {
+    pub id: String,
+    pub enabled: bool,
+    pub refill_enabled: bool,
+    pub minimum: u32,
+    pub target: u32,
+    pub maximum: u32,
+    pub inventory: usize,
+    pub eligible: usize,
+    pub near_expiry: usize,
+    pub expired: usize,
+    pub latest_task_id: Option<i64>,
+    pub latest_task_state: Option<String>,
+    pub latest_error_code: Option<String>,
+    pub latest_task_at: Option<i64>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

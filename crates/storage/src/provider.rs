@@ -196,6 +196,18 @@ impl Store {
     ) -> Result<Vec<ExtractionTask>, StorageError> {
         self.call(move|c|Ok(c.prepare(&format!("SELECT {TASK_COLUMNS} FROM provider_tasks WHERE (?1 IS NULL OR provider_id=?1) ORDER BY id DESC LIMIT 50"))?.query_map([provider_id],task)?.collect::<Result<Vec<_>,_>>()?)).await
     }
+    pub async fn latest_provider_tasks(
+        &self,
+        ids: Vec<String>,
+    ) -> Result<Vec<ExtractionTask>, StorageError> {
+        if ids.len() > 64 {
+            return Err(StorageError::Invalid);
+        }
+        self.call(move|c|{
+            let ids=serde_json::to_string(&ids).map_err(|_|StorageError::Invalid)?;
+            Ok(c.prepare(&format!("SELECT {TASK_COLUMNS} FROM provider_tasks WHERE id IN (SELECT max(id) FROM provider_tasks WHERE provider_id IN (SELECT value FROM json_each(?1)) GROUP BY provider_id) ORDER BY provider_id"))?.query_map([ids],task)?.collect::<Result<Vec<_>,_>>()?)
+        }).await
+    }
     pub async fn fail_extraction(&self, id: i64, error: FetchError) -> Result<(), StorageError> {
         self.call(move|c|{
             let tx=c.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;let now=unix_now();

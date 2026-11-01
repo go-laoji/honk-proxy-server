@@ -24,9 +24,20 @@ impl Supervisor {
             .spawn(async move {
                 let current = service.current();
                 let leases = service.store.node_inventory_leases().await?;
+                let tasks = service
+                    .store
+                    .latest_provider_tasks(
+                        current
+                            .config
+                            .providers
+                            .iter()
+                            .map(|p| p.id.clone())
+                            .collect(),
+                    )
+                    .await?;
                 tokio::task::spawn_blocking(move || {
                     let _permit = permit;
-                    inventory(&current, leases, query)
+                    inventory(&current, leases, query, tasks)
                 })
                 .await
                 .map_err(|_| ApplicationError::Worker)?
@@ -191,6 +202,7 @@ fn inventory(
     current: &RuntimeSnapshot,
     mut leases: Vec<NodeInventoryLease>,
     q: NodeQuery,
+    tasks: Vec<hps_domain::ExtractionTask>,
 ) -> Result<NodesOverview, ApplicationError> {
     let truncated = leases.len() > 200000;
     leases.truncate(200000);
@@ -218,6 +230,30 @@ fn inventory(
         .chain(leases.iter().map(|l| (&l.upstream, Some(l))))
         .collect::<Vec<_>>();
     let mut summary = NodeSummary::default();
+    let mut source_summaries = current
+        .config
+        .providers
+        .iter()
+        .map(|p| {
+            let task = tasks.iter().find(|t| t.provider_id == p.id);
+            hps_domain::ProviderNodeSummary {
+                id: p.id.clone(),
+                enabled: p.enabled,
+                refill_enabled: p.refill.enabled,
+                minimum: p.refill.min_nodes,
+                target: p.refill.target_nodes,
+                maximum: p.refill.max_nodes,
+                inventory: 0,
+                eligible: 0,
+                near_expiry: 0,
+                expired: 0,
+                latest_task_id: task.map(|t| t.id),
+                latest_task_state: task.map(|t| t.state.clone()),
+                latest_error_code: task.and_then(|t| t.error_code.clone()),
+                latest_task_at: task.map(|t| t.started_at),
+            }
+        })
+        .collect::<Vec<_>>();
     let needle = q.search.as_ref().map(|s| s.to_lowercase());
     let requested_group = q.group.as_ref().and_then(|id| {
         current
@@ -239,6 +275,16 @@ fn inventory(
         summary.expired += usize::from(node.remaining_secs == Some(0));
         summary.restricted += usize::from(node.operation.state != NodeOperationState::Enabled);
         summary.source_unavailable += usize::from(node.lease_state.starts_with("source_"));
+        if let Some(source) = source_summaries
+            .iter_mut()
+            .find(|s| node.provider_id.as_ref() == Some(&s.id))
+        {
+            source.inventory += 1;
+            source.eligible += usize::from(node.eligible);
+            source.near_expiry +=
+                usize::from(node.remaining_secs.is_some_and(|n| n > 0 && n <= 60));
+            source.expired += usize::from(node.remaining_secs == Some(0));
+        }
         if q.id.as_ref().is_some_and(|id| *id != node.id)
             || needle.as_ref().is_some_and(|s| {
                 !node.id.to_lowercase().contains(s) && !node.host.to_lowercase().contains(s)
@@ -328,6 +374,7 @@ fn inventory(
             .iter()
             .map(|g| g.id.clone())
             .collect(),
+        sources: source_summaries,
         filtered_total: total,
         offset: q.offset,
         next_offset: (offset + limit < total).then_some((offset + limit) as u32),
@@ -604,6 +651,12 @@ mod tests {
         assert_eq!(all.summary.inventory, 5);
         assert_eq!(all.summary.eligible, 3);
         assert_eq!(all.summary.expired, 1);
+        assert_eq!(all.sources.len(), 2);
+        assert!(
+            all.sources
+                .iter()
+                .all(|s| s.latest_task_state.as_deref() == Some("succeeded") && s.eligible == 1)
+        );
         let json = serde_json::to_string(&all).unwrap();
         assert!(!json.contains("private-credential"));
         assert!(!json.contains("do-not-return"));
