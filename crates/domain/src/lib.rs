@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 mod selection;
 pub use selection::*;
+mod routing;
+pub use routing::*;
 
 pub const API_VERSION: &str = "v1";
 

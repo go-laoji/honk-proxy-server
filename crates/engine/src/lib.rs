@@ -5,6 +5,7 @@ pub mod dial;
 pub mod health;
 mod http_proxy;
 pub mod pool;
+pub mod routing;
 pub mod runtime;
 mod selection;
 mod socks;
@@ -16,6 +17,12 @@ pub use hps_net::{BoxIo, ProxyIo};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProxyError {
+    #[error("routing policy rejected this connection")]
+    Rejected,
+    #[error("routing policy or references are invalid")]
+    RuleConfiguration,
+    #[error("routing needs a data-plane capability not available on this target")]
+    UnsupportedRule,
     #[error("no eligible upstream; direct fallback is disabled")]
     NoUpstream,
     #[error("invalid destination")]

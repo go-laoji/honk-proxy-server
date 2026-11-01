@@ -857,6 +857,7 @@ version = "0.1.0"
 dependencies = [
  "hps-domain",
  "hps-net",
+ "ipnet",
  "serde",
  "serde_json",
  "thiserror",
@@ -944,6 +945,7 @@ dependencies = [
  "httparse",
  "hyper",
  "hyper-util",
+ "ipnet",
  "libc",
  "rcgen",
  "reqwest",
