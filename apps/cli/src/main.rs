@@ -71,6 +71,10 @@ enum ConfigCommand {
         path: PathBuf,
         #[arg(long)]
         expected_revision: Option<i64>,
+        #[arg(long)]
+        draft_version: Option<i64>,
+        #[arg(long, requires = "draft_version")]
+        use_draft_credentials: bool,
     },
     SaveDraft {
         path: PathBuf,
@@ -78,6 +82,8 @@ enum ConfigCommand {
         expected_revision: i64,
         #[arg(long)]
         draft_version: i64,
+        #[arg(long)]
+        use_draft_credentials: bool,
     },
     Import {
         path: PathBuf,
@@ -85,6 +91,10 @@ enum ConfigCommand {
         expected_revision: i64,
         #[arg(long, default_value = "CLI import")]
         note: String,
+        #[arg(long)]
+        draft_version: Option<i64>,
+        #[arg(long, requires = "draft_version")]
+        use_draft_credentials: bool,
     },
     Activate {
         revision: i64,
@@ -236,6 +246,8 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
             ConfigCommand::Validate {
                 path,
                 expected_revision,
+                draft_version,
+                use_draft_credentials,
             } => {
                 let expected = match expected_revision {
                     Some(expected) => *expected,
@@ -249,7 +261,13 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
                 };
                 serde_json::to_value(
                     client
-                        .validate_config(&read_config_input(path, expected, None, String::new())?)
+                        .validate_config(&read_config_input(
+                            path,
+                            expected,
+                            *draft_version,
+                            String::new(),
+                            *use_draft_credentials,
+                        )?)
                         .await
                         .map_err(client_error)?,
                 )
@@ -258,6 +276,7 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
                 path,
                 expected_revision,
                 draft_version,
+                use_draft_credentials,
             } => serde_json::to_value(
                 client
                     .save_draft(&read_config_input(
@@ -265,6 +284,7 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
                         *expected_revision,
                         Some(*draft_version),
                         String::new(),
+                        *use_draft_credentials,
                     )?)
                     .await
                     .map_err(client_error)?,
@@ -273,13 +293,16 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
                 path,
                 expected_revision,
                 note,
+                draft_version,
+                use_draft_credentials,
             } => serde_json::to_value(
                 client
                     .create_revision(&read_config_input(
                         path,
                         *expected_revision,
-                        None,
+                        *draft_version,
                         note.clone(),
+                        *use_draft_credentials,
                     )?)
                     .await
                     .map_err(client_error)?,
@@ -349,6 +372,7 @@ fn read_config_input(
     expected_revision: i64,
     expected_draft_version: Option<i64>,
     note: String,
+    use_draft_credentials: bool,
 ) -> Result<hps_domain::ConfigInput, (u8, String)> {
     let body = std::fs::read_to_string(path).map_err(|error| (2, error.to_string()))?;
     if body.len() > 2 * 1024 * 1024 {
@@ -359,7 +383,7 @@ fn read_config_input(
         expected_revision,
         expected_draft_version,
         note,
-        use_draft_credentials: false,
+        use_draft_credentials,
     })
 }
 
