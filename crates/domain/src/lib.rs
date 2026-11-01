@@ -7,6 +7,8 @@ mod nodes;
 pub use nodes::*;
 mod connections;
 pub use connections::*;
+mod tasks;
+pub use tasks::*;
 
 pub const API_VERSION: &str = "v1";
 

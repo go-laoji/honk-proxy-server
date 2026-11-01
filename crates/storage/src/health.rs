@@ -154,6 +154,7 @@ impl Store {
             tx.execute("DELETE FROM health_tasks WHERE id NOT IN (SELECT task_id FROM health_task_runs JOIN health_runs ON run_id=health_runs.id WHERE state IN ('queued','probing')) AND (id NOT IN (SELECT id FROM health_tasks ORDER BY id DESC LIMIT 5000) OR id IN (SELECT task_id FROM health_task_runs WHERE run_id NOT IN (SELECT id FROM health_runs ORDER BY id DESC LIMIT 100000)))",[])?;
             tx.execute("DELETE FROM health_runs WHERE state NOT IN ('queued','probing') AND id NOT IN (SELECT run_id FROM health_task_runs)",[])?;
             tx.execute("DELETE FROM health_state WHERE checked_at<?1 OR rowid IN (SELECT rowid FROM health_state ORDER BY checked_at DESC LIMIT -1 OFFSET 400000)",[now-30*86400])?;
+            super::tasks::project_health(&tx,task_id)?;
             let result=task(&tx,task_id)?;tx.commit()?;Ok(result)
         }).await
     }
