@@ -2,6 +2,9 @@
 #![no_std]
 mod dns;
 pub use dns::*;
+mod transparent;
+pub use transparent::*;
+pub mod packet;
 pub const ABI_VERSION: u32 = 1;
 pub const FLAG_DENY_TEST_PORT: u32 = 1;
 pub const OBSERVATION_CAPACITY: u32 = 128;
