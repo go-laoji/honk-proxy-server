@@ -80,7 +80,26 @@ fn lease(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredLease> {
         state: row.get(6)?,
     })
 }
+fn prune_history(c: &Connection, now: i64) -> Result<(), StorageError> {
+    c.execute("DELETE FROM provider_leases WHERE expires_at<?1 OR id IN (SELECT id FROM provider_leases WHERE state!='active' OR expires_at<=?2 ORDER BY id DESC LIMIT -1 OFFSET 100000)",params![now-30*86400,now])?;
+    c.execute(
+        "DELETE FROM provider_batches WHERE task_id NOT IN (SELECT batch_id FROM provider_leases)",
+        [],
+    )?;
+    c.execute("DELETE FROM provider_tasks WHERE id NOT IN (SELECT task_id FROM provider_batches) AND state NOT IN ('accepted','requesting') AND id NOT IN (SELECT id FROM provider_tasks ORDER BY id DESC LIMIT 10000)",[])?;
+    Ok(())
+}
 impl Store {
+    pub async fn observe_lease_clock(&self, now: i64) -> Result<(), StorageError> {
+        self.call(move |c| {
+            c.execute(
+                "UPDATE provider_clock SET observed_at=max(observed_at,?1) WHERE singleton=1",
+                [now],
+            )?;
+            Ok(())
+        })
+        .await
+    }
     /// Returns (task, newly accepted). Same ID or any in-flight request is merged.
     pub async fn begin_extraction(
         &self,
@@ -101,6 +120,7 @@ impl Store {
             let previous=tx.query_row(&format!("SELECT {TASK_COLUMNS} FROM provider_tasks WHERE provider_id=?1 AND (request_id=?2 OR state IN ('accepted','requesting')) ORDER BY CASE WHEN request_id=?2 THEN 0 ELSE 1 END,id DESC LIMIT 1"),params![config.id,request_id],task).optional()?;
             if let Some(previous)=previous {return Ok((previous,false));}
             let now=unix_now();
+            prune_history(&tx,now)?;
             let last:Option<i64>=tx.query_row("SELECT max(started_at) FROM provider_tasks WHERE provider_id=?1",[&config.id],|r|r.get(0))?;
             if last.is_some_and(|last|now.saturating_sub(last)<config.min_interval_secs as i64) {return Err(StorageError::ProviderRateLimited);}
             let size:i64=tx.query_row("SELECT count(*) FROM provider_leases WHERE expires_at>?1 AND state='active'",[now],|r|r.get(0))?;
@@ -168,10 +188,8 @@ impl Store {
             }
             tx.execute("UPDATE provider_tasks SET state='succeeded',finished_at=?2,added=?3,rejected=?4,removed=?5,quota=?6 WHERE id=?1",params![id,now,added as i64,rejected as i64,removed as i64,result.quota.map(|n|n.min(i64::MAX as u64) as i64)])?;
             tx.execute("UPDATE provider_clock SET observed_at=max(observed_at,?1) WHERE singleton=1",[now])?;
-            // Keep bounded detailed history; active batches and in-flight/unknown outcomes remain pinned.
-            tx.execute("DELETE FROM provider_leases WHERE expires_at<?1",[now-30*86400])?;
-            tx.execute("DELETE FROM provider_batches WHERE task_id NOT IN (SELECT batch_id FROM provider_leases)",[])?;
-            tx.execute("DELETE FROM provider_tasks WHERE id NOT IN (SELECT task_id FROM provider_batches) AND state NOT IN ('accepted','requesting') AND id NOT IN (SELECT id FROM provider_tasks ORDER BY id DESC LIMIT 10000)",[])?;
+            // Completed IDs are retained within the bounded history window; active batches remain pinned.
+            prune_history(&tx,now)?;
             let result=get_task(&tx,id)?;tx.commit()?;Ok(result)
         }).await
     }
@@ -390,6 +408,39 @@ mod tests {
             .unwrap();
         assert!(!new);
         assert_eq!(dedup.id, task.id);
+        restored.close().await.unwrap();
+    }
+    #[tokio::test]
+    async fn clean_restart_preserves_deadlines_but_unclean_restart_retires_old_leases() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = config();
+        let store = Store::open(Some(dir.path()), DaemonConfig::default()).unwrap();
+        let task = next(&store, &c, "clean").await;
+        store
+            .finish_extraction(task.id, c.clone(), nodes(1), true)
+            .await
+            .unwrap();
+        let expiry = store.active_leases().await.unwrap()[0].candidate.expires_at;
+        store.close().await.unwrap();
+        let restored = Store::open(Some(dir.path()), DaemonConfig::default()).unwrap();
+        assert_eq!(
+            restored.active_leases().await.unwrap()[0]
+                .candidate
+                .expires_at,
+            expiry
+        );
+        restored.close().await.unwrap();
+        let fault = Connection::open(dir.path().join("hps.sqlite3")).unwrap();
+        fault
+            .execute("UPDATE provider_clock SET clean_shutdown=0", [])
+            .unwrap();
+        drop(fault);
+        let restored = Store::open(Some(dir.path()), DaemonConfig::default()).unwrap();
+        assert!(restored.active_leases().await.unwrap().is_empty());
+        assert_eq!(
+            restored.provider_leases(None, None, 10).await.unwrap()[0].state,
+            "revoked"
+        );
         restored.close().await.unwrap();
     }
 }

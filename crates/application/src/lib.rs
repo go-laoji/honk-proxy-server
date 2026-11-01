@@ -557,6 +557,15 @@ impl Supervisor {
         for engine in retired {
             engine.shutdown().await;
         }
+        self.store
+            .observe_lease_clock(
+                self.current()
+                    .engine
+                    .dynamic_pool()
+                    .logical_now()
+                    .min(i64::MAX as u64) as i64,
+            )
+            .await?;
         self.store.close().await?;
         Ok(())
     }

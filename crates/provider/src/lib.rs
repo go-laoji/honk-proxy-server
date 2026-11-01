@@ -156,8 +156,9 @@ impl ProviderClient {
                     uuid::Uuid::new_v4().as_bytes()[..8]
                         .try_into()
                         .expect("UUID bytes"),
-                ) >> 1;
-                params.insert("nonce".into(), nonce.max(1).to_string());
+                ) % 100_000_000
+                    + 1;
+                params.insert("nonce".into(), nonce.to_string());
                 params.remove("signature");
                 let signature = sign(method, url.path(), &params, secret_key);
                 params.insert("signature".into(), signature);
@@ -324,6 +325,7 @@ fn kdl_success(value: &Value) -> Result<(), FetchError> {
         Some(3) => Err(FetchError::known("empty_result")),
         Some(-6) => Err(FetchError::known("whitelist_rejected")),
         Some(-51) => Err(FetchError::known("vendor_source_limit")),
+        Some(-4) => Err(FetchError::unknown("vendor_extraction_failure")),
         Some(-15 | -13 | -12 | -11 | -16 | -14 | -2) => Err(FetchError::known("order_unavailable")),
         Some(-100..=-1) => Err(FetchError::known("vendor_auth_or_parameters")),
         _ => Err(FetchError::unknown("invalid_vendor_envelope")),

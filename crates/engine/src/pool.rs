@@ -50,6 +50,9 @@ impl LeaseClock {
     }
 }
 impl DynamicPool {
+    pub fn logical_now(&self) -> u64 {
+        self.clock.lock().unwrap().now()
+    }
     pub(crate) fn snapshot(&self) -> Arc<Vec<Arc<Upstream>>> {
         self.nodes.read().unwrap().clone()
     }

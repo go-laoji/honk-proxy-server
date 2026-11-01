@@ -325,6 +325,7 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
                 let key = request_id
                     .clone()
                     .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+                eprintln!("extraction request_id={key}; reuse this ID if acknowledgment is lost");
                 let mut task = client
                     .extract_provider(id, key)
                     .await
