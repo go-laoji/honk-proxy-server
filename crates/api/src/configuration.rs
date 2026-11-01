@@ -86,8 +86,11 @@ async fn rollback(
 async fn revision(
     State(state): State<Arc<AppState>>,
     Path(revision): Path<i64>,
+    Query(query): Query<super::tasks::EpochQuery>,
 ) -> ApiResult<ConfigExport> {
-    let toml = application(&state)?
+    let service = application(&state)?;
+    query.check(service)?;
+    let toml = service
         .export_revision(revision)
         .await
         .map_err(application_error)?;

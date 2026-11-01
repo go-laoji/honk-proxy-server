@@ -88,6 +88,8 @@ def main():
 
         try:
             daemon, endpoint, epoch = start()
+            cli("task", "submit-config", candidate, "--expected-revision", 1, "--expected-epoch", str(uuid.uuid4()), "--request-id", "stale-submit", "--prepare", expected_code=7)
+            assert cli("task", "list")["records"] == []
             accepted = cli("task", "submit-config", candidate, "--expected-revision", 1, "--request-id", "cli-prepare", "--prepare")
             task = cli("task", "wait", accepted["id"], "--expected-epoch", epoch, "--wait-secs", 5)
             assert task["state"] == "completed" and task["result_ref"] == "config:2"

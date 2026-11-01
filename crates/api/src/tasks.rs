@@ -48,8 +48,27 @@ async fn submit(
 }
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
-struct EpochQuery {
-    expected_epoch: Option<String>,
+pub(crate) struct EpochQuery {
+    pub(crate) expected_epoch: Option<String>,
+}
+impl EpochQuery {
+    pub(crate) fn check(&self, service: &Supervisor) -> Result<(), (StatusCode, Json<ApiError>)> {
+        if self
+            .expected_epoch
+            .as_deref()
+            .is_some_and(|epoch| !hps_domain::valid_connection_epoch(epoch))
+        {
+            return Err(application_error(ApplicationError::TaskInput));
+        }
+        if self
+            .expected_epoch
+            .as_deref()
+            .is_some_and(|epoch| epoch != service.event_epoch())
+        {
+            return Err(application_error(ApplicationError::TaskEpoch));
+        }
+        Ok(())
+    }
 }
 async fn detail(
     State(state): State<Arc<AppState>>,

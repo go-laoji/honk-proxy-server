@@ -61,9 +61,25 @@ async fn public_preparation_survives_lost_wait_and_submission_is_idempotent_with
             .contains("private-note-value")
     );
     let submission = TaskSubmission {
+        expected_epoch: service.event_epoch().to_owned(),
         request_id: "recoverable-prepare".into(),
         operation: TaskOperation::ConfigurationPrepare(input(&service.current().base_config)),
     };
+    let mut stale = submission.clone();
+    stale.expected_epoch = uuid::Uuid::new_v4().to_string();
+    assert!(matches!(
+        service.submit_task(stale).await,
+        Err(ApplicationError::TaskEpoch)
+    ));
+    assert_eq!(
+        service
+            .tasks(TaskQuery::default())
+            .await
+            .unwrap()
+            .records
+            .len(),
+        1
+    );
     let one = service.submit_task(submission.clone()).await.unwrap();
     let two = service.submit_task(submission.clone()).await.unwrap();
     assert_eq!(one.id, two.id);
@@ -83,6 +99,7 @@ async fn public_preparation_survives_lost_wait_and_submission_is_idempotent_with
     assert!(matches!(
         service
             .submit_task(TaskSubmission {
+                expected_epoch: service.event_epoch().to_owned(),
                 request_id: submission.request_id.clone(),
                 operation: TaskOperation::ConfigurationValidate(input(
                     &service.current().base_config
@@ -183,6 +200,7 @@ async fn blocking_preflight_keeps_capacity_lock_and_shutdown_ownership_after_cal
     assert!(matches!(
         service
             .submit_task(TaskSubmission {
+                expected_epoch: service.event_epoch().to_owned(),
                 request_id: "full".into(),
                 operation: TaskOperation::ConfigurationPrepare(input(
                     &service.current().base_config
@@ -215,6 +233,7 @@ async fn blocking_preflight_keeps_capacity_lock_and_shutdown_ownership_after_cal
     assert!(matches!(
         service
             .submit_task(TaskSubmission {
+                expected_epoch: service.event_epoch().to_owned(),
                 request_id: "after-close".into(),
                 operation: TaskOperation::ConfigurationPrepare(input(
                     &service.current().base_config

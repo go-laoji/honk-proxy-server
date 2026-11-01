@@ -31,6 +31,8 @@ pub(super) enum TaskCommand {
         #[arg(long,value_parser=clap::value_parser!(i64).range(1..))]
         expected_revision: i64,
         #[arg(long)]
+        expected_epoch: Option<String>,
+        #[arg(long)]
         prepare: bool,
     },
 }
@@ -157,8 +159,18 @@ pub(super) async fn run_task(client: &HpsClient, command: &TaskCommand) -> Resul
             path,
             request_id,
             expected_revision,
+            expected_epoch,
             prepare,
         } => {
+            let epoch = match expected_epoch {
+                Some(epoch) => {
+                    if !hps_domain::valid_connection_epoch(epoch) {
+                        return Err((2, "invalid expected epoch".into()));
+                    }
+                    epoch.clone()
+                }
+                None => client.status().await.map_err(client_error)?.instance_id,
+            };
             let config = hps_domain::ConfigInput {
                 toml: read_policy_file(path)?,
                 expected_revision: *expected_revision,
@@ -174,6 +186,7 @@ pub(super) async fn run_task(client: &HpsClient, command: &TaskCommand) -> Resul
             value(
                 client
                     .submit_task(&TaskSubmission {
+                        expected_epoch: epoch,
                         request_id: request_id.clone(),
                         operation: if *prepare {
                             TaskOperation::ConfigurationPrepare(config)

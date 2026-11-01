@@ -58,6 +58,7 @@ pub struct TasksOverview {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TaskSubmission {
+    pub expected_epoch: String,
     pub request_id: String,
     pub operation: TaskOperation,
 }

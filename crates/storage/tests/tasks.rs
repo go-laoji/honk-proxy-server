@@ -414,12 +414,22 @@ async fn task_event_migration_is_reversible_without_dropping_source_facts() {
             .unwrap(),
         1
     );
+    db.execute("INSERT INTO health_tasks(request_id,trigger,created_at) VALUES ('old-health','manual',100)", []).unwrap();
+    db.execute("INSERT INTO provider_tasks(provider_id,request_id,fingerprint,state,requested_count,started_at,finished_at) VALUES ('source','new-provider',?1,'succeeded',1,200,201)", ["a".repeat(64)]).unwrap();
     db.execute_batch(include_str!("../migrations/0008_tasks_events.up.sql"))
         .unwrap();
     assert_eq!(
         db.query_row("SELECT count(*) FROM task_records", [], |r| r
             .get::<_, u32>(0))
             .unwrap(),
-        0
+        2
     );
+    let sources = db
+        .prepare("SELECT source_ref FROM task_records ORDER BY id")
+        .unwrap()
+        .query_map([], |row| row.get::<_, String>(0))
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert_eq!(sources, ["health:1", "provider:1"]);
 }

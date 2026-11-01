@@ -36,8 +36,8 @@ async fn new_fixture() -> Fixture {
         server,
     }
 }
-fn submission() -> TaskSubmission {
-    TaskSubmission {request_id:"http-prepare-one".into(),operation:TaskOperation::ConfigurationPrepare(ConfigInput {
+fn submission(epoch: &str) -> TaskSubmission {
+    TaskSubmission {expected_epoch:epoch.into(),request_id:"http-prepare-one".into(),operation:TaskOperation::ConfigurationPrepare(ConfigInput {
         toml:"[[proxy.upstreams]]\nid='private-test'\nprotocol='http'\nhost='127.0.0.1'\nport=9\n[proxy.upstreams.credentials]\nusername='fixture-user'\npassword='fixture-credential'\n".into(),
         expected_revision:1,expected_draft_version:None,note:"private-test-note".into(),use_draft_credentials:false,
     })}
@@ -109,7 +109,60 @@ async fn real_http_tasks_sse_reconnect_and_capacity_release_preserve_actual_fact
         .await
         .unwrap();
     assert_eq!(initial.epoch, status.instance_id);
-    let input = submission();
+    for path in ["/api/v1/config/revisions/1", "/api/v1/health/tasks/1"] {
+        assert_eq!(
+            client
+                .get(url(&format!(
+                    "{path}?expected_epoch={}",
+                    uuid::Uuid::new_v4()
+                )))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::CONFLICT
+        );
+        assert_eq!(
+            client
+                .get(url(&format!("{path}?expected_epoch=bad")))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
+    }
+    assert_eq!(
+        client
+            .get(url(&format!(
+                "/api/v1/config/revisions/1?expected_epoch={}",
+                initial.epoch
+            )))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+    let input = submission(&initial.epoch);
+    let mut stale = input.clone();
+    stale.expected_epoch = uuid::Uuid::new_v4().to_string();
+    let rejected = client
+        .post(url("/api/v1/tasks"))
+        .json(&stale)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(rejected.status(), StatusCode::CONFLICT);
+    assert!(
+        fixture
+            .service
+            .tasks(TaskQuery::default())
+            .await
+            .unwrap()
+            .records
+            .is_empty()
+    );
     let response = client
         .post(url("/api/v1/tasks"))
         .json(&input)
@@ -451,7 +504,10 @@ async fn shared_rust_client_stream_outlives_normal_request_timeout_and_uses_comp
         subscription.next().await.unwrap(),
         Some(hps_domain::EventFrame::Checkpoint(_))
     ));
-    let task = client.submit_task(&submission()).await.unwrap();
+    let task = client
+        .submit_task(&submission(fixture.service.event_epoch()))
+        .await
+        .unwrap();
     let frame = tokio::time::timeout(Duration::from_secs(4), subscription.next())
         .await
         .unwrap()

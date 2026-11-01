@@ -100,9 +100,20 @@ fn supported_api(path: &str) -> bool {
         || supported_rules_get(path)
         || supported_dns_get(path)
         || supported_provider_get(path)
-        || path
-            .strip_prefix("api/v1/config/revisions/")
-            .is_some_and(|id| id.parse::<i64>().is_ok_and(|id| id > 0))
+        || supported_epoch_detail(path, "api/v1/config/revisions/")
+}
+fn supported_epoch_detail(path: &str, prefix: &str) -> bool {
+    let (base, query) = path
+        .split_once('?')
+        .map_or((path, None), |(base, q)| (base, Some(q)));
+    base.strip_prefix(prefix)
+        .is_some_and(|id| id.parse::<i64>().is_ok_and(|id| id > 0))
+        && query.is_none_or(|q| {
+            let pairs = url::form_urlencoded::parse(q.as_bytes()).collect::<Vec<_>>();
+            pairs.len() == 1
+                && pairs[0].0 == "expected_epoch"
+                && hps_domain::valid_connection_epoch(&pairs[0].1)
+        })
 }
 fn supported_connections_get(path: &str) -> bool {
     let (base, query) = path
@@ -267,7 +278,7 @@ fn supported_health_get(path: &str) -> bool {
         .split_once('?')
         .map_or((path, None), |(base, q)| (base, Some(q)));
     if let Some(id) = base.strip_prefix("api/v1/health/tasks/") {
-        return query.is_none() && id.parse::<i64>().is_ok_and(|id| id > 0);
+        return !id.is_empty() && supported_epoch_detail(path, "api/v1/health/tasks/");
     }
     if base != "api/v1/health" {
         return false;
@@ -560,6 +571,15 @@ mod tests {
         assert!(!supported_action("api/v1/groups/unknown"));
         assert!(supported_api("api/v1/health?after=lease%3A12&limit=50"));
         assert!(supported_api("api/v1/health/tasks/12"));
+        for prefix in ["api/v1/health/tasks/", "api/v1/config/revisions/"] {
+            let epoch = "12345678-1234-4321-8234-123456789abc";
+            assert!(supported_api(&format!("{prefix}12?expected_epoch={epoch}")));
+            assert!(!supported_api(&format!("{prefix}12?expected_epoch=bad")));
+            assert!(!supported_api(&format!(
+                "{prefix}12?expected_epoch={epoch}&expected_epoch={epoch}"
+            )));
+            assert!(!supported_api(&format!("{prefix}12?url=http://external")));
+        }
         assert!(supported_action("api/v1/health/probe"));
         assert!(supported_action("api/v1/health/save"));
         assert!(supported_api("api/v1/dns?limit=50"));

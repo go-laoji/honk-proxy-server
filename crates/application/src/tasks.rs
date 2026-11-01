@@ -235,6 +235,12 @@ impl Supervisor {
         self: &Arc<Self>,
         input: TaskSubmission,
     ) -> Result<TaskInfo, ApplicationError> {
+        if !hps_domain::valid_connection_epoch(&input.expected_epoch) {
+            return Err(ApplicationError::TaskInput);
+        }
+        if input.expected_epoch != self.store.epoch {
+            return Err(ApplicationError::TaskEpoch);
+        }
         match input.operation {
             TaskOperation::ConfigurationValidate(config) => {
                 let input = work_spec(
