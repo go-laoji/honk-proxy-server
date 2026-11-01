@@ -74,6 +74,12 @@ fn reversible_empty_schema_and_newer_schema_rejection() {
         .execute_batch(include_str!("../migrations/0001_configuration.up.sql"))
         .unwrap();
     connection
+        .execute_batch(include_str!("../migrations/0002_known_good.up.sql"))
+        .unwrap();
+    connection
+        .execute_batch(include_str!("../migrations/0002_known_good.down.sql"))
+        .unwrap();
+    connection
         .execute_batch(include_str!("../migrations/0001_configuration.down.sql"))
         .unwrap();
     let directory = tempfile::tempdir().unwrap();

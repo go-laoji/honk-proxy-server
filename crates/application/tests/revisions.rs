@@ -333,3 +333,123 @@ async fn draft_conflict_redacted_round_trip_and_secret_change_diff_never_expose_
     );
     supervisor.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn stopping_inbound_cancels_its_connections_in_draining_generations() {
+    let upstream = support::http_proxy(None, None, 200).await;
+    let echo = support::echo(false).await;
+    let mut config = DaemonConfig {
+        proxy: ProxyConfig {
+            inbounds: vec![support::inbound("http", ProxyProtocol::Http, None)],
+            upstreams: vec![support::upstream(upstream.address, ProxyProtocol::Http)],
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let service = Supervisor::boot(
+        Store::open(None, config.clone()).unwrap(),
+        StartupOverrides::default(),
+    )
+    .await
+    .unwrap();
+    let mut connection = tunnel(&service, echo.address).await;
+    config.proxy.limits.buffer_bytes = 8192;
+    let revision = service.create_revision(input(&config, 1)).await.unwrap();
+    service
+        .activate(ConfigActivate {
+            revision: revision.id,
+            expected_revision: 1,
+            defer_until_restart: false,
+        })
+        .await
+        .unwrap();
+    assert_eq!(service.current().engine.status().active_connections, 1);
+    assert_eq!(
+        service
+            .stop_inbound("http")
+            .await
+            .unwrap()
+            .active_connections,
+        0
+    );
+    let mut byte = [0; 1];
+    assert_eq!(connection.read(&mut byte).await.unwrap(), 0);
+    service.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn retention_is_bounded_and_keeps_runtime_generation_and_foreign_keys_valid() {
+    let mut config = DaemonConfig::default();
+    config.retention.config_versions = 10;
+    let service = Supervisor::boot(
+        Store::open(None, config.clone()).unwrap(),
+        StartupOverrides::default(),
+    )
+    .await
+    .unwrap();
+    service.confirm_startup().await.unwrap();
+    let mut head = 1;
+    for number in 0..24 {
+        config.instance_name = format!("revision-{number}");
+        let revision = service.create_revision(input(&config, head)).await.unwrap();
+        service
+            .activate(ConfigActivate {
+                revision: revision.id,
+                expected_revision: head,
+                defer_until_restart: false,
+            })
+            .await
+            .unwrap();
+        head = revision.id;
+    }
+    let workspace = service.workspace().await.unwrap();
+    assert_eq!(workspace.desired_revision, head);
+    assert!(workspace.revisions.len() <= 11);
+    assert!(workspace.revisions.iter().any(|revision| revision.id == 1));
+    assert!(!workspace.revisions.iter().any(|revision| revision.id == 2));
+    assert!(
+        workspace
+            .revisions
+            .iter()
+            .any(|revision| revision.parent_id.is_none())
+    );
+    service.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn dropped_caller_does_not_abandon_activation_queued_behind_database_lock() {
+    let directory = tempfile::tempdir().unwrap();
+    let service = Supervisor::boot(
+        Store::open(Some(directory.path()), DaemonConfig::default()).unwrap(),
+        StartupOverrides::default(),
+    )
+    .await
+    .unwrap();
+    service.confirm_startup().await.unwrap();
+    let config = DaemonConfig {
+        instance_name: "survives-disconnect".into(),
+        ..Default::default()
+    };
+    let revision = service.create_revision(input(&config, 1)).await.unwrap();
+    let blocking = rusqlite::Connection::open(directory.path().join("hps.sqlite3")).unwrap();
+    blocking.execute_batch("BEGIN IMMEDIATE").unwrap();
+    let caller = service.clone();
+    let handle = tokio::spawn(async move {
+        caller
+            .activate(ConfigActivate {
+                revision: revision.id,
+                expected_revision: 1,
+                defer_until_restart: false,
+            })
+            .await
+    });
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    handle.abort();
+    blocking.execute_batch("ROLLBACK").unwrap();
+    eventually(|| service.current().config.instance_name == "survives-disconnect").await;
+    assert_eq!(
+        service.workspace().await.unwrap().activations[0].state,
+        "applied"
+    );
+    service.shutdown().await.unwrap();
+}

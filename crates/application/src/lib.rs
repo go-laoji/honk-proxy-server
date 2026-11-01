@@ -81,6 +81,7 @@ impl Supervisor {
             .await
             .map_err(|_| ApplicationError::Worker)??;
         let engine = prepared.engine;
+        engine.set_generation(workspace.desired.revision.id);
         engine.prepare_enabled(None).await?;
         engine.start_enabled().await?;
         let path_base = store
@@ -113,6 +114,7 @@ impl Supervisor {
         self.store
             .mark_applied(self.current().revision, None)
             .await?;
+        self.prune().await?;
         Ok(())
     }
     pub async fn workspace(&self) -> Result<ConfigWorkspace, ApplicationError> {
@@ -282,11 +284,13 @@ impl Supervisor {
         tokio::task::spawn_blocking(move || prepare_engine(&preparing, None))
             .await
             .map_err(|_| ApplicationError::Worker)??;
-        Ok(revision_view(
+        let revision = revision_view(
             self.store
                 .create_revision(input.expected_revision, candidate, input.note)
                 .await?,
-        ))
+        );
+        self.prune().await?;
+        Ok(revision)
     }
     pub async fn activate(
         self: &Arc<Self>,
@@ -367,6 +371,34 @@ impl Supervisor {
                 restart_required,
             });
         }
+        if serde_json::to_value(&current.base_config.proxy)
+            .map_err(|_| ApplicationError::Invalid)?
+            == serde_json::to_value(&target.config.proxy).map_err(|_| ApplicationError::Invalid)?
+        {
+            let activation_id = self
+                .store
+                .activate(input.revision, input.expected_revision, false)
+                .await?;
+            self.current.store(Arc::new(RuntimeSnapshot {
+                revision: input.revision,
+                config,
+                base_config: target.config,
+                engine: current.engine.clone(),
+                management_tls: prepared.management_tls,
+            }));
+            *self.pending_restart.lock().unwrap() = None;
+            self.store
+                .mark_applied(input.revision, Some(activation_id))
+                .await?;
+            self.prune().await?;
+            return Ok(ConfigActivationResult {
+                activation_id,
+                desired_revision: input.revision,
+                running_revision: input.revision,
+                state: "applied".into(),
+                restart_required: vec![],
+            });
+        }
         {
             let mut retired = self.retired.lock().unwrap();
             retired.retain(|engine| !engine.is_idle());
@@ -388,6 +420,7 @@ impl Supervisor {
             .store
             .activate(input.revision, input.expected_revision, false)
             .await?;
+        candidate.set_generation(input.revision);
         if let Err(error) = candidate.start_enabled().await {
             candidate.shutdown().await;
             let rollback = self
@@ -412,6 +445,7 @@ impl Supervisor {
         self.store
             .mark_applied(input.revision, Some(activation_id))
             .await?;
+        self.prune().await?;
         Ok(ConfigActivationResult {
             activation_id,
             desired_revision: input.revision,
@@ -445,7 +479,34 @@ impl Supervisor {
     }
     pub async fn stop_inbound(&self, id: &str) -> Result<InboundStatus, ApplicationError> {
         let _operation = self.operation.lock().await;
-        Ok(self.current().engine.stop(id).await?)
+        self.current().engine.stop(id).await?;
+        let retired = self.retired.lock().unwrap().clone();
+        for engine in retired {
+            match engine.stop(id).await {
+                Ok(_) | Err(EngineError::NotFound) => {}
+                Err(error) => return Err(error.into()),
+            }
+        }
+        self.current()
+            .engine
+            .status()
+            .inbounds
+            .into_iter()
+            .find(|entry| entry.id == id)
+            .ok_or_else(|| EngineError::NotFound.into())
+    }
+    async fn prune(&self) -> Result<(), ApplicationError> {
+        let current = self.current();
+        let mut pinned = vec![current.revision, current.engine.generation()];
+        {
+            let mut retired = self.retired.lock().unwrap();
+            retired.retain(|engine| !engine.is_idle());
+            pinned.extend(retired.iter().map(|engine| engine.generation()));
+        }
+        self.store
+            .prune_versions(current.config.retention.config_versions, pinned)
+            .await?;
+        Ok(())
     }
     pub async fn shutdown(&self) -> Result<(), ApplicationError> {
         let _operation = self.operation.lock().await;
@@ -490,7 +551,13 @@ fn revision_view(revision: hps_storage::Revision) -> ConfigRevision {
     }
 }
 fn export(config: &DaemonConfig) -> Result<String, ApplicationError> {
-    toml::to_string_pretty(&config.redacted()).map_err(|_| ApplicationError::Invalid)
+    toml::to_string_pretty(&config.redacted())
+        .map(|body| {
+            format!(
+                "# honk-proxy-server configuration format_version=1; credentials redacted\n{body}"
+            )
+        })
+        .map_err(|_| ApplicationError::Invalid)
 }
 struct PreparedRuntime {
     engine: Arc<Engine>,

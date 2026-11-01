@@ -41,6 +41,7 @@ pub struct Engine {
     capacity: Arc<Capacity>,
     bandwidth: Arc<Pacer>,
     cancel: CancellationToken,
+    generation: std::sync::atomic::AtomicI64,
 }
 struct Entry {
     config: InboundConfig,
@@ -171,6 +172,7 @@ impl Engine {
                 ),
             limits: Arc::new(config.limits),
             cancel: CancellationToken::new(),
+            generation: std::sync::atomic::AtomicI64::new(0),
         }))
     }
     pub async fn start_enabled(self: &Arc<Self>) -> Result<(), EngineError> {
@@ -222,6 +224,14 @@ impl Engine {
     }
     pub fn is_idle(&self) -> bool {
         self.entries.values().all(|entry| entry.tracker.is_empty())
+    }
+    pub fn set_generation(&self, id: i64) {
+        let _ = self
+            .generation
+            .compare_exchange(0, id, Ordering::AcqRel, Ordering::Acquire);
+    }
+    pub fn generation(&self) -> i64 {
+        self.generation.load(Ordering::Acquire)
     }
     pub async fn start(self: &Arc<Self>, id: &str) -> Result<InboundStatus, EngineError> {
         let entry = self.entries.get(id).ok_or(EngineError::NotFound)?.clone();

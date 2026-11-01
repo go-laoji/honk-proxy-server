@@ -17,6 +17,7 @@ tracing-subscriber.workspace = true
 arc-swap = "1.9"
 
 [dev-dependencies]
+rusqlite = "0.41"
 tempfile = "3"
 rcgen = "0.14"
 reqwest = { workspace = true, features = ["socks"] }

@@ -610,6 +610,7 @@ dependencies = [
  "hyper-util",
  "rcgen",
  "reqwest",
+ "rusqlite",
  "serde_json",
  "tempfile",
  "thiserror",

@@ -209,6 +209,18 @@ impl Store {
         self.call(move |connection| read_document(connection, id))
             .await
     }
+    pub async fn prune_versions(&self, maximum: u32, pinned: Vec<i64>) -> Result<(), StorageError> {
+        self.call(move|connection|{
+            let transaction=connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+            transaction.execute_batch("CREATE TEMP TABLE IF NOT EXISTS hps_retained_versions(id INTEGER PRIMARY KEY);DELETE FROM hps_retained_versions")?;
+            transaction.execute("INSERT INTO hps_retained_versions SELECT id FROM config_revisions ORDER BY id DESC LIMIT ?1",[maximum])?;
+            transaction.execute_batch("INSERT OR IGNORE INTO hps_retained_versions SELECT desired_revision FROM config_head;INSERT OR IGNORE INTO hps_retained_versions SELECT last_applied_revision FROM config_head WHERE last_applied_revision IS NOT NULL;INSERT OR IGNORE INTO hps_retained_versions SELECT base_revision FROM config_draft")?;
+            for id in pinned {transaction.execute("INSERT OR IGNORE INTO hps_retained_versions VALUES(?1)",[id])?;}
+            transaction.execute_batch("DELETE FROM config_activations WHERE revision NOT IN (SELECT id FROM hps_retained_versions) OR previous_revision NOT IN (SELECT id FROM hps_retained_versions);UPDATE config_revisions SET parent_id=NULL WHERE parent_id NOT IN (SELECT id FROM hps_retained_versions);DELETE FROM config_revisions WHERE id NOT IN (SELECT id FROM hps_retained_versions)")?;
+            transaction.execute("DELETE FROM config_activations WHERE id NOT IN (SELECT id FROM config_activations ORDER BY id DESC LIMIT ?1)",[maximum.saturating_mul(2)])?;
+            transaction.commit()?;Ok(())
+        }).await
+    }
     pub async fn save_draft(
         &self,
         base: i64,
@@ -217,7 +229,7 @@ impl Store {
     ) -> Result<Draft, StorageError> {
         let body = document(&config)?;
         self.call(move|connection|{
-            let transaction=connection.transaction()?;
+            let transaction=connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
             check_head(&transaction,base)?;
             let changed=transaction.execute("UPDATE config_draft SET version=version+1,base_revision=?1,document=?2,updated_at=?3 WHERE singleton=1 AND version=?4",params![base,body,unix_now(),expected_version])?;
             if changed!=1{return Err(StorageError::Conflict);}
@@ -236,7 +248,8 @@ impl Store {
         }
         let body = document(&config)?;
         self.call(move |connection| {
-            let transaction = connection.transaction()?;
+            let transaction =
+                connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
             check_head(&transaction, expected_head)?;
             let id = insert_revision(&transaction, Some(expected_head), &body, &note)?;
             let revision = read_document(&transaction, id)?.revision;
@@ -252,7 +265,7 @@ impl Store {
         pending_restart: bool,
     ) -> Result<i64, StorageError> {
         self.call(move|connection|{
-            let transaction=connection.transaction()?;check_head(&transaction,expected_head)?;read_document(&transaction,revision)?;
+            let transaction=connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;check_head(&transaction,expected_head)?;read_document(&transaction,revision)?;
             transaction.execute("UPDATE config_head SET desired_revision=?1 WHERE singleton=1",[revision])?;
             transaction.execute("INSERT INTO config_activations(revision,previous_revision,state,created_at) VALUES(?1,?2,?3,?4)",params![revision,expected_head,if pending_restart {"pending_restart"} else {"prepared"},unix_now()])?;
             let activation=transaction.last_insert_rowid();transaction.commit()?;Ok(activation)
@@ -264,7 +277,7 @@ impl Store {
         activation: Option<i64>,
     ) -> Result<(), StorageError> {
         self.call(move|connection|{
-            let transaction=connection.transaction()?;read_document(&transaction,revision)?;
+            let transaction=connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;read_document(&transaction,revision)?;
             transaction.execute("UPDATE config_head SET last_applied_revision=?1 WHERE singleton=1",[revision])?;
             transaction.execute("UPDATE config_revisions SET applied_at=?1 WHERE id=?2",params![unix_now(),revision])?;
             if let Some(id)=activation {transaction.execute("UPDATE config_activations SET state='applied',error_code=NULL WHERE id=?1 AND revision=?2",params![id,revision])?;}
@@ -338,7 +351,8 @@ fn migrate(connection: &mut Connection, bootstrap: &str) -> Result<(), StorageEr
     if version > 2 {
         return Err(StorageError::SchemaTooNew);
     }
-    let transaction = connection.transaction()?;
+    let transaction =
+        connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
     if version == 0 {
         transaction.execute_batch(include_str!("../migrations/0001_configuration.up.sql"))?;
         transaction.execute(
