@@ -157,7 +157,7 @@
       "acceptance": "端口/认证/穿透分层；目标403/429不全局判死；短寿命不浪费探测；所有入口单一健康状态，限并发与任务恢复。",
       "issue": 13,
       "url": "https://github.com/go-laoji/honk-proxy-server/issues/13",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "id": "T09",
