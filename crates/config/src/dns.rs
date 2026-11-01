@@ -102,6 +102,7 @@ impl DnsConfig {
             ));
         }
         let mut ids = HashSet::new();
+        let mut proxy_bootstrap = std::collections::HashMap::new();
         for up in &self.upstreams {
             if !crate::valid_id(&up.id) || !ids.insert(up.id.as_str()) {
                 return Err(invalid("upstream IDs must be valid and unique"));
@@ -165,6 +166,13 @@ impl DnsConfig {
                 return Err(invalid("https_path requires DoH"));
             }
             if let Some(id) = &up.proxy_id {
+                if let Some(ips) = proxy_bootstrap.insert(id, &up.proxy_bootstrap_ips)
+                    && ips != &up.proxy_bootstrap_ips
+                {
+                    return Err(invalid(
+                        "a static proxy must have one consistent explicit bootstrap list",
+                    ));
+                }
                 if up.protocol == DnsProtocol::Udp {
                     return Err(invalid(
                         "TCP-only HTTP/HTTPS/SOCKS5 DNS egress cannot carry UDP",

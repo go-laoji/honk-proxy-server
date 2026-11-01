@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+hps-dns.workspace = true
 hps-web-assets = { path = "../web-assets", optional = true }
 hps-domain.workspace = true
 hps-config.workspace = true

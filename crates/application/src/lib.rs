@@ -1,4 +1,6 @@
 mod controller;
+mod dns;
+pub use dns::DnsOverview;
 mod health;
 mod providers;
 use arc_swap::ArcSwap;
@@ -35,6 +37,8 @@ pub enum ApplicationError {
     ClockRollback,
     #[error("provider operation failed: {0}")]
     Provider(#[from] hps_provider::FetchError),
+    #[error(transparent)]
+    Dns(#[from] hps_dns::DnsError),
 }
 #[derive(Default, Clone)]
 pub struct StartupOverrides {
@@ -67,6 +71,8 @@ pub struct RuntimeSnapshot {
     pub engine: Arc<Engine>,
     pub management_tls: Option<hps_engine::tls::PreparedServer>,
     pub health_profiles: Vec<hps_health::PreparedProfile>,
+    pub dns: hps_dns::Resolver,
+    pub dns_server: Option<Arc<hps_dns::server::DnsServer>>,
     base_config: DaemonConfig,
 }
 pub struct Supervisor {
@@ -100,7 +106,11 @@ impl Supervisor {
         let engine = prepared.engine;
         engine.set_generation(workspace.desired.revision.id);
         engine.prepare_enabled(None).await?;
+        let dns_server = dns::listener(&prepared.dns, None).await?;
         engine.start_enabled().await?;
+        if let Some(server) = &dns_server {
+            server.start();
+        }
         let path_base = store
             .database_path
             .as_ref()
@@ -116,6 +126,8 @@ impl Supervisor {
                 engine,
                 management_tls: prepared.management_tls,
                 health_profiles: prepared.health_profiles,
+                dns: prepared.dns,
+                dns_server,
             }),
             operation: tokio::sync::Mutex::new(()),
             retired: Mutex::new(vec![]),
@@ -363,7 +375,7 @@ impl Supervisor {
         let mut config = target.config.clone();
         self.overrides.apply(&mut config);
         let prepare = config.clone();
-        let previous = current.engine.clone();
+        let previous = current.clone();
         let prepared =
             match tokio::task::spawn_blocking(move || prepare_engine(&prepare, Some(&previous)))
                 .await
@@ -417,6 +429,7 @@ impl Supervisor {
             });
         }
         if current.engine.preparation_fingerprint() == candidate.preparation_fingerprint()
+            && current.dns.fingerprint() == prepared.dns.fingerprint()
             && serde_json::to_value(&current.base_config.proxy)
                 .map_err(|_| ApplicationError::Invalid)?
                 == serde_json::to_value(&target.config.proxy)
@@ -446,6 +459,8 @@ impl Supervisor {
                 engine: current.engine.clone(),
                 management_tls: prepared.management_tls,
                 health_profiles: prepared.health_profiles,
+                dns: prepared.dns,
+                dns_server: current.dns_server.clone(),
             }));
             *self.pending_restart.lock().unwrap() = None;
             self.store
@@ -477,6 +492,19 @@ impl Supervisor {
                 .await?;
             return Err(error.into());
         }
+        let dns_server = match dns::listener(&prepared.dns, Some(&current)).await {
+            Ok(server) => server,
+            Err(error) => {
+                self.store
+                    .record_failure(
+                        input.revision,
+                        input.expected_revision,
+                        "dns_listen_preparation_failed",
+                    )
+                    .await?;
+                return Err(error);
+            }
+        };
         let activation_id = self
             .store
             .activate(input.revision, input.expected_revision, false)
@@ -494,6 +522,10 @@ impl Supervisor {
             return Err(error.into());
         }
         current.engine.drain_acceptors().await;
+        if let Some(server) = &dns_server {
+            server.replace_resolver(prepared.dns.clone());
+            server.start();
+        }
         self.current.store(Arc::new(RuntimeSnapshot {
             revision: input.revision,
             config,
@@ -501,7 +533,14 @@ impl Supervisor {
             engine: candidate,
             management_tls: prepared.management_tls,
             health_profiles: prepared.health_profiles,
+            dns: prepared.dns,
+            dns_server: dns_server.clone(),
         }));
+        if let Some(old) = &current.dns_server
+            && !dns_server.as_ref().is_some_and(|new| Arc::ptr_eq(old, new))
+        {
+            old.shutdown().await;
+        }
         self.refresh_pool().await?;
         self.retired.lock().unwrap().push(current.engine.clone());
         *self.pending_restart.lock().unwrap() = None;
@@ -580,6 +619,9 @@ impl Supervisor {
         drop(_operation);
         self.provider_tasks.close();
         self.provider_tasks.wait().await;
+        if let Some(server) = &self.current().dns_server {
+            server.shutdown().await;
+        }
         self.current().engine.shutdown().await;
         let retired = std::mem::take(&mut *self.retired.lock().unwrap());
         for engine in retired {
@@ -636,13 +678,14 @@ fn export(config: &DaemonConfig) -> Result<String, ApplicationError> {
         .map_err(|_| ApplicationError::Invalid)
 }
 struct PreparedRuntime {
+    dns: hps_dns::Resolver,
     health_profiles: Vec<hps_health::PreparedProfile>,
     engine: Arc<Engine>,
     management_tls: Option<hps_engine::tls::PreparedServer>,
 }
 fn prepare_engine(
     config: &DaemonConfig,
-    previous: Option<&Arc<Engine>>,
+    previous: Option<&RuntimeSnapshot>,
 ) -> Result<PreparedRuntime, ApplicationError> {
     tracing_subscriber::EnvFilter::try_new(&config.log_filter)
         .map_err(|_| ApplicationError::Invalid)?;
@@ -656,7 +699,11 @@ fn prepare_engine(
     } else {
         None
     };
-    let engine = Engine::with_previous(config.proxy.clone(), previous)?;
+    let dns = dns::prepare(config, previous)?;
+    let engine = Engine::with_previous(config.proxy.clone(), previous.map(|p| &p.engine))?;
+    if config.dns.enabled {
+        engine.configure_resolver(Some(Arc::new(dns.clone())));
+    }
     let health_profiles = if config.health.enabled {
         config
             .health
@@ -664,7 +711,15 @@ fn prepare_engine(
             .iter()
             .filter(|p| p.enabled && p.transport == hps_domain::HealthTransport::Tcp)
             .cloned()
-            .map(hps_health::PreparedProfile::prepare)
+            .map(|profile| {
+                hps_health::PreparedProfile::prepare(profile).map(|profile| {
+                    if config.dns.enabled {
+                        profile.with_resolver(Arc::new(dns.clone()), dns.fingerprint())
+                    } else {
+                        profile
+                    }
+                })
+            })
             .collect::<Result<Vec<_>, _>>()
             .map_err(|_| ApplicationError::Invalid)?
     } else {
@@ -696,6 +751,7 @@ fn prepare_engine(
         return Err(ApplicationError::Invalid);
     }
     Ok(PreparedRuntime {
+        dns,
         health_profiles,
         engine,
         management_tls,

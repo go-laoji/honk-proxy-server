@@ -5,6 +5,10 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+hps-dns.workspace = true
+hps-net.workspace = true
+sha2 = "0.10"
+serde.workspace = true
 hps-config.workspace = true
 hps-domain.workspace = true
 hps-engine.workspace = true
@@ -21,6 +25,7 @@ tracing-subscriber.workspace = true
 arc-swap = "1.9"
 
 [dev-dependencies]
+hickory-proto = "0.26.3"
 axum.workspace = true
 rusqlite = "0.41"
 tempfile = "3"

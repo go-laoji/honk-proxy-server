@@ -98,6 +98,12 @@ pub struct ProviderClient {
 }
 impl ProviderClient {
     pub fn new(config: &ProviderConfig) -> Result<Self, FetchError> {
+        Self::with_resolver(config, None)
+    }
+    pub fn with_resolver(
+        config: &ProviderConfig,
+        resolver: Option<std::sync::Arc<dyn hps_net::NameResolver>>,
+    ) -> Result<Self, FetchError> {
         config
             .validate()
             .map_err(|_| FetchError::known("invalid_provider"))?;
@@ -108,6 +114,9 @@ impl ProviderClient {
             .timeout(Duration::from_millis(config.timeout_ms))
             .connect_timeout(Duration::from_millis(config.timeout_ms.min(10000)))
             .user_agent("honk-proxy-server/0.1");
+        if let Some(resolver) = resolver {
+            builder = builder.dns_resolver(std::sync::Arc::new(ProviderResolver(resolver)));
+        }
         if let Some(proxy) = &config.fetch_proxy {
             builder = builder.proxy(
                 reqwest::Proxy::all(proxy).map_err(|_| FetchError::known("invalid_fetch_proxy"))?,
@@ -316,6 +325,24 @@ impl ProviderClient {
             serde_json::json!({"supported":true,"state":"known","unit":"ips","balance":value.pointer("/data/balance").and_then(Value::as_u64)})
         } else {
             serde_json::json!({"supported":true,"state":"known","whitelist":value.pointer("/data/ipwhitelist").and_then(Value::as_array).map(|items|items.iter().filter_map(Value::as_str).filter(|v|v.parse::<IpAddr>().is_ok()).take(1000).collect::<Vec<_>>())})
+        })
+    }
+}
+struct ProviderResolver(std::sync::Arc<dyn hps_net::NameResolver>);
+impl reqwest::dns::Resolve for ProviderResolver {
+    fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+        let resolver = self.0.clone();
+        let name = name.as_str().to_owned();
+        Box::pin(async move {
+            let addresses = resolver
+                .lookup(name, hps_net::ResolvePurpose::Provider)
+                .await?;
+            let addresses: reqwest::dns::Addrs = Box::new(
+                addresses
+                    .into_iter()
+                    .map(|ip| std::net::SocketAddr::new(ip, 0)),
+            );
+            Ok(addresses)
         })
     }
 }

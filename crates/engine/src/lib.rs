@@ -25,6 +25,8 @@ pub enum ProxyError {
     LocalResource,
     #[error("upstream endpoint connection failed")]
     Endpoint,
+    #[error("upstream endpoint DNS resolution failed")]
+    Dns,
     #[error("upstream TLS handshake failed")]
     UpstreamTls,
     #[error("upstream authentication failed")]

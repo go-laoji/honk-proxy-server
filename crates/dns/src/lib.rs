@@ -1,4 +1,5 @@
 //! Policy-directed DNS with explicit bootstrap and independently bounded transports.
+pub mod server;
 mod transport;
 pub mod wire;
 use hickory_proto::op::Message;
@@ -104,6 +105,14 @@ pub struct CachePage {
     pub misses: u64,
     pub merged: u64,
     pub failures: u64,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Overview<C> {
+    pub running_revision: i64,
+    pub configuration: C,
+    pub listener: Option<std::net::SocketAddr>,
+    pub cache: CachePage,
+    pub linux_capture_active: bool,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DomainContext {
