@@ -1,7 +1,11 @@
 //! Shared user-space transport for explicit and future transparent proxy ingress.
 pub mod dial;
+mod http_proxy;
+pub mod runtime;
+mod socks;
 pub mod target;
 pub mod tls;
+mod traffic;
 
 use tokio::io::{AsyncRead, AsyncWrite};
 pub trait ProxyIo: AsyncRead + AsyncWrite + Unpin + Send {}
@@ -20,6 +24,8 @@ pub enum ProxyError {
     Upstream,
     #[error("invalid TLS certificate, key, trust roots or server name")]
     TlsConfig,
+    #[error("invalid or failed proxy protocol")]
+    Protocol,
     #[error("I/O failed")]
     Io(#[from] std::io::Error),
 }

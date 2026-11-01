@@ -243,3 +243,79 @@ pub async fn socks_proxy(credentials: bool) -> Server {
         requests,
     }
 }
+
+pub async fn origin(tls: Option<&Certificate>) -> Server {
+    use bytes::Bytes;
+    use http_body_util::{BodyExt, Full};
+    use hyper::{Response, body::Incoming, service::service_fn};
+    use hyper_util::rt::TokioIo;
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let acceptor = tls.map(|cert| {
+        tokio_rustls::TlsAcceptor::from(hps_engine::tls::server(&cert.config).unwrap().0)
+    });
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let captured = requests.clone();
+    let task = tokio::spawn(async move {
+        while let Ok((tcp, _)) = listener.accept().await {
+            let acceptor = acceptor.clone();
+            let captured = captured.clone();
+            tokio::spawn(async move {
+                let io: BoxIo = if let Some(acceptor) = acceptor {
+                    match acceptor.accept(tcp).await {
+                        Ok(tls) => Box::new(tls),
+                        Err(_) => return,
+                    }
+                } else {
+                    Box::new(tcp)
+                };
+                let service = service_fn(move |request: hyper::Request<Incoming>| {
+                    let captured = captured.clone();
+                    async move {
+                        captured.lock().unwrap().push(
+                            format!("{:?} {:?}", request.uri(), request.headers()).into_bytes(),
+                        );
+                        let body = request.into_body().collect().await.unwrap().to_bytes();
+                        Ok::<_, std::convert::Infallible>(
+                            Response::builder()
+                                .header("Connection", "close, X-Origin-Hop")
+                                .header("X-Origin-Hop", "remove-this")
+                                .header("Proxy-Authenticate", "fixture-internal")
+                                .body(Full::new(if body.is_empty() {
+                                    Bytes::from_static(b"origin")
+                                } else {
+                                    body
+                                }))
+                                .unwrap(),
+                        )
+                    }
+                });
+                let _ = hyper::server::conn::http1::Builder::new()
+                    .half_close(true)
+                    .serve_connection(TokioIo::new(io), service)
+                    .await;
+            });
+        }
+    });
+    Server {
+        address,
+        task,
+        requests,
+    }
+}
+
+pub fn inbound(
+    id: &str,
+    protocol: ProxyProtocol,
+    tls: Option<&Certificate>,
+) -> hps_config::InboundConfig {
+    hps_config::InboundConfig {
+        id: id.into(),
+        protocol,
+        listen: "127.0.0.1:0".parse().unwrap(),
+        enabled: true,
+        tls: tls.map(|certificate| certificate.config.clone()),
+        max_connections: 64,
+        bytes_per_second: 0,
+    }
+}

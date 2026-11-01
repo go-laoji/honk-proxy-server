@@ -1,4 +1,5 @@
 use crate::ConfigError;
+pub use hps_domain::ResourceLimits;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, net::SocketAddr, path::PathBuf};
 
@@ -71,33 +72,6 @@ pub struct UpstreamCredentials {
 impl std::fmt::Debug for UpstreamCredentials {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("UpstreamCredentials([REDACTED])")
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default, deny_unknown_fields)]
-pub struct ResourceLimits {
-    pub max_connections: usize,
-    pub bytes_per_second: u64,
-    pub buffer_bytes: usize,
-    pub handshake_timeout_ms: u64,
-    pub connect_timeout_ms: u64,
-    pub idle_timeout_ms: u64,
-    pub max_header_bytes: usize,
-    pub min_remaining_lifetime_secs: u64,
-}
-impl Default for ResourceLimits {
-    fn default() -> Self {
-        Self {
-            max_connections: 1024,
-            bytes_per_second: 0,
-            buffer_bytes: 16 * 1024,
-            handshake_timeout_ms: 10_000,
-            connect_timeout_ms: 10_000,
-            idle_timeout_ms: 60_000,
-            max_header_bytes: 32 * 1024,
-            min_remaining_lifetime_secs: 30,
-        }
     }
 }
 

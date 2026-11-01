@@ -18,6 +18,9 @@ impl Target {
         })
     }
     pub fn from_authority(authority: &str) -> Result<Self, ProxyError> {
+        if authority.contains('@') {
+            return Err(ProxyError::InvalidTarget);
+        }
         let authority: http::uri::Authority =
             authority.parse().map_err(|_| ProxyError::InvalidTarget)?;
         let port = authority.port_u16().ok_or(ProxyError::InvalidTarget)?;

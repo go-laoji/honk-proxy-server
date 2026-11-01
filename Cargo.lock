@@ -521,6 +521,7 @@ dependencies = [
 name = "hps-config"
 version = "0.1.0"
 dependencies = [
+ "hps-domain",
  "serde",
  "serde_json",
  "thiserror",
