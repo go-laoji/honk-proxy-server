@@ -1,4 +1,5 @@
 //! Vendor contracts and bounded fetching. No task scheduling or implicit retries.
+pub mod policy;
 use base64::Engine;
 use hmac::{Hmac, Mac};
 use hps_config::{
@@ -61,6 +62,7 @@ pub fn fingerprint(config: &ProviderConfig) -> String {
     provenance.mode = hps_config::LeaseMode::AppendLeases;
     provenance.full_snapshot = false;
     provenance.minimum_snapshot_percent = 0;
+    provenance.refill = hps_config::RefillConfig::default();
     format!(
         "{:x}",
         Sha256::digest(serde_json::to_vec(&provenance).expect("provider serialization"))
