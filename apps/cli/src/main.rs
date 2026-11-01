@@ -46,6 +46,10 @@ enum Command {
         #[command(subcommand)]
         command: HealthCommand,
     },
+    Dns {
+        #[command(subcommand)]
+        command: DnsCommand,
+    },
     Provider {
         #[command(subcommand)]
         command: ProviderCommand,
@@ -92,6 +96,51 @@ enum HealthCommand {
         #[arg(long)]
         expected_revision: i64,
     },
+}
+#[derive(Subcommand)]
+enum DnsCommand {
+    Show {
+        #[arg(long)]
+        after: Option<String>,
+        #[arg(long,default_value_t=50,value_parser=clap::value_parser!(u32).range(1..=200))]
+        limit: u32,
+    },
+    Resolve {
+        name: String,
+        #[arg(long, default_value = "A")]
+        query_type: String,
+        #[arg(long,value_enum,default_value_t=DnsPurpose::Business)]
+        purpose: DnsPurpose,
+    },
+    Context {
+        ip: std::net::IpAddr,
+    },
+    Clear {
+        #[arg(long)]
+        domain: Option<String>,
+    },
+    Save {
+        path: PathBuf,
+        #[arg(long)]
+        expected_revision: i64,
+    },
+}
+#[derive(Clone, Copy, clap::ValueEnum)]
+enum DnsPurpose {
+    Bootstrap,
+    Provider,
+    Health,
+    Business,
+}
+impl From<DnsPurpose> for hps_net::ResolvePurpose {
+    fn from(value: DnsPurpose) -> Self {
+        match value {
+            DnsPurpose::Bootstrap => Self::Bootstrap,
+            DnsPurpose::Provider => Self::Provider,
+            DnsPurpose::Health => Self::Health,
+            DnsPurpose::Business => Self::Business,
+        }
+    }
 }
 #[derive(Subcommand)]
 enum ConfigCommand {
@@ -377,6 +426,63 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
             }
             InboundCommand::Stop { id } => {
                 serde_json::to_value(client.stop_inbound(id).await.map_err(client_error)?)
+            }
+        },
+        Command::Dns { command } => match command {
+            DnsCommand::Show { after, limit } => serde_json::to_value(
+                client
+                    .dns(after.as_deref(), *limit)
+                    .await
+                    .map_err(client_error)?,
+            ),
+            DnsCommand::Resolve {
+                name,
+                query_type,
+                purpose,
+            } => serde_json::to_value(
+                client
+                    .resolve_dns(&hps_dns::LookupInput {
+                        name: name.clone(),
+                        query_type: query_type.to_ascii_uppercase(),
+                        purpose: (*purpose).into(),
+                    })
+                    .await
+                    .map_err(client_error)?,
+            ),
+            DnsCommand::Context { ip } => {
+                serde_json::to_value(client.dns_context(*ip).await.map_err(client_error)?)
+            }
+            DnsCommand::Clear { domain } => serde_json::to_value(
+                client
+                    .clear_dns(&hps_dns::ClearInput {
+                        domain: domain.clone(),
+                    })
+                    .await
+                    .map_err(client_error)?,
+            ),
+            DnsCommand::Save {
+                path,
+                expected_revision,
+            } => {
+                let metadata = std::fs::metadata(path).map_err(|e| (2, e.to_string()))?;
+                if !metadata.is_file() || metadata.len() > 512 * 1024 {
+                    return Err((
+                        2,
+                        "DNS TOML must be a regular file no larger than 512 KiB".into(),
+                    ));
+                }
+                let body = std::fs::read_to_string(path).map_err(|e| (2, e.to_string()))?;
+                let configuration = toml::from_str::<hps_config::DnsConfig>(&body)
+                    .map_err(|_| (2, "invalid DNS TOML; check syntax and fields".into()))?;
+                serde_json::to_value(
+                    client
+                        .save_dns(&hps_config::DnsSave {
+                            configuration,
+                            expected_revision: *expected_revision,
+                        })
+                        .await
+                        .map_err(client_error)?,
+                )
             }
         },
         Command::Health { command } => match command {

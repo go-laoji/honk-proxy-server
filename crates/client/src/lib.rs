@@ -112,6 +112,46 @@ impl HpsClient {
         self.get_json(&format!("api/v1/health?{}", query.finish()))
             .await
     }
+    pub async fn dns(
+        &self,
+        after: Option<&str>,
+        limit: u32,
+    ) -> Result<hps_dns::Overview<hps_config::DnsConfig>, ClientError> {
+        let mut query = url::form_urlencoded::Serializer::new(String::new());
+        query.append_pair("limit", &limit.to_string());
+        if let Some(after) = after {
+            query.append_pair("after", after);
+        }
+        self.get_json(&format!("api/v1/dns?{}", query.finish()))
+            .await
+    }
+    pub async fn resolve_dns(
+        &self,
+        input: &hps_dns::LookupInput,
+    ) -> Result<hps_dns::LookupResult, ClientError> {
+        self.post_body("api/v1/dns/resolve", input).await
+    }
+    pub async fn clear_dns(
+        &self,
+        input: &hps_dns::ClearInput,
+    ) -> Result<serde_json::Value, ClientError> {
+        self.post_body("api/v1/dns/cache/clear", input).await
+    }
+    pub async fn dns_context(
+        &self,
+        ip: std::net::IpAddr,
+    ) -> Result<hps_dns::DomainContext, ClientError> {
+        let mut query = url::form_urlencoded::Serializer::new(String::new());
+        query.append_pair("ip", &ip.to_string());
+        self.get_json(&format!("api/v1/dns/context?{}", query.finish()))
+            .await
+    }
+    pub async fn save_dns(
+        &self,
+        input: &hps_config::DnsSave,
+    ) -> Result<hps_domain::ConfigActivationResult, ClientError> {
+        self.post_body("api/v1/dns/save", input).await
+    }
     pub async fn probe_health(
         &self,
         input: &hps_domain::HealthProbeInput,

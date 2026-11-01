@@ -770,6 +770,7 @@ dependencies = [
  "hps-dns",
  "hps-domain",
  "hps-engine",
+ "hps-net",
  "hps-platform",
  "hps-storage",
  "hps-web-assets",

@@ -37,6 +37,7 @@ fn set_endpoint(
 }
 
 fn supported_api(path: &str) -> bool {
+    if path.len()>4096 {return false;}
     matches!(
         path,
         "api/v1/status"
@@ -49,10 +50,30 @@ fn supported_api(path: &str) -> bool {
             | "api/v1/config/export"
             | "api/v1/providers"
     ) || supported_health_get(path)
+        || supported_dns_get(path)
         || supported_provider_get(path)
         || path
             .strip_prefix("api/v1/config/revisions/")
             .is_some_and(|id| id.parse::<i64>().is_ok_and(|id| id > 0))
+}
+fn supported_dns_get(path:&str)->bool {
+    let (base,query)=path.split_once('?').map_or((path,None),|(base,q)|(base,Some(q)));
+    if base=="api/v1/dns/context" {
+        let Some(query)=query else {return false};
+        let pairs=url::form_urlencoded::parse(query.as_bytes()).collect::<Vec<_>>();
+        return pairs.len()==1 && pairs[0].0=="ip" && pairs[0].1.parse::<std::net::IpAddr>().is_ok();
+    }
+    if base!="api/v1/dns" {return false;}
+    query.is_none_or(|query| {
+        let mut keys=std::collections::HashSet::new();
+        !query.is_empty() && url::form_urlencoded::parse(query.as_bytes()).all(|(key,value)| {
+            keys.insert(key.to_string()) && match key.as_ref() {
+                "limit"=>value.parse::<u32>().is_ok_and(|v|(1..=200).contains(&v)),
+                "after"=>value.len()==64 && value.bytes().all(|b|b.is_ascii_hexdigit()),
+                _=>false,
+            }
+        })
+    })
 }
 
 fn supported_health_get(path: &str) -> bool {
@@ -121,9 +142,13 @@ fn supported_provider_get(path: &str) -> bool {
 }
 
 fn supported_action(path: &str) -> bool {
+    if path.len()>4096 {return false;}
     if matches!(
         path,
         "api/v1/health/probe"
+            | "api/v1/dns/resolve"
+            | "api/v1/dns/cache/clear"
+            | "api/v1/dns/save"
             | "api/v1/health/save"
             | "api/v1/config/validate"
             | "api/v1/config/draft"
@@ -267,6 +292,14 @@ mod tests {
         assert!(supported_api("api/v1/health/tasks/12"));
         assert!(supported_action("api/v1/health/probe"));
         assert!(supported_action("api/v1/health/save"));
+        assert!(supported_api("api/v1/dns?limit=50"));
+        assert!(supported_api("api/v1/dns/context?ip=2001%3Adb8%3A%3A1"));
+        assert!(supported_action("api/v1/dns/resolve"));
+        assert!(supported_action("api/v1/dns/cache/clear"));
+        assert!(supported_action("api/v1/dns/save"));
+        assert!(!supported_api("api/v1/dns?url=http://external"));
+        assert!(!supported_api("api/v1/dns?limit=50&limit=100"));
+        assert!(!supported_api("api/v1/dns/context?ip=host.example"));
         assert!(!supported_api("api/v1/health?limit=10000"));
         assert!(!supported_api("api/v1/health?url=http://external"));
         assert!(!supported_api("api/v1/health/tasks/1/../2"));
