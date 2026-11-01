@@ -1,5 +1,5 @@
-//! Read-only observations for our own TC/cgroup prototype. They never prove
-//! that a program can pass the verifier, attach, intercept or forward traffic.
+//! Read-only prerequisites plus a separately invoked, owned Linux eBPF lifecycle.
+//! Prerequisite observations never prove verifier, attach or forwarding success.
 use hps_domain::{CheckStatus, EnvironmentCheck, LinuxPreflight};
 use std::io::{self, Read};
 
@@ -247,5 +247,22 @@ mod tests {
         let result = collect(&Fixture(HashMap::new()));
         assert!(result.checks.iter().all(|c| c.status != CheckStatus::Pass));
         assert!(!result.datapath_ready);
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub mod ebpf;
+#[cfg(not(target_os = "linux"))]
+pub mod ebpf {
+    use std::{net::SocketAddr, path::Path};
+    pub fn self_test(
+        _: &Path,
+        _: &Path,
+        _: &Path,
+    ) -> Result<hps_domain::LinuxEbpfSelfTest, String> {
+        Err("eBPF self-test requires Linux; no hooks were loaded".into())
+    }
+    pub fn self_test_child(_: &Path, _: SocketAddr, _: bool) -> Result<(), String> {
+        Err("eBPF test helper requires Linux".into())
     }
 }
