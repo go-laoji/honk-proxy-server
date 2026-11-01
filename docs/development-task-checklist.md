@@ -25,7 +25,7 @@ T05 配置基础后推进 T06/T07 短效 API 与补池。T08–T14 逐步闭合�
 | --- | --- | --- | --- | --- |
 | T01 | P0 | [#6](https://github.com/go-laoji/honk-proxy-server/issues/6) Rust 工作区与独立 CLI/Daemon 基础 | 无 | 已完成基础交付 |
 | T02 | P0 | [#7](https://github.com/go-laoji/honk-proxy-server/issues/7) 共享 React Tailwind MPA 与 Desktop 桥骨架 | T01 | 已完成基础验收 |
-| T03 | P0 | [#8](https://github.com/go-laoji/honk-proxy-server/issues/8) 自研 Rust 核心与 Linux eBPF 前置验证 | T01 | 自研方案与环境预检中 |
+| T03 | P0 | [#8](https://github.com/go-laoji/honk-proxy-server/issues/8) 自研 Rust 核心与 Linux eBPF 前置验证 | T01 | 只读预检已验收，真实 eBPF 待实现 |
 | T04 | P0 | [#9](https://github.com/go-laoji/honk-proxy-server/issues/9) HTTP HTTPS SOCKS5 核心代理与资源控制 | T01 | 待开发 |
 | T05 | P0 | [#10](https://github.com/go-laoji/honk-proxy-server/issues/10) SQLite 配置版本、校验、激活与回滚 | T01 | 待开发 |
 | T06 | P0 | [#11](https://github.com/go-laoji/honk-proxy-server/issues/11) 短效提取 API、批次租约与安全重试 | T05 | 待开发 |
@@ -211,3 +211,4 @@ T02 随后接管现有模板：共享页面清单、Tailwind 布局与 API trans
 - 2026-11-01：T02 的 18 页 MPA、共享构建清单、Daemon 嵌入及 Desktop 原生桥通过编译、4 项浏览器 E2E 和实际打包窗口验收，详见 [基础验收](validation/runtime-foundation-2026-11-01.md)。开始 T03；尚未加载真实 eBPF。
 
 - 2026-11-01：按用户澄清修正 T03：honk 仅供能力学习，自研 Rust engine、eBPF 与 loader；T04 不再等待 honk 集成。保留真实 Linux 发布门槛，按验证切片及时提交。
+- 2026-11-01：T03 第一片交付 Rust 只读环境诊断、管理 API 和 `hps linux preflight`。真实 Linux 容器识别 BTF/cgroup2、缺失的 bpffs 和能力；macOS 返回 unsupported。始终不将预检等同接管，T03 保持进行中，详见 [预检验收](validation/linux-preflight-2026-11-01.md)。

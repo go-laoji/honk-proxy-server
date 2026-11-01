@@ -359,6 +359,7 @@ dependencies = [
  "hps-client",
  "hps-config",
  "hps-domain",
+ "hps-platform",
  "hps-web-assets",
  "reqwest",
  "serde_json",
@@ -418,6 +419,14 @@ name = "hps-domain"
 version = "0.1.0"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "hps-platform"
+version = "0.1.0"
+dependencies = [
+ "hps-domain",
+ "serde_json",
 ]
 
 [[package]]

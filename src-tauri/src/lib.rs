@@ -38,7 +38,11 @@ fn set_endpoint(
 fn supported_api(path: &str) -> bool {
     matches!(
         path,
-        "api/v1/status" | "api/v1/version" | "api/v1/capabilities" | "api/v1/config"
+        "api/v1/status"
+            | "api/v1/version"
+            | "api/v1/capabilities"
+            | "api/v1/config"
+            | "api/v1/linux/preflight"
     )
 }
 

@@ -34,7 +34,7 @@ pnpm tauri build --debug --bundles app
 
 ## Linux 前期观测与未交付范围
 
-Docker Linux 预检读取到内核 `7.0.14-linuxkit`、aarch64、可读 BTF、cgroup2。普通测试容器未挂载 bpffs，能力掩码也不代表已经可加载 honk；本次没有加载 BPF 程序或验证真实透明出口。
+Docker Linux 预检读取到内核 `7.0.14-linuxkit`、aarch64、可读 BTF、cgroup2。普通测试容器未挂载 bpffs，能力掩码也不代表已经可加载本项目的 eBPF 程序；本次没有加载 BPF 程序或验证真实透明出口。
 
 HTTP/HTTPS/SOCKS5 代理转发、短效供应商、持久化配置写入、完整业务页面、系统服务管理和真实 eBPF 仍由后续任务交付。控制台未实现模块显示不可用，不提供虚构的节点、健康或转发成功数据。
 

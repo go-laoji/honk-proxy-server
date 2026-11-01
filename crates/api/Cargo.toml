@@ -8,6 +8,8 @@ rust-version.workspace = true
 hps-web-assets = { path = "../web-assets", optional = true }
 hps-domain.workspace = true
 hps-config.workspace = true
+hps-platform.workspace = true
+tokio.workspace = true
 axum.workspace = true
 serde_json.workspace = true
 uuid.workspace = true
@@ -17,5 +19,4 @@ web-ui = ["dep:hps-web-assets"]
 
 [dev-dependencies]
 hps-client.workspace = true
-tokio.workspace = true
 reqwest.workspace = true

@@ -28,6 +28,7 @@ cargo build --locked -p hps-cli -p hps-daemon --no-default-features
 ./target/debug/hps --output json status
 ./target/debug/hps capabilities
 ./target/debug/hps config show
+./target/debug/hps linux preflight
 ```
 
 默认管理地址为 `127.0.0.1:17900`，通过 `hpsd --listen` 或 TOML 调整；CLI 使用 `--endpoint` 或 `HPS_ENDPOINT` 选择目标。`hps --version` 查看本地 CLI 版本，`hps version` 查询目标服务版本。`hps ui` 仅输出控制台 URL，只有显式 `--open` 才打开浏览器。
@@ -53,6 +54,8 @@ Vite 生成文件哈希与 `web_build_id`，Daemon 与 Tauri 读取同一份 `di
 
 `/healthz` 报告进程存活，`/readyz` 报告代理是否可接入；未初始化代理引擎时返回 503，`status.proxy_ready` 为 false。eBPF 的 compiled/configured/attached/ready 分开报告，未集成时不会显示已经接管。
 
+`hps linux preflight` 读取目标 Daemon 的默认路径环境信息，经 `/api/v1/linux/preflight` 返回内核、BTF、cgroup2、bpffs、进程能力和可读内核选项。非 Linux 如实返回 unsupported；命令不挂载文件系统、不加载 BPF、不更改网络，也不把环境信息当作透明代理就绪证明。
+
 ## 验证
 
 ```sh
@@ -64,4 +67,4 @@ pnpm test:e2e
 
 首次运行浏览器测试需要 `pnpm exec playwright install chromium`。测试会启动真实 Daemon，验证多页面导航、无账号访问、共享资源哈希、移动布局和状态准确性。`cargo test --workspace` 包含 Web 资源 crate，先执行 `pnpm build`；仅构建 CLI/Daemon 精简包则没有此要求。
 
-Linux 数据面需要实际内核环境与上游对象验证；macOS 的管理 API 测试或容器预检不能代替真实 eBPF 验收。
+Linux 数据面需要在实际内核环境验证本项目自研 eBPF 程序及真实出口；macOS 的管理 API 测试或容器预检不能代替真实 eBPF 验收。当前预检证据见 [Linux 预检验收](docs/validation/linux-preflight-2026-11-01.md)。
