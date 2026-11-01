@@ -270,7 +270,7 @@
       "acceptance": "实际转发计数；不解析HTTPS正文；主动断开范围明确；重连补快照、切页取消，不无限内存增长。",
       "issue": 18,
       "url": "https://github.com/go-laoji/honk-proxy-server/issues/18",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "id": "T14",
