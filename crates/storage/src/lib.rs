@@ -1,6 +1,7 @@
 //! Bounded asynchronous facade over one SQLite owner thread.
 pub mod controller;
 pub mod health;
+pub mod nodes;
 pub mod provider;
 use fs2::FileExt;
 use hps_config::DaemonConfig;
@@ -362,7 +363,7 @@ fn migrate(connection: &mut Connection, bootstrap: &str) -> Result<(), StorageEr
         [],
         |row| row.get(0),
     )?;
-    if version > 6 {
+    if version > 7 {
         return Err(StorageError::SchemaTooNew);
     }
     let transaction =
@@ -409,6 +410,13 @@ fn migrate(connection: &mut Connection, bootstrap: &str) -> Result<(), StorageEr
         transaction.execute_batch(include_str!("../migrations/0006_health.up.sql"))?;
         transaction.execute(
             "INSERT INTO schema_migrations(version,applied_at) VALUES(6,?1)",
+            [unix_now()],
+        )?;
+    }
+    if version < 7 {
+        transaction.execute_batch(include_str!("../migrations/0007_node_controls.up.sql"))?;
+        transaction.execute(
+            "INSERT INTO schema_migrations(version,applied_at) VALUES(7,?1)",
             [unix_now()],
         )?;
     }

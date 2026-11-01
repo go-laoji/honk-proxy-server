@@ -586,6 +586,7 @@ impl Supervisor {
                 enabled: plan.config().enabled,
                 remaining_secs: plan.remaining().map(|r| r.as_secs()),
                 eligible: plan.config().enabled
+                    && plan.operation().state.blocking_reason().is_none()
                     && plan
                         .remaining()
                         .is_none_or(|r| r > Duration::from_secs(plan.minimum_lifetime()))

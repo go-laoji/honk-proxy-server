@@ -3,6 +3,8 @@ mod selection;
 pub use selection::*;
 mod routing;
 pub use routing::*;
+mod nodes;
+pub use nodes::*;
 
 pub const API_VERSION: &str = "v1";
 

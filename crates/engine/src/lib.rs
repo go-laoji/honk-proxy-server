@@ -4,6 +4,7 @@ mod demand;
 pub mod dial;
 pub mod health;
 mod http_proxy;
+pub mod nodes;
 pub mod pool;
 pub mod routing;
 pub mod runtime;

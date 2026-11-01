@@ -127,6 +127,9 @@ impl Supervisor {
             .map_err(|_| ApplicationError::Worker)??;
         let engine = prepared.engine;
         engine.set_generation(workspace.desired.revision.id);
+        for control in store.node_controls().await? {
+            engine.node_registry().publish(control);
+        }
         engine.prepare_enabled(None).await?;
         let dns_server = dns::listener(&prepared.dns, None).await?;
         let capture = prepared.capture.ready(&prepared.dns).await?;

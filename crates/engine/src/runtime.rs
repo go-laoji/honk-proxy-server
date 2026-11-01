@@ -138,6 +138,7 @@ impl Engine {
             dialer.pool = old.dialer.pool.clone();
             dialer.demand = old.dialer.demand.clone();
             dialer.health = old.dialer.health.clone();
+            dialer.nodes = old.dialer.nodes.clone();
         }
         let mut preparation = Sha256::new();
         preparation.update(serde_json::to_vec(&config).map_err(|_| EngineError::Configuration)?);
@@ -269,6 +270,9 @@ impl Engine {
     }
     pub fn dynamic_pool(&self) -> Arc<crate::pool::DynamicPool> {
         self.dialer.pool.clone()
+    }
+    pub fn node_registry(&self) -> Arc<crate::nodes::NodeRegistry> {
+        self.dialer.nodes.clone()
     }
     pub fn set_provider_sources(&self, sources: std::collections::HashMap<String, String>) {
         self.dialer.set_sources(sources);
