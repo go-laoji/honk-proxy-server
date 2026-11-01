@@ -86,7 +86,8 @@ impl Dialer {
             .as_ref()
             .is_some_and(|(id, fp)| self.sources.read().unwrap().get(id) != Some(fp))
             || upstream.deadline.is_some_and(|deadline| {
-                deadline <= std::time::Instant::now() + Duration::from_secs(minimum)
+                deadline.saturating_duration_since(std::time::Instant::now())
+                    <= Duration::from_secs(minimum)
             })
         {
             return false;

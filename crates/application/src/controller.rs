@@ -67,7 +67,7 @@ impl Supervisor {
             } else {
                 0
             });
-        let cutoff = now.saturating_add(retirement as i64);
+        let cutoff = now.saturating_add(retirement.min(i64::MAX as u64) as i64);
         let future = cutoff.saturating_add(config.refill.forecast_secs as i64);
         let mut seen = HashSet::new();
         let deadlines = leases
