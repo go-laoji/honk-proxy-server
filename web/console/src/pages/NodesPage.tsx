@@ -47,6 +47,11 @@ export default function NodesPage() {
   const [reviewed, setReviewed] = useState<ImportRequest | null>(null);
   const generation = useRef(0);
   const params = new URLSearchParams(query);
+  const pageSizes = Array.from(
+    new Set([20, 50, 100, 200, Number(params.get("limit") ?? 50)]),
+  )
+    .filter((n) => Number.isInteger(n) && n >= 1 && n <= 200)
+    .sort((a, b) => a - b);
   const selectedId = params.get("id");
   useEffect(() => {
     const pop = () => setQuery(window.location.search);
@@ -358,7 +363,7 @@ export default function NodesPage() {
               name="limit"
               defaultValue={params.get("limit") ?? "50"}
             >
-              {[20, 50, 100, 200].map((n) => (
+              {pageSizes.map((n) => (
                 <option key={n}>{n}</option>
               ))}
             </select>
@@ -580,7 +585,12 @@ export default function NodesPage() {
                   ["标签", selected.tags.join("、") || "无"],
                   [
                     "业务拨号与连接",
-                    `${selected.active_connections}，探测不计入`,
+                    <a
+                      className="text-blue-600"
+                      href={`./connections.html?node=${encodeURIComponent(selected.id)}`}
+                    >
+                      {selected.active_connections}，查看业务交换 / 隧道 →
+                    </a>,
                   ],
                   [
                     "能力",
