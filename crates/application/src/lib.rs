@@ -827,6 +827,14 @@ fn prepare_engine(
             .map(|p| (p.id.clone(), hps_provider::fingerprint(p)))
             .collect(),
     );
+    engine.set_provider_source_protocols(
+        config
+            .providers
+            .iter()
+            .filter(|p| p.enabled)
+            .map(|p| (p.id.clone(), p.protocol))
+            .collect(),
+    );
     if engine.status().inbounds.iter().any(|entry| {
         entry
             .certificate

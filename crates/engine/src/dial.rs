@@ -68,6 +68,8 @@ pub struct Dialer {
     pub(crate) health: Arc<crate::health::HealthRegistry>,
     policy: std::sync::RwLock<crate::health::HealthPolicy>,
     sources: std::sync::RwLock<std::collections::HashMap<String, String>>,
+    source_protocols: std::sync::RwLock<std::collections::HashMap<String, ProxyProtocol>>,
+    refill_fingerprint: String,
     selector: crate::selection::Selector,
     router: crate::routing::Router,
     revision: std::sync::atomic::AtomicI64,
@@ -210,6 +212,12 @@ impl Dialer {
         }
     }
     pub fn new(config: &ProxyConfig) -> Result<Self, ProxyError> {
+        let mut scope = Sha256::new();
+        scope.update(
+            serde_json::to_vec(&(&config.selection, &config.routing, &config.inbounds))
+                .map_err(|_| ProxyError::RuleConfiguration)?,
+        );
+        let refill_fingerprint = format!("{:x}", scope.finalize());
         let router = crate::routing::Router::compile(
             config,
             crate::routing::RoutingCapabilities::default(),
@@ -226,6 +234,8 @@ impl Dialer {
             health: Arc::new(crate::health::HealthRegistry::default()),
             policy: Default::default(),
             sources: std::sync::RwLock::new(std::collections::HashMap::new()),
+            source_protocols: Default::default(),
+            refill_fingerprint,
             selector: crate::selection::Selector::new(config.selection.clone()),
             router,
             revision: Default::default(),
@@ -296,6 +306,22 @@ impl Dialer {
     }
     pub fn set_sources(&self, sources: std::collections::HashMap<String, String>) {
         *self.sources.write().unwrap() = sources;
+    }
+    pub fn set_source_protocols(
+        &self,
+        protocols: std::collections::HashMap<String, ProxyProtocol>,
+    ) {
+        *self.source_protocols.write().unwrap() = protocols;
+    }
+    pub fn source_demand(&self, id: &str) -> (bool, Option<Duration>) {
+        self.sources
+            .read()
+            .unwrap()
+            .get(id)
+            .map_or((false, None), |fp| {
+                self.demand
+                    .source(id, &format!("{fp}:{}", self.refill_fingerprint))
+            })
     }
     pub fn eligible_count(&self) -> usize {
         self.selection(&hps_domain::SelectionQuery::default())
@@ -515,7 +541,19 @@ impl Dialer {
             hps_domain::RouteAction::Group { id } => query.group = Some(id.clone()),
             _ => {}
         }
-        let demand = self.demand.begin();
+        let refill_sources = {
+            let sources = self.sources.read().unwrap();
+            let protocols = self.source_protocols.read().unwrap();
+            sources
+                .iter()
+                .filter(|(id, _)| {
+                    self.selector
+                        .allows_refill(&query, id, protocols.get(*id).copied())
+                })
+                .map(|(id, fp)| (id.clone(), format!("{fp}:{}", self.refill_fingerprint)))
+                .collect()
+        };
+        let demand = self.demand.begin(refill_sources);
         let (_, upstream) = self.select(&query, true);
         let upstream = upstream.ok_or(ProxyError::NoUpstream)?;
         if remaining(&upstream).is_some_and(|r| {

@@ -240,6 +240,15 @@ impl Engine {
     pub fn demand_age(&self) -> Option<Duration> {
         self.dialer.demand.age()
     }
+    pub fn source_demand(&self, id: &str) -> (bool, Option<Duration>) {
+        self.dialer.source_demand(id)
+    }
+    pub fn set_provider_source_protocols(
+        &self,
+        protocols: std::collections::HashMap<String, ProxyProtocol>,
+    ) {
+        self.dialer.set_source_protocols(protocols);
+    }
     pub fn dynamic_pool(&self) -> Arc<crate::pool::DynamicPool> {
         self.dialer.pool.clone()
     }

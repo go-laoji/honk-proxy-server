@@ -113,11 +113,9 @@ impl Supervisor {
                 100000
             })
             .collect::<Vec<_>>();
-        let demand_active = current.engine.has_active_demand()
-            || current
-                .engine
-                .demand_age()
-                .is_some_and(|age| age <= Duration::from_secs(config.refill.idle_timeout_secs));
+        let (active, age) = current.engine.source_demand(&config.id);
+        let demand_active = active
+            || age.is_some_and(|age| age <= Duration::from_secs(config.refill.idle_timeout_secs));
         let clock_wrong = now > hps_provider::unix_now().saturating_add(5);
         let inventory = Inventory {
             current: deadlines.len() as u32,

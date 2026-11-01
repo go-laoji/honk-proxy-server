@@ -35,6 +35,42 @@ pub(crate) struct Selector {
     state: Mutex<State>,
 }
 impl Selector {
+    pub fn allows_refill(
+        &self,
+        query: &SelectionQuery,
+        provider: &str,
+        protocol: Option<hps_config::ProxyProtocol>,
+    ) -> bool {
+        if query.node.is_some() || self.state.lock().unwrap().retired {
+            return false;
+        }
+        let group = query
+            .group
+            .as_ref()
+            .or_else(|| {
+                query
+                    .inbound
+                    .as_ref()
+                    .and_then(|i| self.config.inbound_groups.get(i))
+            })
+            .or(self.config.default_group.as_ref());
+        let Some(id) = group else {
+            return true;
+        };
+        let Some(group) = self.config.groups.iter().find(|g| &g.id == id) else {
+            return false;
+        };
+        group.pinned_node.is_none()
+            && (group.include_all || group.providers.iter().any(|id| id == provider))
+            && (group.protocols.is_empty()
+                || protocol.is_some_and(|p| group.protocols.contains(&p)))
+            && group.tags.iter().all(|tag| {
+                self.config
+                    .provider_tags
+                    .get(provider)
+                    .is_some_and(|tags| tags.contains(tag))
+            })
+    }
     pub fn new(config: SelectionConfig) -> Self {
         Self {
             config,
@@ -453,6 +489,11 @@ mod tests {
         let mut g = group(GroupStrategy::Fixed);
         g.pinned_node = Some("a".into());
         let s = selector(g.clone());
+        assert!(!s.allows_refill(
+            &SelectionQuery::default(),
+            "source",
+            Some(ProxyProtocol::Http)
+        ));
         let mut nodes = choices();
         nodes[0].reasons.push("disabled".into());
         assert!(

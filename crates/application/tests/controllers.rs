@@ -168,6 +168,93 @@ async fn demand(app: &Arc<Supervisor>) {
     drop(client);
 }
 #[tokio::test]
+async fn group_and_rule_demand_only_refills_sources_that_can_supply_future_candidates() {
+    let selected = server(Mode::Good(300), None).await;
+    let unrelated = server(Mode::Good(300), None).await;
+    let mut cfg = config(&selected, RefillMode::OnDemand);
+    let mut other = cfg.providers[0].clone();
+    other.id = "other".into();
+    other.name = "other".into();
+    other.endpoint = format!("http://{}/extract", unrelated.address);
+    let mut wrong = other.clone();
+    wrong.id = "wrong-protocol".into();
+    wrong.name = "wrong-protocol".into();
+    wrong.protocol = ProxyProtocol::Socks5;
+    cfg.providers.extend([other, wrong]);
+    cfg.proxy.selection = hps_config::SelectionConfig {
+        default_group: Some("chosen".into()),
+        groups: vec![hps_config::GroupConfig {
+            id: "chosen".into(),
+            providers: vec!["source".into(), "wrong-protocol".into()],
+            protocols: vec![ProxyProtocol::Http],
+            tags: vec!["preferred".into()],
+            ..Default::default()
+        }],
+        provider_tags: std::collections::BTreeMap::from([
+            ("source".into(), vec!["preferred".into()]),
+            ("wrong-protocol".into(), vec!["preferred".into()]),
+        ]),
+        ..Default::default()
+    };
+    let group_app = app(cfg).await;
+    demand(&group_app).await;
+    until(async || selected.mock.calls.load(Ordering::Relaxed) > 0).await;
+    for id in ["other", "wrong-protocol"] {
+        let state = group_app.provider_controller(id).await.unwrap();
+        assert!(!state.demand_active);
+        assert_eq!(state.used_requests, 0);
+    }
+    assert_eq!(unrelated.mock.calls.load(Ordering::Relaxed), 0);
+    let mut changed = group_app.current().config.clone();
+    changed.proxy.routing.default_action = hps_domain::RouteAction::Direct;
+    let before = group_app.current().revision;
+    let revision = group_app
+        .create_revision(hps_domain::ConfigInput {
+            toml: toml::to_string(&changed).unwrap(),
+            expected_revision: before,
+            expected_draft_version: None,
+            note: "direct-only demand scope".into(),
+            use_draft_credentials: false,
+        })
+        .await
+        .unwrap();
+    group_app
+        .activate(hps_domain::ConfigActivate {
+            revision: revision.id,
+            expected_revision: before,
+            defer_until_restart: false,
+        })
+        .await
+        .unwrap();
+    assert!(
+        !group_app
+            .provider_controller("source")
+            .await
+            .unwrap()
+            .demand_active
+    );
+    group_app.shutdown().await.unwrap();
+
+    let vendor = server(Mode::Good(300), None).await;
+    let mut cfg = config(&vendor, RefillMode::OnDemand);
+    let mut pinned = support::upstream("127.0.0.1:9".parse().unwrap(), ProxyProtocol::Http);
+    pinned.enabled = false;
+    cfg.proxy.routing.default_action = hps_domain::RouteAction::Node {
+        id: pinned.id.clone(),
+    };
+    cfg.proxy.upstreams.push(pinned);
+    let app = app(cfg).await;
+    demand(&app).await;
+    assert!(
+        !app.provider_controller("source")
+            .await
+            .unwrap()
+            .demand_active
+    );
+    assert_eq!(vendor.mock.calls.load(Ordering::Relaxed), 0);
+    app.shutdown().await.unwrap();
+}
+#[tokio::test]
 async fn on_demand_refill_uses_real_dial_signal_hysteresis_inflight_and_requested_quantities() {
     let gate = Arc::new(Notify::new());
     let vendor = server(Mode::Good(300), Some(gate.clone())).await;
