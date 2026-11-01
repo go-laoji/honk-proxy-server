@@ -1,5 +1,7 @@
 //! Versioned plain-data boundary shared by our Rust hooks and loader.
 #![no_std]
+mod dns;
+pub use dns::*;
 pub const ABI_VERSION: u32 = 1;
 pub const FLAG_DENY_TEST_PORT: u32 = 1;
 pub const OBSERVATION_CAPACITY: u32 = 128;
