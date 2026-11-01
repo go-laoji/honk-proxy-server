@@ -62,3 +62,20 @@ export async function getJson<T>(
   }
   return response.json() as Promise<T>;
 }
+
+export async function postJson<T>(path: string): Promise<T> {
+  if (isDesktop) return native<T>("api_post", { path });
+  const response = await fetch(new URL(path, await endpoint()), {
+    method: "POST",
+    credentials: "omit",
+  });
+  if (!response.ok) {
+    const error: unknown = await response.json().catch(() => null);
+    throw new Error(
+      error && typeof error === "object" && "message" in error
+        ? String(error.message)
+        : `操作失败（${response.status}）`,
+    );
+  }
+  return response.json() as Promise<T>;
+}

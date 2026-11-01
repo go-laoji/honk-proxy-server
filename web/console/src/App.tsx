@@ -32,6 +32,7 @@ import Overview from "./pages/Overview";
 import ConnectPage from "./pages/ConnectPage";
 import SettingsPage from "./pages/SettingsPage";
 import LinuxPage from "./pages/LinuxPage";
+import InboundsPage from "./pages/InboundsPage";
 
 const icons: Record<
   string,
@@ -239,6 +240,8 @@ export default function App() {
               <SettingsPage data={service.data} />
             ) : current.id === "linux" ? (
               <LinuxPage data={service.data} />
+            ) : current.id === "inbounds" ? (
+              <InboundsPage data={service.data} refresh={service.refresh} />
             ) : (
               <section className="panel px-6 py-16 text-center">
                 <div className="mx-auto mb-5 flex size-14 items-center justify-center rounded-2xl bg-slate-50 text-slate-400 dark:bg-slate-800">

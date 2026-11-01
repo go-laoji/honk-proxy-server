@@ -1,12 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { endpoint, getJson } from "./platform";
-import type { Capabilities, DaemonConfig, ServiceStatus } from "./types";
+import type {
+  Capabilities,
+  DaemonConfig,
+  ServiceStatus,
+  ProxyStatus,
+} from "./types";
 
 export interface ServiceData {
   endpoint: string;
   status: ServiceStatus;
   capabilities: Capabilities;
   config: DaemonConfig;
+  proxy: ProxyStatus;
 }
 
 export function useService() {
@@ -21,23 +27,25 @@ export function useService() {
     setLoading(true);
     setError("");
     try {
-      const [address, status, capabilities, config] = await Promise.all([
+      const [address, status, capabilities, config, proxy] = await Promise.all([
         endpoint(),
         getJson<ServiceStatus>("api/v1/status", current.signal),
         getJson<Capabilities>("api/v1/capabilities", current.signal),
         getJson<DaemonConfig>("api/v1/config", current.signal),
+        getJson<ProxyStatus>("api/v1/inbounds", current.signal),
       ]);
       if (
         status?.version?.api_version !== "v1" ||
         !capabilities?.linux_ebpf ||
-        typeof config?.management_listen !== "string"
+        typeof config?.management_listen !== "string" ||
+        !Array.isArray(proxy?.inbounds)
       ) {
         throw new Error(
           "目标服务返回了不兼容的数据，请检查服务地址与 API 版本",
         );
       }
       if (!current.signal.aborted)
-        setData({ endpoint: address, status, capabilities, config });
+        setData({ endpoint: address, status, capabilities, config, proxy });
     } catch (cause) {
       if (!current.signal.aborted) {
         setData(null);

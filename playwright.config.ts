@@ -10,7 +10,8 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
   webServer: {
-    command: "cargo run --locked -p hps-daemon -- --listen 127.0.0.1:17991",
+    command:
+      "cargo run --locked -p hps-daemon -- --config tests/fixtures/console.toml --listen 127.0.0.1:17991",
     url: "http://127.0.0.1:17991/healthz",
     reuseExistingServer: false,
     timeout: 120_000,
