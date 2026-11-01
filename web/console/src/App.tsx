@@ -1,4 +1,4 @@
-import { useState, useEffect, type ComponentType } from "react";
+import { useState, useEffect, lazy, Suspense, type ComponentType } from "react";
 import {
   Activity,
   ArrowDownUp,
@@ -33,6 +33,7 @@ import ConnectPage from "./pages/ConnectPage";
 import SettingsPage from "./pages/SettingsPage";
 import LinuxPage from "./pages/LinuxPage";
 import InboundsPage from "./pages/InboundsPage";
+const ConfigPage = lazy(() => import("./pages/ConfigPage"));
 
 const icons: Record<
   string,
@@ -236,7 +237,11 @@ export default function App() {
           ) : service.data ? (
             current.id === "overview" ? (
               <Overview data={service.data} />
-            ) : current.id === "settings" || current.id === "config" ? (
+            ) : current.id === "config" ? (
+              <Suspense fallback={<p className="muted">正在打开配置工作台…</p>}>
+                <ConfigPage refreshService={service.refresh} />
+              </Suspense>
+            ) : current.id === "settings" ? (
               <SettingsPage data={service.data} />
             ) : current.id === "linux" ? (
               <LinuxPage data={service.data} />
