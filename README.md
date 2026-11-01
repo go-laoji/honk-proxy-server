@@ -1,6 +1,6 @@
 # honk-proxy-server
 
-自主实现的 Rust 代理池服务，提供独立 CLI、无桌面 Daemon 和共享 React/Tailwind 多页面控制台。当前已交付 HTTP/CONNECT、HTTPS 代理与 SOCKS5 TCP、配置版本、短效供应商提取、批次租约、预算补池和统一健康检测；自研 eBPF hook 已在实际 6.12 LTS 与 7.0 内核验证，分组路由和 Linux 透明转发仍在开发。
+自主实现的 Rust 代理池服务，提供独立 CLI、无桌面 Daemon 和共享 React/Tailwind 多页面控制台。当前已交付 HTTP/CONNECT、HTTPS 代理与 SOCKS5 TCP、配置版本、短效供应商提取、批次租约、预算补池、健康、DNS、分组和显式规则路由；自研 eBPF DNS hook 已在实际 6.12 LTS 与 7.0 内核验证，Linux 完整透明转发及本机进程选路仍在开发。
 
 honk 仅作为能力参考；项目不集成其 crate、二进制或 fork。
 
@@ -60,6 +60,8 @@ Daemon 默认把配置保存在 `.hps/hps.sqlite3`，可通过 `--data-dir` 指�
 [DNS](docs/dns-usage.md) 支持 System/UDP/TCP/DoT/DoH、按用途和域名选路、正负 TTL 缓存、诊断及清理。System 不虚构 TTL；可选静态代理承载 TCP DNS。Linux 自有八个 eBPF hook 已实际验证双栈 TCP/UDP DNS 捕获、对端地址恢复和服务生命周期；默认不开启监听或捕获，完整透明转发仍由 T15 交付。
 
 [节点分组](docs/groups-usage.md) 支持成员/来源/标签过滤、固定与显式回退、健康延迟优选、轮询和加权轮询，三个代理入口共用同一选择器。会话固定受健康和剩余寿命约束；CLI 与共享 MPA 可以管理、预览候选并解释排除原因，模拟不产生网络和补池副作用。
+
+[规则路由](docs/routing-rules-usage.md) 支持首条命中的域名/CIDR/端口/传输/入口/来源组合，执行节点、组、明确直连或拒绝。共享规则页与 CLI 将候选保存和显式激活分开，提供排序、引用校验和无网络副作用的模拟。Linux 进程来源及内核原子版本继续与完整透明数据面联合验收，当前不伪报可用。
 
 前端在 `web/console`，包含 18 个实际 HTML 入口。原始未使用的演示素材未纳入版本管理。连接、运行概览、代理入口、启动设置与 eBPF 状态读取真实 Daemon API；尚未实现的业务模块明确显示不可用，不使用演示节点填充。
 
