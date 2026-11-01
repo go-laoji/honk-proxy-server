@@ -223,7 +223,7 @@
       "acceptance": "无账号条件或功能权限；模拟与实际决策一致；用户态和eBPF原子版本一致；目标不支持条件不能误显示支持。",
       "issue": 16,
       "url": "https://github.com/go-laoji/honk-proxy-server/issues/16",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "id": "T12",

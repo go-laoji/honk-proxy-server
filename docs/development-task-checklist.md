@@ -33,7 +33,7 @@ T05 配置基础后推进 T06/T07 短效 API 与补池。T08–T14 逐步闭合�
 | T08 | P0 | [#13](https://github.com/go-laoji/honk-proxy-server/issues/13) 统一健康检测与真实流量反馈 | T04, T06 | 已完成 |
 | T09 | P0 | [#14](https://github.com/go-laoji/honk-proxy-server/issues/14) DNS 上游、路由、缓存与诊断 | T03, T05, T04 | 实现与内核验收完成，窗口待验收 |
 | T10 | P0 | [#15](https://github.com/go-laoji/honk-proxy-server/issues/15) 节点分组、选点、固定与租约准入 | T04, T06, T08 | 实现与自动化验收完成，窗口待验收 |
-| T11 | P0 | [#16](https://github.com/go-laoji/honk-proxy-server/issues/16) 规则 CRUD、模拟与一致性发布 | T05, T09, T10 | 待开发 |
+| T11 | P0 | [#16](https://github.com/go-laoji/honk-proxy-server/issues/16) 规则 CRUD、模拟与一致性发布 | T05, T09, T10 | 开发中 |
 | T12 | P0 | [#17](https://github.com/go-laoji/honk-proxy-server/issues/17) 节点管理与来源详情控制台闭环 | T02, T06, T08, T10 | 待开发 |
 | T13 | P0 | [#18](https://github.com/go-laoji/honk-proxy-server/issues/18) 活跃连接、流量统计与路由解释 | T04, T10, T11 | 待开发 |
 | T14 | P0 | [#19](https://github.com/go-laoji/honk-proxy-server/issues/19) 后台任务、SSE 与结构化事件 | T05, T06 | 待开发 |
