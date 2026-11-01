@@ -239,7 +239,10 @@ impl Supervisor {
             for offset in 0..plans.len().min(5000) {
                 let plan = &plans[(start + offset) % plans.len()];
                 scanned += 1;
-                if !plan.config().enabled || !self.probe_lifetime_ok(plan, config) {
+                if !plan.config().enabled
+                    || plan.operation().state.blocking_reason().is_some()
+                    || !self.probe_lifetime_ok(plan, config)
+                {
                     continue;
                 }
                 for profile in &current.health_profiles {

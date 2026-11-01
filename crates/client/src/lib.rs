@@ -188,6 +188,55 @@ impl HpsClient {
     ) -> Result<hps_domain::SelectionDecision, ClientError> {
         self.post_body("api/v1/groups/simulate", input).await
     }
+    pub async fn nodes(
+        &self,
+        query: &hps_domain::NodeQuery,
+    ) -> Result<hps_domain::NodesOverview, ClientError> {
+        let mut url = self
+            .endpoint
+            .join("api/v1/nodes")
+            .map_err(|_| ClientError::InvalidEndpoint)?;
+        if let serde_json::Value::Object(fields) = serde_json::to_value(query).expect("node query")
+        {
+            let mut pairs = url.query_pairs_mut();
+            for (key, value) in fields {
+                if !value.is_null() {
+                    pairs.append_pair(
+                        &key,
+                        &match value {
+                            serde_json::Value::String(s) => s,
+                            other => other.to_string(),
+                        },
+                    );
+                }
+            }
+        }
+        Self::decode(self.http.get(url).send().await?).await
+    }
+    pub async fn node(&self, id: &str) -> Result<hps_domain::NodesOverview, ClientError> {
+        if !hps_config::valid_node_id(id) {
+            return Err(ClientError::InvalidEndpoint);
+        }
+        self.get_json(&format!("api/v1/nodes/{id}")).await
+    }
+    pub async fn node_action(
+        &self,
+        input: &hps_domain::NodeActionInput,
+    ) -> Result<hps_domain::NodeActionResult, ClientError> {
+        self.post_body("api/v1/nodes/action", input).await
+    }
+    pub async fn preview_nodes(
+        &self,
+        input: &hps_domain::NodeImportInput,
+    ) -> Result<hps_domain::NodeImportPreview, ClientError> {
+        self.post_body("api/v1/nodes/import/preview", input).await
+    }
+    pub async fn import_nodes(
+        &self,
+        input: &hps_domain::NodeImportInput,
+    ) -> Result<hps_domain::ConfigActivationResult, ClientError> {
+        self.post_body("api/v1/nodes/import/apply", input).await
+    }
     pub async fn save_groups(
         &self,
         input: &hps_config::SelectionSave,

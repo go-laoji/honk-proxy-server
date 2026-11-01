@@ -61,6 +61,9 @@ impl NodeRegistry {
     pub fn active(&self, id: &str) -> usize {
         self.0.lock().unwrap().active.get(id).copied().unwrap_or(0)
     }
+    pub fn total_active(&self) -> usize {
+        self.0.lock().unwrap().active.values().sum()
+    }
     /// Serializes admission with restriction publication. Already admitted dials drain naturally.
     pub(crate) fn begin(self: &Arc<Self>, id: &str) -> Option<NodeGuard> {
         let mut state = self.0.lock().unwrap();

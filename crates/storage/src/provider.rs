@@ -13,6 +13,20 @@ pub struct StoredLease {
     pub received_at: i64,
     pub state: String,
 }
+/// Compact inventory projection. Vendor credentials and TLS file contents never enter this query.
+#[derive(Debug, Clone)]
+pub struct NodeInventoryLease {
+    pub id: i64,
+    pub batch_id: i64,
+    pub provider_id: String,
+    pub fingerprint: String,
+    pub upstream: hps_config::UpstreamConfig,
+    pub has_credentials: bool,
+    pub received_at: i64,
+    pub state: String,
+    pub expiry_basis: String,
+    pub region: Option<String>,
+}
 impl StoredLease {
     pub fn info(&self, now: i64) -> LeaseInfo {
         LeaseInfo {
@@ -234,6 +248,22 @@ impl Store {
     }
     pub async fn active_leases(&self) -> Result<Vec<StoredLease>, StorageError> {
         self.call(move|c|Ok(c.prepare("SELECT id,batch_id,provider_id,fingerprint,document,received_at,state FROM provider_leases WHERE state='active' AND expires_at>?1 ORDER BY id DESC LIMIT 100000")?.query_map([unix_now()],lease)?.collect::<Result<Vec<_>,_>>()?)).await
+    }
+    /// Live inventory first, then bounded retired history. Raw documents stay inside Rust.
+    pub async fn node_inventory_leases(&self) -> Result<Vec<NodeInventoryLease>, StorageError> {
+        self.call(|c| Ok(c.prepare("SELECT id,batch_id,provider_id,fingerprint,received_at,state,expires_at,json_extract(document,'$.upstream.protocol'),json_extract(document,'$.upstream.host'),json_extract(document,'$.upstream.port'),json_extract(document,'$.upstream.enabled'),coalesce(json_type(document,'$.upstream.credentials')='object',0),substr(json_extract(document,'$.expiry_basis'),1,128),substr(json_extract(document,'$.region'),1,256) FROM provider_leases ORDER BY CASE WHEN state='active' AND expires_at>?1 THEN 0 ELSE 1 END,id DESC LIMIT 200001")?.query_map([unix_now()],|r| {
+            let protocol:String=r.get(7)?;
+            let protocol=match protocol.as_str(){"http"=>hps_config::ProxyProtocol::Http,"https"=>hps_config::ProxyProtocol::Https,"socks5"=>hps_config::ProxyProtocol::Socks5,_=>return Err(rusqlite::Error::InvalidQuery)};
+            let id:i64=r.get(0)?;
+            Ok(NodeInventoryLease {
+                id,batch_id:r.get(1)?,provider_id:r.get(2)?,fingerprint:r.get(3)?,received_at:r.get(4)?,state:r.get(5)?,
+                upstream:hps_config::UpstreamConfig {id:format!("lease:{id}"),protocol,host:r.get(8)?,port:r.get(9)?,enabled:r.get(10)?,credentials:None,expires_at_unix:Some(r.get::<_,i64>(6)? as u64),ca_certificate:None,tls_server_name:None},
+                has_credentials:r.get(11)?,expiry_basis:r.get(12)?,region:r.get(13)?,
+            })
+        })?.collect::<Result<Vec<_>,_>>()?)).await
+    }
+    pub async fn node_lease(&self, id: i64) -> Result<StoredLease, StorageError> {
+        self.call(move |c| c.query_row("SELECT id,batch_id,provider_id,fingerprint,document,received_at,state FROM provider_leases WHERE id=?1",[id],lease).optional()?.ok_or(StorageError::NotFound)).await
     }
     pub async fn provider_leases(
         &self,

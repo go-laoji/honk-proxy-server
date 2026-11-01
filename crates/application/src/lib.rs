@@ -4,6 +4,8 @@ mod dns_capture;
 pub use dns::DnsOverview;
 mod groups;
 mod health;
+mod node_import;
+mod nodes;
 mod providers;
 mod rules;
 use arc_swap::ArcSwap;
@@ -22,6 +24,8 @@ use std::{
 
 #[derive(Debug, thiserror::Error)]
 pub enum ApplicationError {
+    #[error("too many concurrent node inventory operations")]
+    NodeCapacity,
     #[error("rule not found")]
     RuleUnavailable,
     #[error(
@@ -109,6 +113,7 @@ pub struct Supervisor {
     provider_cancel: tokio_util::sync::CancellationToken,
     provider_slots: Arc<tokio::sync::Semaphore>,
     rule_diagnostics: Arc<tokio::sync::Semaphore>,
+    node_operations: Arc<tokio::sync::Semaphore>,
     controller_started: std::sync::atomic::AtomicBool,
     health: health::HealthRuntime,
 }
@@ -164,6 +169,7 @@ impl Supervisor {
             provider_cancel: tokio_util::sync::CancellationToken::new(),
             provider_slots: Arc::new(tokio::sync::Semaphore::new(8)),
             rule_diagnostics: Arc::new(tokio::sync::Semaphore::new(4)),
+            node_operations: Arc::new(tokio::sync::Semaphore::new(4)),
             controller_started: std::sync::atomic::AtomicBool::new(false),
             health: Default::default(),
         });

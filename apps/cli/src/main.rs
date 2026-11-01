@@ -58,6 +58,10 @@ enum Command {
         #[command(subcommand)]
         command: RuleCommand,
     },
+    Node {
+        #[command(subcommand)]
+        command: NodeCommand,
+    },
     Provider {
         #[command(subcommand)]
         command: ProviderCommand,
@@ -131,6 +135,66 @@ enum DnsCommand {
         path: PathBuf,
         #[arg(long)]
         expected_revision: i64,
+    },
+}
+#[derive(clap::Args)]
+struct NodeActionArgs {
+    id: String,
+    #[arg(long)]
+    expected_revision: i64,
+    #[arg(long)]
+    expected_control_version: i64,
+}
+#[derive(clap::Args)]
+struct NodeImportArgs {
+    path: PathBuf,
+    #[arg(long,default_value="lines",value_parser=["lines","json"])]
+    format: String,
+    #[arg(long,default_value="http",value_parser=["http","https","socks5"])]
+    protocol: String,
+    #[arg(long)]
+    expected_revision: i64,
+    #[arg(long, value_delimiter = ',')]
+    rows: Vec<u32>,
+}
+#[derive(Subcommand)]
+enum NodeCommand {
+    List {
+        #[arg(long)]
+        search: Option<String>,
+        #[arg(long)]
+        provider: Option<String>,
+        #[arg(long)]
+        group: Option<String>,
+        #[arg(long)]
+        protocol: Option<String>,
+        #[arg(long)]
+        capability: Option<String>,
+        #[arg(long)]
+        state: Option<String>,
+        #[arg(long)]
+        remaining_max_secs: Option<u64>,
+        #[arg(long)]
+        sort: Option<String>,
+        #[arg(long, default_value_t = 0)]
+        offset: u32,
+        #[arg(long, default_value_t = 50)]
+        limit: u32,
+    },
+    Show {
+        id: String,
+    },
+    Enable(NodeActionArgs),
+    Disable(NodeActionArgs),
+    Drain(NodeActionArgs),
+    /// Recoverably suppress only this node; other leases and active sockets remain.
+    Delete(NodeActionArgs),
+    ImportPreview(NodeImportArgs),
+    ImportApply {
+        #[command(flatten)]
+        input: NodeImportArgs,
+        #[arg(long)]
+        checksum: String,
     },
 }
 #[derive(Subcommand)]
@@ -549,6 +613,91 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
             }
             InboundCommand::Stop { id } => {
                 serde_json::to_value(client.stop_inbound(id).await.map_err(client_error)?)
+            }
+        },
+        Command::Node { command } => match command {
+            NodeCommand::List {
+                search,
+                provider,
+                group,
+                protocol,
+                capability,
+                state,
+                remaining_max_secs,
+                sort,
+                offset,
+                limit,
+            } => serde_json::to_value(
+                client
+                    .nodes(&hps_domain::NodeQuery {
+                        id: None,
+                        search: search.clone(),
+                        provider: provider.clone(),
+                        group: group.clone(),
+                        protocol: protocol.clone(),
+                        capability: capability.clone(),
+                        state: state.clone(),
+                        remaining_max_secs: *remaining_max_secs,
+                        sort: sort.clone(),
+                        offset: *offset,
+                        limit: Some(*limit),
+                    })
+                    .await
+                    .map_err(client_error)?,
+            ),
+            NodeCommand::Show { id } => {
+                serde_json::to_value(client.node(id).await.map_err(client_error)?)
+            }
+            NodeCommand::Enable(input)
+            | NodeCommand::Disable(input)
+            | NodeCommand::Drain(input)
+            | NodeCommand::Delete(input) => {
+                let detail = client.node(&input.id).await.map_err(client_error)?;
+                let node = detail
+                    .nodes
+                    .first()
+                    .ok_or_else(|| (2, "node not found".into()))?;
+                let action = match command {
+                    NodeCommand::Enable(_) => "enable",
+                    NodeCommand::Disable(_) => "disable",
+                    NodeCommand::Drain(_) => "drain",
+                    _ => "delete",
+                };
+                serde_json::to_value(
+                    client
+                        .node_action(&hps_domain::NodeActionInput {
+                            id: input.id.clone(),
+                            action: action.into(),
+                            expected_revision: input.expected_revision,
+                            expected_control_version: input.expected_control_version,
+                            lease_id: node.lease_id,
+                            batch_id: node.batch_id,
+                            provider_id: node.provider_id.clone(),
+                        })
+                        .await
+                        .map_err(client_error)?,
+                )
+            }
+            NodeCommand::ImportPreview(input) | NodeCommand::ImportApply { input, .. } => {
+                let request = hps_domain::NodeImportInput {
+                    document: read_policy_file(&input.path)?,
+                    format: input.format.clone(),
+                    default_protocol: input.protocol.clone(),
+                    expected_revision: input.expected_revision,
+                    preview_checksum: match command {
+                        NodeCommand::ImportApply { checksum, .. } => Some(checksum.clone()),
+                        _ => None,
+                    },
+                    selected_rows: input.rows.clone(),
+                };
+                match command {
+                    NodeCommand::ImportPreview(_) => serde_json::to_value(
+                        client.preview_nodes(&request).await.map_err(client_error)?,
+                    ),
+                    _ => serde_json::to_value(
+                        client.import_nodes(&request).await.map_err(client_error)?,
+                    ),
+                }
             }
         },
         Command::Rule { command } => match command {
