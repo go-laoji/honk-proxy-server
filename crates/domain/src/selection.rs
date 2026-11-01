@@ -15,6 +15,8 @@ pub struct SelectionQuery {
     pub group: Option<String>,
     pub inbound: Option<String>,
     pub source_ip: Option<IpAddr>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_port: Option<u16>,
     pub destination_host: Option<String>,
     pub destination_port: Option<u16>,
     pub transport: SelectionTransport,

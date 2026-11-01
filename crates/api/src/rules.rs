@@ -142,6 +142,7 @@ mod tests {
                 destination_port: 443,
                 transport: SelectionTransport::Tcp,
                 source_ip: None,
+                source_port: None,
                 inbound: None,
                 inbound_protocol: None,
                 observed_domains: vec![],

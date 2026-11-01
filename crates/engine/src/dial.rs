@@ -187,6 +187,7 @@ pub struct Connected {
     pub absolute_form: bool,
     pub proxy_authorization: Option<HeaderValue>,
     pub routing: Option<hps_domain::RouteDecision>,
+    pub observation: Option<crate::connections::ConnectionGuard>,
 }
 impl Dialer {
     pub(crate) fn preserve_static_deadlines(&mut self, previous: &Self) {
@@ -363,6 +364,7 @@ impl Dialer {
             destination_port: target.port,
             transport: context.transport,
             source_ip: context.source_ip,
+            source_port: context.source_port,
             inbound: context.inbound.clone(),
             inbound_protocol: context
                 .inbound
@@ -383,6 +385,7 @@ impl Dialer {
         let mut query = hps_domain::SelectionQuery {
             inbound: context.inbound.clone(),
             source_ip: context.source_ip,
+            source_port: context.source_port,
             destination_host: Some(context.destination_host.clone()),
             destination_port: Some(context.destination_port),
             transport: context.transport,
@@ -533,6 +536,53 @@ impl Dialer {
         let decision = self
             .router
             .evaluate(context, self.revision.load(Ordering::Acquire), false);
+        let observation = self
+            .nodes
+            .observe(context.clone(), decision.clone())
+            .ok_or(ProxyError::LocalResource)?;
+        let cancelled = observation.cancellation();
+        let outcome = tokio::select! {biased;
+            _=cancelled.cancelled()=>Err(ProxyError::Disconnected),
+            result=self.connect_decided(target,http_forward,context,&decision,&observation)=>result,
+        };
+        match outcome {
+            Ok(mut connected) => {
+                observation.open();
+                connected.io = observation.wrap(connected.io);
+                connected.observation = Some(observation);
+                Ok(connected)
+            }
+            Err(error) => {
+                let (phase, code, rejected) = match &error {
+                    ProxyError::Rejected => ("routing", "rule_rejected", true),
+                    ProxyError::NoUpstream => ("admission", "no_eligible_upstream", false),
+                    ProxyError::UnsupportedRule => ("routing", "unsupported_transport", false),
+                    ProxyError::Disconnected => ("dialing", "connection_disconnected", false),
+                    ProxyError::LocalResource => ("local", "local_resource_exhausted", false),
+                    ProxyError::Dns => ("dns", "endpoint_dns_failed", false),
+                    ProxyError::Endpoint => ("endpoint_connect", "endpoint_connect_failed", false),
+                    ProxyError::UpstreamTls => ("upstream_tls", "upstream_tls_failed", false),
+                    ProxyError::Authentication => {
+                        ("authentication", "upstream_authentication_failed", false)
+                    }
+                    ProxyError::TargetConnect => ("target_connect", "target_connect_failed", false),
+                    ProxyError::Timeout => ("dialing", "connect_timeout", false),
+                    ProxyError::Policy(_) => ("target_connect", "upstream_target_policy", false),
+                    _ => ("dialing", "proxy_handshake_failed", false),
+                };
+                observation.fail_unless_recorded(phase, code, rejected);
+                Err(error)
+            }
+        }
+    }
+    async fn connect_decided(
+        &self,
+        target: &Target,
+        http_forward: bool,
+        context: &hps_domain::RoutingContext,
+        decision: &hps_domain::RouteDecision,
+        observation: &crate::connections::ConnectionGuard,
+    ) -> Result<Connected, ProxyError> {
         if decision.action == hps_domain::RouteAction::Reject {
             return Err(ProxyError::Rejected);
         }
@@ -540,11 +590,12 @@ impl Dialer {
             return Err(ProxyError::UnsupportedRule);
         }
         if decision.action == hps_domain::RouteAction::Direct {
-            return self.connect_direct(target, decision).await;
+            return self.connect_direct(target, decision.clone()).await;
         }
         let mut query = hps_domain::SelectionQuery {
             inbound: context.inbound.clone(),
             source_ip: context.source_ip,
+            source_port: context.source_port,
             destination_host: Some(target.host.clone()),
             destination_port: Some(target.port),
             transport: context.transport,
@@ -577,12 +628,22 @@ impl Dialer {
                 .collect()
         };
         let demand = self.demand.begin(refill_sources);
-        let (_, upstream) = self.select(&query, true);
+        let (selection, upstream) = self.select(&query, true);
+        observation.selection(&selection);
         let upstream = upstream.ok_or(ProxyError::NoUpstream)?;
-        let node_guard = self
-            .nodes
-            .begin(&upstream.config.id)
-            .ok_or(ProxyError::NoUpstream)?;
+        if !observation.select(hps_domain::ConnectionChoice {
+            node_id: upstream.config.id.clone(),
+            provider_id: upstream.source.as_ref().map(|(id, _)| id.clone()),
+            upstream_host: upstream.config.host.clone(),
+            upstream_port: upstream.config.port,
+            upstream_protocol: format!("{:?}", upstream.config.protocol).to_lowercase(),
+            expires_at_unix: upstream.config.expires_at_unix,
+            remaining_secs_at_admission: remaining(&upstream).map(|r| r.as_secs()),
+            minimum_remaining_secs: self.min_lifetime.max(upstream.minimum_lifetime),
+        }) {
+            observation.fail("admission", "node_admission_changed", false);
+            return Err(ProxyError::NoUpstream);
+        }
         if remaining(&upstream).is_some_and(|r| {
             r <= Duration::from_secs(self.min_lifetime.max(upstream.minimum_lifetime))
         }) || !self.health_usable(
@@ -599,6 +660,7 @@ impl Dialer {
                     }
                 }),
         ) {
+            observation.fail("admission", "node_no_longer_eligible", false);
             return Err(ProxyError::NoUpstream);
         }
         let progress = Progress::new();
@@ -649,8 +711,8 @@ impl Dialer {
             );
         }
         outcome.map(|mut connected| {
-            connected.io = demand.wrap(node_guard.wrap(connected.io));
-            connected.routing = Some(decision);
+            connected.io = demand.wrap(connected.io);
+            connected.routing = Some(decision.clone());
             connected
         })
     }
@@ -697,6 +759,7 @@ impl Dialer {
             absolute_form: false,
             proxy_authorization: None,
             routing: Some(decision),
+            observation: None,
         })
     }
 
@@ -858,6 +921,7 @@ impl Dialer {
             absolute_form,
             proxy_authorization: auth,
             routing: None,
+            observation: None,
         })
     }
 }

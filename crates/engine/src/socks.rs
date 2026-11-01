@@ -27,6 +27,9 @@ pub(crate) async fn serve(mut io: BoxIo, session: Session) -> Result<(), ProxyEr
             return Err(error);
         }
     };
+    if let Some(observation) = upstream.observation.as_ref() {
+        observation.bind_inbound_cancel(session.cancel.clone());
+    }
     reply(&mut io, 0).await?;
     relay(io, upstream.io, session.limits.buffer_bytes, session.budget).await?;
     Ok(())

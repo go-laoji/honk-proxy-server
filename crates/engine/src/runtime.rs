@@ -106,7 +106,7 @@ impl Session {
         tokio::select! {
             biased;
             _=self.cancel.cancelled()=>{},
-            _=self.activity.idle(Duration::from_millis(self.limits.idle_timeout_ms))=>{self.entry.idle_timeouts.fetch_add(1,Ordering::Relaxed);},
+            _=self.activity.idle(Duration::from_millis(self.limits.idle_timeout_ms))=>{self.entry.idle_timeouts.fetch_add(1,Ordering::Relaxed);self.cancel.cancel();},
             _=future=>{},
         }
     }
@@ -396,7 +396,7 @@ impl Engine {
                 let inbound=match run.capacity.acquire(run.config.max_connections) { Some(permit)=>permit,None=>{run.inbound_rejected.fetch_add(1,Ordering::Relaxed);continue;} };
                 run.accepted.fetch_add(1,Ordering::Relaxed);
                 let activity=Activity::new();
-                let session=Session { dialer:engine.dialer.clone(),limits:engine.limits.clone(),budget:Budget::new(engine.bandwidth.clone(),run.bandwidth.clone(),activity.clone()),activity,cancel:sessions.child_token(),tracker:run.tracker.clone(),entry:run.clone(),selection_context:hps_domain::SelectionQuery {inbound:Some(run.config.id.clone()),source_ip:Some(peer.ip()),..Default::default()},_admission:Arc::new(Admission { _global:global,_inbound:inbound }) };
+                let session=Session { dialer:engine.dialer.clone(),limits:engine.limits.clone(),budget:Budget::new(engine.bandwidth.clone(),run.bandwidth.clone(),activity.clone()),activity,cancel:sessions.child_token(),tracker:run.tracker.clone(),entry:run.clone(),selection_context:hps_domain::SelectionQuery {inbound:Some(run.config.id.clone()),source_ip:Some(peer.ip()),source_port:Some(peer.port()),..Default::default()},_admission:Arc::new(Admission { _global:global,_inbound:inbound }) };
                 let acceptor=run.tls.clone(); let protocol=run.config.protocol; let child=session.clone();
                 session.spawn_io(async move {
                     let _=tcp.set_nodelay(true);

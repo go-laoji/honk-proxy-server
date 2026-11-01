@@ -840,6 +840,7 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
                         group: group.clone(),
                         inbound: inbound.clone(),
                         source_ip: *source_ip,
+                        source_port: None,
                         destination_host: host.clone(),
                         destination_port: *port,
                         transport: if *udp {

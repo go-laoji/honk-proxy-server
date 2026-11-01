@@ -1,5 +1,6 @@
 //! Shared user-space transport for explicit and future transparent proxy ingress.
 mod capacity;
+pub mod connections;
 mod demand;
 pub mod dial;
 pub mod health;
@@ -18,6 +19,8 @@ pub use hps_net::{BoxIo, ProxyIo};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProxyError {
+    #[error("business connection disconnected")]
+    Disconnected,
     #[error("routing policy rejected this connection")]
     Rejected,
     #[error("routing policy or references are invalid")]

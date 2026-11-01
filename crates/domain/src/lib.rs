@@ -5,6 +5,8 @@ mod routing;
 pub use routing::*;
 mod nodes;
 pub use nodes::*;
+mod connections;
+pub use connections::*;
 
 pub const API_VERSION: &str = "v1";
 

@@ -958,6 +958,7 @@ dependencies = [
  "tokio-rustls",
  "tokio-util",
  "tracing",
+ "uuid",
  "webpki-roots",
  "x509-parser",
 ]

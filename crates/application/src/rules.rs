@@ -192,7 +192,8 @@ impl Supervisor {
         )
         .map_err(|_| ApplicationError::Invalid)?;
         let c = &input.context;
-        if c.observed_domains.len() > 64
+        if c.source_port == Some(0)
+            || c.observed_domains.len() > 64
             || c.observed_domains
                 .iter()
                 .any(|d| !hps_config::valid_host(d) || d.parse::<std::net::IpAddr>().is_ok())
@@ -348,6 +349,7 @@ mod tests {
                 destination_port: 443,
                 transport: hps_domain::SelectionTransport::Tcp,
                 source_ip: None,
+                source_port: None,
                 inbound: None,
                 inbound_protocol: None,
                 observed_domains: vec![],
