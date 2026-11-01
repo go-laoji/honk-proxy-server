@@ -143,7 +143,7 @@ impl Store {
             if size+reserved+i64::from(config.count)>100000 {return Err(StorageError::PoolFull);}
             tx.execute("INSERT INTO provider_tasks(provider_id,request_id,fingerprint,state,requested_count,started_at,trigger,policy_json,min_interval_secs) VALUES(?1,?2,?3,'accepted',?4,?5,?6,?7,?8)",params![config.id,request_id,fingerprint,config.count,now,trigger,serde_json::to_string(&config.refill).map_err(|_|StorageError::Invalid)?,config.min_interval_secs as i64])?;
             let id=tx.last_insert_rowid();
-            tx.execute("UPDATE provider_control SET last_task_id=?2,next_allowed_at=max(next_allowed_at,?3),updated_at=?4 WHERE provider_id=?1",params![config.id,id,now.saturating_add(config.min_interval_secs as i64),now])?;
+            tx.execute("UPDATE provider_control SET last_task_id=?2,acknowledged_at=NULL,next_allowed_at=max(next_allowed_at,?3),updated_at=?4 WHERE provider_id=?1",params![config.id,id,now.saturating_add(config.min_interval_secs as i64),now])?;
             let result=get_task(&tx,id)?;tx.commit()?;Ok((result,true))
         }).await
     }

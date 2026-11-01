@@ -180,6 +180,9 @@ impl Engine {
             generation: std::sync::atomic::AtomicI64::new(0),
         }))
     }
+    pub fn has_active_demand(&self) -> bool {
+        self.dialer.demand.active()
+    }
     pub fn demand_age(&self) -> Option<Duration> {
         self.dialer.demand.age()
     }

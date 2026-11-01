@@ -173,6 +173,23 @@ async fn on_demand_refill_uses_real_dial_signal_hysteresis_inflight_and_requeste
         "idle"
     );
     assert_eq!(vendor.mock.calls.load(Ordering::Relaxed), 0);
+    let handshake = tokio::net::TcpStream::connect(
+        app.current().engine.status().inbounds[0]
+            .listen
+            .as_ref()
+            .unwrap(),
+    )
+    .await
+    .unwrap();
+    tokio::time::sleep(Duration::from_millis(1100)).await;
+    assert!(
+        !app.provider_controller("source")
+            .await
+            .unwrap()
+            .demand_active
+    );
+    assert_eq!(vendor.mock.calls.load(Ordering::Relaxed), 0);
+    drop(handshake);
     demand(&app).await;
     until(async || vendor.mock.calls.load(Ordering::Relaxed) == 1).await;
     let snapshot = app.provider_controller("source").await.unwrap();

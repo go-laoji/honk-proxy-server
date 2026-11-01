@@ -114,7 +114,7 @@ impl Dialer {
         target: &Target,
         http_forward: bool,
     ) -> Result<Connected, ProxyError> {
-        self.demand.mark();
+        let demand = self.demand.begin();
         let dynamic = self.pool.snapshot();
         let total = self.upstreams.len() + dynamic.len();
         if total == 0 {
@@ -138,6 +138,10 @@ impl Dialer {
         )
         .await
         .map_err(|_| ProxyError::Timeout)?
+        .map(|mut connected| {
+            connected.io = demand.wrap(connected.io);
+            connected
+        })
     }
     async fn connect_selected(
         &self,

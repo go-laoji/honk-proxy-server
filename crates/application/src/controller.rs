@@ -87,7 +87,7 @@ impl Supervisor {
                 100000
             })
             .collect::<Vec<_>>();
-        let demand_active = current.engine.status().active_connections > 0
+        let demand_active = current.engine.has_active_demand()
             || current
                 .engine
                 .demand_age()

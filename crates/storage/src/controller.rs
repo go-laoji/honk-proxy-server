@@ -144,7 +144,15 @@ impl Store {
         provider_id: String,
         paused: bool,
     ) -> Result<(), StorageError> {
-        self.call(move|c|{c.execute("INSERT INTO provider_control(provider_id,paused_reason,acknowledged_at,updated_at) VALUES(?1,?2,?3,?4) ON CONFLICT(provider_id) DO UPDATE SET paused_reason=excluded.paused_reason,acknowledged_at=CASE WHEN excluded.paused_reason IS NULL THEN excluded.updated_at ELSE acknowledged_at END,failure_count=CASE WHEN excluded.paused_reason IS NULL THEN 0 ELSE failure_count END,updated_at=excluded.updated_at",params![provider_id,if paused{Some("manual")}else{None},if paused{None}else{Some(unix_now())},unix_now()])?;Ok(())}).await
+        self.call(move|c| {
+            let tx=c.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;let now=unix_now();
+            // An acknowledgement belongs to the current terminal task. Resuming an
+            // in-flight request cannot acknowledge a future unknown outcome.
+            let finished:Option<i64>=if paused {None}else{tx.query_row("SELECT t.finished_at FROM provider_tasks t JOIN provider_control p ON p.last_task_id=t.id WHERE p.provider_id=?1 AND t.state NOT IN ('accepted','requesting')",[&provider_id],|r|r.get(0)).optional()?.flatten()};
+            let acknowledged=finished.map(|at|at.max(now));
+            tx.execute("INSERT INTO provider_control(provider_id,paused_reason,acknowledged_at,updated_at) VALUES(?1,?2,?3,?4) ON CONFLICT(provider_id) DO UPDATE SET paused_reason=excluded.paused_reason,acknowledged_at=CASE WHEN excluded.paused_reason IS NULL THEN excluded.acknowledged_at ELSE acknowledged_at END,failure_count=CASE WHEN excluded.paused_reason IS NULL THEN 0 ELSE failure_count END,updated_at=excluded.updated_at",params![provider_id,if paused{Some("manual")}else{None},acknowledged,now])?;
+            tx.commit()?;Ok(())
+        }).await
     }
 }
 
@@ -353,6 +361,69 @@ mod tests {
         let snapshot = store.controller_snapshot("source".into()).await.unwrap();
         assert_eq!((snapshot.used_requests, snapshot.reserved_nodes), (2, 6));
         assert_eq!(snapshot.paused_reason.as_deref(), Some("outcome_unknown"));
+        store.close().await.unwrap();
+    }
+    #[tokio::test]
+    async fn resume_does_not_acknowledge_a_future_unknown_outcome_or_a_different_task() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(Some(dir.path()), DaemonConfig::default()).unwrap();
+        let c = config();
+        let (task, _) = accept(&store, &c, "first", "automatic").await.unwrap();
+        store.extraction_requesting(task.id).await.unwrap();
+        store.pause_provider(c.id.clone(), true).await.unwrap();
+        store.pause_provider(c.id.clone(), false).await.unwrap();
+        assert!(
+            store
+                .controller_snapshot(c.id.clone())
+                .await
+                .unwrap()
+                .acknowledged_at
+                .is_none()
+        );
+        store.close().await.unwrap();
+        let store = Store::open(Some(dir.path()), DaemonConfig::default()).unwrap();
+        assert_eq!(
+            store
+                .controller_snapshot(c.id.clone())
+                .await
+                .unwrap()
+                .paused_reason
+                .as_deref(),
+            Some("process_interrupted")
+        );
+        store.pause_provider(c.id.clone(), false).await.unwrap();
+        store.close().await.unwrap();
+        let store = Store::open(Some(dir.path()), DaemonConfig::default()).unwrap();
+        assert!(
+            store
+                .controller_snapshot(c.id.clone())
+                .await
+                .unwrap()
+                .paused_reason
+                .is_none()
+        );
+        cool(&store).await;
+        let (task, _) = accept(&store, &c, "second", "automatic").await.unwrap();
+        store.extraction_requesting(task.id).await.unwrap();
+        assert!(
+            store
+                .controller_snapshot(c.id.clone())
+                .await
+                .unwrap()
+                .acknowledged_at
+                .is_none()
+        );
+        store.close().await.unwrap();
+        let store = Store::open(Some(dir.path()), DaemonConfig::default()).unwrap();
+        assert_eq!(
+            store
+                .controller_snapshot(c.id.clone())
+                .await
+                .unwrap()
+                .paused_reason
+                .as_deref(),
+            Some("process_interrupted")
+        );
         store.close().await.unwrap();
     }
 }
