@@ -84,6 +84,10 @@ test("Chromium without proxy credentials reaches an unresolvable origin through 
     stdio: "ignore",
     env: environment,
   });
+  const daemonExited = new Promise<void>((done) => {
+    daemon.once("exit", () => done());
+    daemon.once("error", () => done());
+  });
   let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
   try {
     const base = `http://127.0.0.1:${managementPort}`;
@@ -120,10 +124,9 @@ test("Chromium without proxy credentials reaches an unresolvable origin through 
     expect(redacted).not.toContain("fixture-secret");
   } finally {
     await browser?.close();
-    const exited = once(daemon, "exit");
     daemon.kill("SIGTERM");
     const force = setTimeout(() => daemon.kill("SIGKILL"), 5000);
-    await exited;
+    await daemonExited;
     clearTimeout(force);
     origin.closeAllConnections();
     supplier.closeAllConnections();

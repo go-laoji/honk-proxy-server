@@ -70,7 +70,7 @@
       "acceptance": "协议矩阵真实互通；无可用上游不隐式直连；上游凭据不泄漏；大文件、取消、IPv6与业务数据不重放回归通过。",
       "issue": 9,
       "url": "https://github.com/go-laoji/honk-proxy-server/issues/9",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "T05",
