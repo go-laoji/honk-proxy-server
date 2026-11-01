@@ -32,6 +32,8 @@ pub enum ApplicationError {
         "routing references a missing or expired lease node; disable or remove that rule, or select a group"
     )]
     RouteNodeUnavailable,
+    #[error("too many concurrent rule diagnostics; wait for the current work to finish")]
+    RuleDiagnosticsCapacity,
     #[error("group not found")]
     GroupUnavailable,
     #[error(transparent)]
@@ -106,6 +108,7 @@ pub struct Supervisor {
     provider_tasks: tokio_util::task::TaskTracker,
     provider_cancel: tokio_util::sync::CancellationToken,
     provider_slots: Arc<tokio::sync::Semaphore>,
+    rule_diagnostics: Arc<tokio::sync::Semaphore>,
     controller_started: std::sync::atomic::AtomicBool,
     health: health::HealthRuntime,
 }
@@ -157,6 +160,7 @@ impl Supervisor {
             provider_tasks: tokio_util::task::TaskTracker::new(),
             provider_cancel: tokio_util::sync::CancellationToken::new(),
             provider_slots: Arc::new(tokio::sync::Semaphore::new(8)),
+            rule_diagnostics: Arc::new(tokio::sync::Semaphore::new(4)),
             controller_started: std::sync::atomic::AtomicBool::new(false),
             health: Default::default(),
         });

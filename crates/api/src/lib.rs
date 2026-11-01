@@ -280,6 +280,9 @@ fn application_error(error: ApplicationError) -> (StatusCode, Json<ApiError>) {
         ApplicationError::RouteNodeUnavailable => {
             (StatusCode::UNPROCESSABLE_ENTITY, "routing_node_unavailable")
         }
+        ApplicationError::RuleDiagnosticsCapacity => {
+            (StatusCode::TOO_MANY_REQUESTS, "rule_diagnostics_capacity")
+        }
         ApplicationError::Provider(error) => (StatusCode::BAD_GATEWAY, error.code),
         ApplicationError::Capture(_) => (
             StatusCode::UNPROCESSABLE_ENTITY,

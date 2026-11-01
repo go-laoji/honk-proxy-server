@@ -51,7 +51,7 @@ impl Supervisor {
         let delta = changes(&current.base_config, &document.config);
         let other = !only_routing_changed(&current.base_config, &document.config)?;
         Ok(RulesOverview{running_revision:current.revision,desired_revision:workspace.desired.revision.id,viewed_revision:viewed,
-            configuration:document.config.proxy.routing,active_configuration:current.base_config.proxy.routing.clone(),
+            viewed_parent_revision:document.revision.parent_id,configuration:document.config.proxy.routing,active_configuration:current.base_config.proxy.routing.clone(),
             candidates:workspace.revisions.into_iter().filter(|r|r.note=="Routing rules candidate"&&r.applied_at.is_none()).take(50).map(revision_view).collect(),
             changes:delta,other_configuration_changes:other,capabilities:RuleCapabilities{local_process_available:false,
                 local_process_reason:"No attached and verified local Linux process-origin data plane; remote explicit-proxy clients and gateway processes cannot be inferred".into(),
@@ -186,9 +186,13 @@ impl Supervisor {
         &self,
         mut input: RulesSimulationInput,
     ) -> Result<RouteSimulation, ApplicationError> {
+        let target = hps_engine::target::Target::new(
+            &input.context.destination_host,
+            input.context.destination_port,
+        )
+        .map_err(|_| ApplicationError::Invalid)?;
         let c = &input.context;
-        if hps_engine::target::Target::new(&c.destination_host, c.destination_port).is_err()
-            || c.observed_domains.len() > 64
+        if c.observed_domains.len() > 64
             || c.observed_domains
                 .iter()
                 .any(|d| !hps_config::valid_host(d) || d.parse::<std::net::IpAddr>().is_ok())
@@ -212,6 +216,13 @@ impl Supervisor {
         {
             return Err(ApplicationError::Invalid);
         }
+        input.context.destination_host = target.host;
+        let permit = Arc::new(
+            self.rule_diagnostics
+                .clone()
+                .try_acquire_owned()
+                .map_err(|_| ApplicationError::RuleDiagnosticsCapacity)?,
+        );
         let current = self.current();
         let revision = input.revision.unwrap_or(current.revision);
         let (engine, resolver) = if revision == current.revision {
@@ -221,7 +232,9 @@ impl Supervisor {
             let mut config = current.config.clone();
             config.proxy.routing = document.config.proxy.routing;
             let old = current.clone();
+            let worker_permit = permit.clone();
             tokio::task::spawn_blocking(move || {
+                let _permit = worker_permit;
                 let resolver = dns::prepare(&config, Some(&old))?;
                 let candidate = Engine::with_previous(config.proxy.clone(), Some(&old.engine))?;
                 let profiles = prepare_network(&config, &candidate, &resolver)?;
@@ -244,7 +257,14 @@ impl Supervisor {
         if !declared && let Ok(ip) = input.context.destination_host.parse() {
             input.context.observed_domains = resolver.domain_context(ip).domains;
         }
-        let mut result = engine.simulate_route(&input.context, revision);
+        let context = input.context.clone();
+        let worker_permit = permit.clone();
+        let mut result = tokio::task::spawn_blocking(move || {
+            let _permit = worker_permit;
+            engine.simulate_route(&context, revision)
+        })
+        .await
+        .map_err(|_| ApplicationError::Worker)?;
         if revision != current.revision {
             result.notes.push("Candidate rules evaluated with current non-routing settings and live lease/health evidence".into());
         }
@@ -302,6 +322,52 @@ impl Supervisor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    async fn diagnostic_capacity_rejects_before_work_and_recovers_without_production_demand() {
+        let mut config = DaemonConfig::default();
+        config.health.enabled = false;
+        let service = Supervisor::boot(
+            Store::open(None, config).unwrap(),
+            StartupOverrides::default(),
+        )
+        .await
+        .unwrap();
+        let permits = (0..service.rule_diagnostics.available_permits())
+            .map(|_| {
+                service
+                    .rule_diagnostics
+                    .clone()
+                    .try_acquire_owned()
+                    .unwrap()
+            })
+            .collect::<Vec<_>>();
+        let mut input = RulesSimulationInput {
+            revision: None,
+            context: hps_domain::RoutingContext {
+                destination_host: "example.com".into(),
+                destination_port: 443,
+                transport: hps_domain::SelectionTransport::Tcp,
+                source_ip: None,
+                inbound: None,
+                inbound_protocol: None,
+                observed_domains: vec![],
+                origin: hps_domain::FlowOrigin::Explicit,
+                process: None,
+            },
+        };
+        assert!(matches!(
+            service.simulate_rules(input.clone()).await,
+            Err(ApplicationError::RuleDiagnosticsCapacity)
+        ));
+        drop(permits);
+        assert!(service.simulate_rules(input.clone()).await.is_ok());
+        input.context.destination_host = "[2001:db8::1]".into();
+        let ipv6 = service.simulate_rules(input).await.unwrap();
+        assert!(ipv6.decision.domain.is_none());
+        assert_eq!(ipv6.decision.domain_source, "unknown");
+        assert!(service.current().engine.demand_age().is_none());
+        service.shutdown().await.unwrap();
+    }
     #[tokio::test]
     async fn expired_candidate_node_keeps_head_and_mixed_candidates_require_explicit_rebase() {
         let mut config = DaemonConfig::default();

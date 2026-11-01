@@ -68,7 +68,7 @@ pub struct RouteSimulation {
     pub decision: RouteDecision,
     pub selection: Option<SelectionDecision>,
     pub action_supported: bool,
-    pub health_evaluated_at_unix: u64,
+    pub health_evaluated_at_unix: Option<u64>,
     pub notes: Vec<String>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -90,6 +90,7 @@ pub struct RulesOverview<C> {
     pub running_revision: i64,
     pub desired_revision: i64,
     pub viewed_revision: i64,
+    pub viewed_parent_revision: Option<i64>,
     pub configuration: C,
     pub active_configuration: C,
     pub candidates: Vec<crate::ConfigRevision>,

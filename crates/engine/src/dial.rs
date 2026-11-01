@@ -395,8 +395,14 @@ impl Dialer {
             }
             _ => None,
         };
-        hps_domain::RouteSimulation{action_supported:context.transport==hps_domain::SelectionTransport::Tcp||decision.action==hps_domain::RouteAction::Reject,
-            decision,selection,health_evaluated_at_unix:crate::routing::unix_now(),notes:vec!["Simulation reads current health and leases without network, demand or session mutations".into()]}
+        let health_evaluated_at_unix = selection.as_ref().map(|_| crate::routing::unix_now());
+        hps_domain::RouteSimulation {
+            action_supported: context.transport == hps_domain::SelectionTransport::Tcp || decision.action == hps_domain::RouteAction::Reject,
+            decision,
+            selection,
+            health_evaluated_at_unix,
+            notes: vec!["Simulation reads current health and leases without network, demand or session mutations".into()],
+        }
     }
     pub fn can_forward(&self, inbound: &str, protocol: &str) -> bool {
         self.router
