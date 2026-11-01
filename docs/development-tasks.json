@@ -135,7 +135,7 @@
       "acceptance": "并发触发合并；在途计预算；空闲不无限购买；短缺不每请求直调供应商；临界到期/重启/429/无配额测试。",
       "issue": 12,
       "url": "https://github.com/go-laoji/honk-proxy-server/issues/12",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "id": "T08",

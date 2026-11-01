@@ -29,7 +29,7 @@ T05 配置基础后推进 T06/T07 短效 API 与补池。T08–T14 逐步闭合�
 | T04 | P0 | [#9](https://github.com/go-laoji/honk-proxy-server/issues/9) HTTP HTTPS SOCKS5 核心代理与资源控制 | T01 | 已完成显式代理验收 |
 | T05 | P0 | [#10](https://github.com/go-laoji/honk-proxy-server/issues/10) SQLite 配置版本、校验、激活与回滚 | T01 | 已完成持久化与三端验收 |
 | T06 | P0 | [#11](https://github.com/go-laoji/honk-proxy-server/issues/11) 短效提取 API、批次租约与安全重试 | T05 | 已完成契约、租约和三端验收 |
-| T07 | P0 | [#12](https://github.com/go-laoji/honk-proxy-server/issues/12) 到期预测、水位与预算驱动补池 | T06 | 待开发 |
+| T07 | P0 | [#12](https://github.com/go-laoji/honk-proxy-server/issues/12) 到期预测、水位与预算驱动补池 | T06 | 开发中 |
 | T08 | P0 | [#13](https://github.com/go-laoji/honk-proxy-server/issues/13) 统一健康检测与真实流量反馈 | T04, T06 | 待开发 |
 | T09 | P0 | [#14](https://github.com/go-laoji/honk-proxy-server/issues/14) DNS 上游、路由、缓存与诊断 | T03, T05, T04 | 待开发 |
 | T10 | P0 | [#15](https://github.com/go-laoji/honk-proxy-server/issues/15) 节点分组、选点、固定与租约准入 | T04, T06, T08 | 待开发 |
