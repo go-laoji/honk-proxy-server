@@ -1,0 +1,451 @@
+{
+  "epic": 5,
+  "version": 1,
+  "tasks": [
+    {
+      "id": "T01",
+      "priority": "P0",
+      "title": "Rust 工作区与独立 CLI/Daemon 基础",
+      "deps": [],
+      "features": [
+        "INST-01",
+        "INST-02",
+        "INST-04",
+        "DASH-01",
+        "SYS-04"
+      ],
+      "scope": "建立独立可构建的 Rust CLI/Daemon、统一 DTO/API client、启动配置与结构化错误；无账号直接提供 status/version/capabilities；明确管理就绪与代理就绪。",
+      "acceptance": "cargo test/clippy 通过；不编译 Tauri 可运行 hpsd 与 hps；真实 HTTP 请求与 CLI JSON 输出验证；无数据面时 proxy_ready=false。",
+      "issue": 6,
+      "url": "https://github.com/go-laoji/honk-proxy-server/issues/6",
+      "status": "pending"
+    },
+    {
+      "id": "T02",
+      "priority": "P0",
+      "title": "共享 React Tailwind MPA 与 Desktop 桥骨架",
+      "deps": [
+        "T01"
+      ],
+      "features": [],
+      "scope": "接管现有前端模板，建立18个真实HTML入口、共用布局/主题/API transport和页面清单；Rust Daemon与Tauri嵌入同一dist；Desktop原生桥处理目标连接，浏览器同源API，无登录。",
+      "acceptance": "前端类型/生产构建通过；18页独立可访问、刷新、无登录、未知页404；两端同一web_build_id；Desktop cargo check通过，基础页面连接真实Daemon。",
+      "issue": 7,
+      "url": "https://github.com/go-laoji/honk-proxy-server/issues/7",
+      "status": "pending"
+    },
+    {
+      "id": "T03",
+      "priority": "P0",
+      "title": "honk 集成与真实 Linux eBPF 前置验证",
+      "deps": [
+        "T01"
+      ],
+      "features": [
+        "LINUX-01",
+        "LINUX-02"
+      ],
+      "scope": "固定honk基线并确认共享运行时接入边界；实现真实环境预检，准备Linux6.12+隔离测试；验证BPF对象、hooks/maps、TCP/UDP真实出口和清理。",
+      "acceptance": "真实Linux挂载与出口证据；不能使用mock或仅预检替代数据面；非Linux明确unsupported；记录直接crate集成或必要fork决策。",
+      "issue": 8,
+      "url": "https://github.com/go-laoji/honk-proxy-server/issues/8",
+      "status": "pending"
+    },
+    {
+      "id": "T04",
+      "priority": "P0",
+      "title": "HTTP HTTPS SOCKS5 核心代理与资源控制",
+      "deps": [
+        "T01",
+        "T03"
+      ],
+      "features": [
+        "IN-01",
+        "IN-03",
+        "IN-04",
+        "IN-05",
+        "IN-06",
+        "SYS-02"
+      ],
+      "scope": "无认证HTTP正向/CONNECT、TLS代理与SOCKS5 TCP；HTTP/HTTPS/SOCKS5上游；统一拨号与连接准入，流式转发、半关闭、超时/资源限制和接入说明。",
+      "acceptance": "协议矩阵真实互通；无可用上游不隐式直连；上游凭据不泄漏；大文件、取消、IPv6与业务数据不重放回归通过。",
+      "issue": 9,
+      "url": "https://github.com/go-laoji/honk-proxy-server/issues/9",
+      "status": "pending"
+    },
+    {
+      "id": "T05",
+      "priority": "P0",
+      "title": "SQLite 配置版本、校验、激活与回滚",
+      "deps": [
+        "T01"
+      ],
+      "features": [
+        "CFG-01",
+        "CFG-02",
+        "CFG-03",
+        "CFG-04",
+        "CFG-05",
+        "CFG-06",
+        "SYS-01",
+        "SYS-03"
+      ],
+      "scope": "单写者SQLite、迁移、草稿/配置版本/运行激活状态；API/CLI及共享页面；监听/TLS/日志/存储配置，不含账号表。",
+      "acceptance": "持久化与重启恢复、过期版本409、失败保留旧版本、脱敏导入导出、回滚一致性；HTTP无账号可读写。",
+      "issue": 10,
+      "url": "https://github.com/go-laoji/honk-proxy-server/issues/10",
+      "status": "pending"
+    },
+    {
+      "id": "T06",
+      "priority": "P0",
+      "title": "短效提取 API、批次租约与安全重试",
+      "deps": [
+        "T05"
+      ],
+      "features": [
+        "PROV-01",
+        "PROV-02",
+        "PROV-04",
+        "PROV-05",
+        "PROV-06",
+        "PROV-07",
+        "PROV-08",
+        "PROV-10",
+        "PROV-11",
+        "PROV-12"
+      ],
+      "scope": "适配真实供应商与可复现测试服务；配置提取参数/签名、TTL起算、增量批次/快照、凭据/白名单/配额；持久记录结果不确定，提供API/CLI/页面。",
+      "acceptance": "新批次不误删有效旧节点；到期不延长；损坏/空结果不清池；响应丢失不盲目重复消耗额度；真实供应商验收需其API契约。",
+      "issue": 11,
+      "url": "https://github.com/go-laoji/honk-proxy-server/issues/11",
+      "status": "pending"
+    },
+    {
+      "id": "T07",
+      "priority": "P0",
+      "title": "到期预测、水位与预算驱动补池",
+      "deps": [
+        "T06"
+      ],
+      "features": [
+        "PROV-03",
+        "PROV-09"
+      ],
+      "scope": "单来源控制器管理最小/目标/最大水位、批量、预退休窗口、最小剩余寿命、在途预算、限频/退避和按协议/地域补充。",
+      "acceptance": "并发触发合并；在途计预算；空闲不无限购买；短缺不每请求直调供应商；临界到期/重启/429/无配额测试。",
+      "issue": 12,
+      "url": "https://github.com/go-laoji/honk-proxy-server/issues/12",
+      "status": "pending"
+    },
+    {
+      "id": "T08",
+      "priority": "P0",
+      "title": "统一健康检测与真实流量反馈",
+      "deps": [
+        "T04",
+        "T06"
+      ],
+      "features": [
+        "HEALTH-01",
+        "HEALTH-02",
+        "HEALTH-03",
+        "HEALTH-04",
+        "HEALTH-05",
+        "NODE-05"
+      ],
+      "scope": "按TCP/UDP、IPv4/IPv6区分健康；寿命约束的准入探测、预算/退避、单个批量任务和实际连接反馈；API/CLI/页面。",
+      "acceptance": "端口/认证/穿透分层；目标403/429不全局判死；短寿命不浪费探测；所有入口单一健康状态，限并发与任务恢复。",
+      "issue": 13,
+      "url": "https://github.com/go-laoji/honk-proxy-server/issues/13",
+      "status": "pending"
+    },
+    {
+      "id": "T09",
+      "priority": "P0",
+      "title": "DNS 上游、路由、缓存与诊断",
+      "deps": [
+        "T03",
+        "T05",
+        "T04"
+      ],
+      "features": [
+        "DNS-01",
+        "DNS-02",
+        "DNS-03",
+        "DNS-04"
+      ],
+      "scope": "共享DNS解析与bootstrap、出口策略和缓存隔离；域名上下文、诊断与清理API/CLI/页面；防下载/代理解析回环。",
+      "acceptance": "IPv4/IPv6、TTL/缓存、不可见域名回退明确；真实Linux DNS接管；外部加密DNS识别限制如实说明。",
+      "issue": 14,
+      "url": "https://github.com/go-laoji/honk-proxy-server/issues/14",
+      "status": "pending"
+    },
+    {
+      "id": "T10",
+      "priority": "P0",
+      "title": "节点分组、选点、固定与租约准入",
+      "deps": [
+        "T04",
+        "T06",
+        "T08"
+      ],
+      "features": [
+        "GROUP-01",
+        "GROUP-02",
+        "GROUP-03",
+        "GROUP-04",
+        "GROUP-05"
+      ],
+      "scope": "成员过滤、固定/故障切换/延迟优选/负载均衡、候选解释、回退范围、寿命约束的会话固定；API/CLI/页面。",
+      "acceptance": "不能越过固定或回退范围；UDP排除TCP-only；到期/禁用不选；已有连接不承诺迁移；入口共享选择。",
+      "issue": 15,
+      "url": "https://github.com/go-laoji/honk-proxy-server/issues/15",
+      "status": "pending"
+    },
+    {
+      "id": "T11",
+      "priority": "P0",
+      "title": "规则 CRUD、模拟与一致性发布",
+      "deps": [
+        "T05",
+        "T09",
+        "T10"
+      ],
+      "features": [
+        "RULE-01",
+        "RULE-02",
+        "RULE-03",
+        "RULE-04",
+        "RULE-05",
+        "RULE-06"
+      ],
+      "scope": "域名/CIDR/端口/协议/入口/源地址与本机进程规则；首条命中；节点/组/直连/拒绝；引用校验、模拟、代际发布；API/CLI/页面。",
+      "acceptance": "无账号条件或功能权限；模拟与实际决策一致；用户态和eBPF原子版本一致；目标不支持条件不能误显示支持。",
+      "issue": 16,
+      "url": "https://github.com/go-laoji/honk-proxy-server/issues/16",
+      "status": "pending"
+    },
+    {
+      "id": "T12",
+      "priority": "P0",
+      "title": "节点管理与来源详情控制台闭环",
+      "deps": [
+        "T02",
+        "T06",
+        "T08",
+        "T10"
+      ],
+      "features": [
+        "NODE-01",
+        "NODE-02",
+        "NODE-03",
+        "NODE-04",
+        "NODE-06",
+        "DASH-02"
+      ],
+      "scope": "节点分页查询、导入预览、协议能力/租约/退休状态、启停/排空/删除、来源/组/连接关联与摘要；API/CLI及共享MPA。",
+      "acceptance": "URL恢复筛选；批次归属不误删；过期与健康分开；敏感数据脱敏；界面不是静态演示数据。",
+      "issue": 17,
+      "url": "https://github.com/go-laoji/honk-proxy-server/issues/17",
+      "status": "pending"
+    },
+    {
+      "id": "T13",
+      "priority": "P0",
+      "title": "活跃连接、流量统计与路由解释",
+      "deps": [
+        "T04",
+        "T10",
+        "T11"
+      ],
+      "features": [
+        "CONN-01",
+        "CONN-02",
+        "CONN-03",
+        "CONN-04",
+        "DASH-03",
+        "DASH-04"
+      ],
+      "scope": "连接生命周期、源/目标/入口/出口/命中规则、流量/异常摘要、有界列表和主动断开；API/CLI/共享页面。",
+      "acceptance": "实际转发计数；不解析HTTPS正文；主动断开范围明确；重连补快照、切页取消，不无限内存增长。",
+      "issue": 18,
+      "url": "https://github.com/go-laoji/honk-proxy-server/issues/18",
+      "status": "pending"
+    },
+    {
+      "id": "T14",
+      "priority": "P0",
+      "title": "后台任务、SSE 与结构化事件",
+      "deps": [
+        "T05",
+        "T06"
+      ],
+      "features": [
+        "TASK-01",
+        "TASK-02",
+        "TASK-03",
+        "TASK-04",
+        "LOG-01",
+        "LOG-02",
+        "LOG-03",
+        "LOG-04"
+      ],
+      "scope": "统一任务ID/终态/版本、重复触发保护、跨页面恢复、事件过滤/游标重连、原生订阅取消与上游凭据脱敏；API/CLI/页面。",
+      "acceptance": "客户端离开不丢后台任务；游标过期补快照；切实例不收旧事件；无项目登录或已认证操作人假设。",
+      "issue": 19,
+      "url": "https://github.com/go-laoji/honk-proxy-server/issues/19",
+      "status": "pending"
+    },
+    {
+      "id": "T15",
+      "priority": "P0",
+      "title": "Linux 透明数据面产品化与恢复",
+      "deps": [
+        "T03",
+        "T09",
+        "T11",
+        "T13",
+        "T14"
+      ],
+      "features": [
+        "LINUX-03",
+        "LINUX-04",
+        "LINUX-05",
+        "LINUX-06"
+      ],
+      "scope": "本机/LAN接管范围、bypass、网卡/路由变化、热更新、启停与对象所有权；真实TCP/UDP和DNS；API/CLI/页面。",
+      "acceptance": "Linux6.12+ x86_64/aarch64真实出口矩阵；失败不假报ready；清理不损伤其他网络对象；异常退出可恢复。",
+      "issue": 20,
+      "url": "https://github.com/go-laoji/honk-proxy-server/issues/20",
+      "status": "pending"
+    },
+    {
+      "id": "T16",
+      "priority": "P0",
+      "title": "Desktop 本地远程档案与系统服务集成",
+      "deps": [
+        "T02",
+        "T05",
+        "T15"
+      ],
+      "features": [
+        "INST-03",
+        "SYS-05"
+      ],
+      "scope": "同页面管理本机/远端；持久系统服务安装/启动、系统代理原值恢复；窗口退出与服务生命周期分离，无用户认证。",
+      "acceptance": "打包后导航/原生transport/目标切换；窗口关闭代理仍由系统服务运行；不以root运行WebView；远端操作不误改本机代理。",
+      "issue": 21,
+      "url": "https://github.com/go-laoji/honk-proxy-server/issues/21",
+      "status": "pending"
+    },
+    {
+      "id": "T17",
+      "priority": "P0",
+      "title": "分包发行、端到端与发布门槛",
+      "deps": [
+        "T01",
+        "T02",
+        "T04",
+        "T05",
+        "T06",
+        "T07",
+        "T08",
+        "T09",
+        "T10",
+        "T11",
+        "T12",
+        "T13",
+        "T14",
+        "T15",
+        "T16"
+      ],
+      "features": [],
+      "scope": "独立headless/desktop流水线、嵌入相同web产物、文档/安装包/锁定依赖；端到端、故障注入、压测和升级回退。",
+      "acceptance": "80个适用P0验收证据，真实Linux eBPF和真实供应商必需；无桌面安装与18页一致；不把mock或骨架称为正式功能版本。",
+      "issue": 22,
+      "url": "https://github.com/go-laoji/honk-proxy-server/issues/22",
+      "status": "pending"
+    },
+    {
+      "id": "T18",
+      "priority": "P1",
+      "title": "历史观测、诊断导出与任务增强",
+      "deps": [
+        "T17"
+      ],
+      "features": [
+        "DASH-05",
+        "NODE-07",
+        "HEALTH-06",
+        "DNS-05",
+        "CONN-05",
+        "RULE-07",
+        "LOG-05",
+        "LOG-06",
+        "TASK-05"
+      ],
+      "scope": "按预算实现历史趋势/画像/关联、规则统计导入、脱敏诊断、告警和服务明确支持的取消/重试。",
+      "acceptance": "来源/时间窗口/保留期明确，结果有界可核实；不可取消阶段不伪回滚，通知状态变化限频。",
+      "issue": 23,
+      "url": "https://github.com/go-laoji/honk-proxy-server/issues/23",
+      "status": "pending"
+    },
+    {
+      "id": "T19",
+      "priority": "P1",
+      "title": "SOCKS5 UDP、订阅与高级分组扩展",
+      "deps": [
+        "T17"
+      ],
+      "features": [
+        "IN-07",
+        "PROV-13",
+        "GROUP-06"
+      ],
+      "scope": "按实际需求加入UDP ASSOCIATE、标准订阅、嵌套组和高级Score。",
+      "acceptance": "协议关联生命周期与来源归属正确；不替代短效API主线；嵌套循环拒绝，高级策略可解释。",
+      "issue": 24,
+      "url": "https://github.com/go-laoji/honk-proxy-server/issues/24",
+      "status": "pending"
+    },
+    {
+      "id": "T20",
+      "priority": "P1",
+      "title": "备份恢复、系统体验与高级 Linux 诊断",
+      "deps": [
+        "T17"
+      ],
+      "features": [
+        "CFG-07",
+        "SYS-06",
+        "LINUX-07"
+      ],
+      "scope": "SQLite一致性备份恢复、托盘/通知/自启选项、拓扑和内核诊断。",
+      "acceptance": "备份不直接复制写库；桌面自启和Daemon开机启动分离；高级数据面变更单独验收。",
+      "issue": 25,
+      "url": "https://github.com/go-laoji/honk-proxy-server/issues/25",
+      "status": "pending"
+    },
+    {
+      "id": "T21",
+      "priority": "P2",
+      "title": "多实例与其他平台等储备范围",
+      "deps": [
+        "T17"
+      ],
+      "features": [
+        "FUT-01",
+        "FUT-02",
+        "FUT-03",
+        "FUT-04"
+      ],
+      "scope": "储备多实例编排、macOS/Windows透明、成本分析、外部规则/复杂评分/FakeIP；进入实施前再按各领域细分。",
+      "acceptance": "不作为首版隐含范围；先明确产品语义、平台方案、真实供应商口径和兼容性后再拆实施Issue。",
+      "issue": 26,
+      "url": "https://github.com/go-laoji/honk-proxy-server/issues/26",
+      "status": "pending"
+    }
+  ]
+}
+
