@@ -14,7 +14,7 @@
 
 独立 CLI/Daemon 使用临时持久目录及实际 HTTP 提取服务验收：自动提取 2 个节点、暂停/恢复、正常退出后重启；库存仍为 2、使用量仍为 1 次请求/2 个节点、到期时间不变、供应商总请求仍为 1；超预算提取退出码为 5。进程不依赖图形会话，未向付费供应商发请求。
 
-macOS aarch64 与官方 `rust:1.98.1-alpine` 实际 Linux aarch64 musl 完整套件各 **62 项 Rust 测试**通过。随后新增来源隔离测试在 macOS 与 Linux 定向验证，各累计 **63 项**，没有代码语义变更。Linux 使用只读隔离源码与独立缓存，没有特权或 eBPF。
+macOS aarch64 与官方 `rust:1.98.1-alpine` 实际 Linux aarch64 musl 完整套件各 **64 项 Rust 测试**通过，包含来源隔离、亚秒级租约时钟与极大准入窗口不溢出的回归。Linux 使用只读隔离源码与独立缓存，没有特权或 eBPF。
 
 fmt/clippy、TypeScript、Prettier、生产构建通过；Desktop 桥 allowlist 单测和 clippy 通过，新的 .app 已成功打包。T06 已验证实际 Desktop 来源/提取页面，本次新增控制路径通过桥测试与同一 React 页面的浏览器测试；未把本次打包等同于新的桌面窗口操作验收。
 

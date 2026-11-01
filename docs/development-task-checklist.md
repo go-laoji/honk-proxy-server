@@ -29,7 +29,7 @@ T05 配置基础后推进 T06/T07 短效 API 与补池。T08–T14 逐步闭合�
 | T04 | P0 | [#9](https://github.com/go-laoji/honk-proxy-server/issues/9) HTTP HTTPS SOCKS5 核心代理与资源控制 | T01 | 已完成显式代理验收 |
 | T05 | P0 | [#10](https://github.com/go-laoji/honk-proxy-server/issues/10) SQLite 配置版本、校验、激活与回滚 | T01 | 已完成持久化与三端验收 |
 | T06 | P0 | [#11](https://github.com/go-laoji/honk-proxy-server/issues/11) 短效提取 API、批次租约与安全重试 | T05 | 已完成契约、租约和三端验收 |
-| T07 | P0 | [#12](https://github.com/go-laoji/honk-proxy-server/issues/12) 到期预测、水位与预算驱动补池 | T06 | 开发中 |
+| T07 | P0 | [#12](https://github.com/go-laoji/honk-proxy-server/issues/12) 到期预测、水位与预算驱动补池 | T06 | 已完成预算、补池与运行验收 |
 | T08 | P0 | [#13](https://github.com/go-laoji/honk-proxy-server/issues/13) 统一健康检测与真实流量反馈 | T04, T06 | 待开发 |
 | T09 | P0 | [#14](https://github.com/go-laoji/honk-proxy-server/issues/14) DNS 上游、路由、缓存与诊断 | T03, T05, T04 | 待开发 |
 | T10 | P0 | [#15](https://github.com/go-laoji/honk-proxy-server/issues/15) 节点分组、选点、固定与租约准入 | T04, T06, T08 | 待开发 |
@@ -217,3 +217,5 @@ T02 随后接管现有模板：共享页面清单、Tailwind 布局与 API trans
 - 2026-11-01：T05 配置版本、SQLite、共享草稿、热切换/排空、CLI、管理 HTTPS、离线恢复与原生导出完成。macOS/Linux 各 33 项 Rust 测试、7 项浏览器 E2E 及 Desktop 实际保存/激活/导出/回滚通过；见 [配置验收](validation/configuration-2026-11-01.md)。
 
 - 2026-11-01：T06 来源管理、快代理签名/提取/只读诊断、通用接口、云代理 GBK 免费源、独立批次租约、动态池和安全提取完成。macOS/Linux 各 49 项 Rust 测试、8 项浏览器 E2E、Desktop 实际提取 15 条与 CLI 同任务幂等查询通过；见 [供应商验收](validation/provider-leases-2026-11-01.md)。T07 接续自动补池。
+
+- 2026-11-01：T07 按需/维护补池、滞回水位、退休预测、统一持久预算、冷却/暂停/确认恢复、API/CLI/共享控制台完成。macOS/Linux 各 64 项 Rust 测试、9 项浏览器 E2E、独立 CLI 持久重启与 Desktop 桥/打包通过；见 [补池验收](validation/replenishment-2026-11-01.md)。T08 接续健康筛选与真实反馈。
