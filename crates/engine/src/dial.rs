@@ -44,6 +44,7 @@ impl Upstream {
 pub struct Dialer {
     upstreams: Vec<Arc<Upstream>>,
     pub(crate) pool: Arc<crate::pool::DynamicPool>,
+    pub(crate) demand: Arc<crate::demand::Demand>,
     sources: std::sync::RwLock<std::collections::HashMap<String, String>>,
     cursor: AtomicUsize,
     timeout: Duration,
@@ -66,6 +67,7 @@ impl Dialer {
         Ok(Self {
             upstreams,
             pool: Arc::new(crate::pool::DynamicPool::default()),
+            demand: Arc::new(crate::demand::Demand::default()),
             sources: std::sync::RwLock::new(std::collections::HashMap::new()),
             cursor: AtomicUsize::new(0),
             timeout: Duration::from_millis(config.limits.connect_timeout_ms),
@@ -112,6 +114,7 @@ impl Dialer {
         target: &Target,
         http_forward: bool,
     ) -> Result<Connected, ProxyError> {
+        self.demand.mark();
         let dynamic = self.pool.snapshot();
         let total = self.upstreams.len() + dynamic.len();
         if total == 0 {

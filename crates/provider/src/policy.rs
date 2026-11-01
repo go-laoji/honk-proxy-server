@@ -100,7 +100,11 @@ pub fn cooldown(
     let jitter = (task_id.unsigned_abs() % 21) * backoff / 100;
     config
         .min_interval_secs
-        .max(backoff.saturating_add(jitter))
+        .max(
+            backoff
+                .saturating_add(jitter)
+                .min(config.refill.backoff_max_secs),
+        )
         .max(retry_after.unwrap_or(0).min(86400))
 }
 #[cfg(test)]

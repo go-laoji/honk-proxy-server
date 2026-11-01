@@ -13,8 +13,10 @@ impl Supervisor {
             .filter(|p| p.enabled)
             .map(|p| (p.id.clone(), hps_provider::fingerprint(p)))
             .collect();
-        let leases = self.store.active_leases().await?;
+        let mut leases = self.store.active_leases().await?;
+        leases.sort_by_key(|lease| std::cmp::Reverse((lease.candidate.expires_at, lease.id)));
         let mut seen = HashSet::new();
+        let mut counts = HashMap::<String, u32>::new();
         let nodes = leases
             .into_iter()
             .filter(|lease| allowed.get(&lease.provider_id) == Some(&lease.fingerprint))
@@ -26,6 +28,21 @@ impl Supervisor {
                     lease.candidate.upstream.port,
                 ))
             })
+            .filter(|lease| {
+                let provider = current
+                    .config
+                    .providers
+                    .iter()
+                    .find(|p| p.id == lease.provider_id)
+                    .expect("allowed provider");
+                let count = counts.entry(lease.provider_id.clone()).or_default();
+                if provider.refill.enabled && *count >= provider.refill.max_nodes {
+                    false
+                } else {
+                    *count += 1;
+                    true
+                }
+            })
             .map(|lease| hps_engine::pool::PoolNode {
                 provider_id: lease.provider_id.clone(),
                 fingerprint: lease.fingerprint,
@@ -34,7 +51,13 @@ impl Supervisor {
                     .providers
                     .iter()
                     .find(|p| p.id == lease.provider_id)
-                    .map_or(0, |p| p.min_remaining_secs),
+                    .map_or(0, |p| {
+                        if p.refill.enabled {
+                            p.min_remaining_secs.max(p.refill.retire_before_secs)
+                        } else {
+                            p.min_remaining_secs
+                        }
+                    }),
                 upstream: lease.candidate.upstream,
             })
             .collect();
@@ -143,31 +166,51 @@ impl Supervisor {
             .find(|p| p.id == id && p.enabled)
             .cloned()
             .ok_or(ApplicationError::ProviderUnavailable)?;
+        self.accept_extraction_locked(config, input.request_id, "manual")
+            .await
+    }
+    /// The caller holds operation; both API extraction and the controller use this path.
+    pub(crate) async fn accept_extraction_locked(
+        self: &Arc<Self>,
+        config: ProviderConfig,
+        request_id: String,
+        trigger: &str,
+    ) -> Result<ExtractionTask, ApplicationError> {
+        if let Some(task) = self
+            .store
+            .existing_extraction(config.id.clone(), request_id.clone())
+            .await?
+        {
+            return Ok(task);
+        }
+        let logical = self
+            .current()
+            .engine
+            .dynamic_pool()
+            .logical_now()
+            .min(i64::MAX as u64) as i64;
+        if logical > hps_provider::unix_now().saturating_add(5) {
+            return Err(ApplicationError::ClockRollback);
+        }
+        let permit = self
+            .provider_slots
+            .clone()
+            .try_acquire_owned()
+            .map_err(|_| ApplicationError::ExtractionCapacity)?;
         let client = ProviderClient::new(&config)?;
+        self.store.observe_lease_clock(logical).await?;
         let (task, new) = self
             .store
-            .begin_extraction(
+            .begin_extraction_with_trigger(
                 config.clone(),
-                input.request_id,
+                request_id,
                 hps_provider::fingerprint(&config),
+                trigger.into(),
             )
             .await?;
         if !new {
             return Ok(task);
         }
-        let Ok(permit) = self.provider_slots.clone().try_acquire_owned() else {
-            self.store
-                .fail_extraction(
-                    task.id,
-                    FetchError {
-                        code: "local_fetch_capacity",
-                        outcome_unknown: false,
-                        retry_after_secs: None,
-                    },
-                )
-                .await?;
-            return Ok(self.store.extraction_task(task.id).await?);
-        };
         let service = self.clone();
         let task_id = task.id;
         self.provider_tasks.spawn(async move {
@@ -182,7 +225,7 @@ impl Supervisor {
                 Err(error)=>{let _=service.store.fail_extraction(task_id,error).await;},
                 Ok(result)=>{
                     let publish=!service.closed.load(std::sync::atomic::Ordering::Acquire) && service.current().config.providers.iter().any(|p|p.enabled && p.id==config.id && hps_provider::fingerprint(p)==hps_provider::fingerprint(&config));
-                    if service.store.finish_extraction(task_id,config,result,publish).await.is_ok() {let _=service.refresh_pool().await;}
+                    if service.store.finish_extraction(task_id,config,result,publish).await.is_ok() {let _=service.refresh_pool().await;} else {let _=service.store.fail_extraction(task_id,FetchError{code:"lease_commit_outcome_unknown",outcome_unknown:true,retry_after_secs:None}).await;}
                 },
             }
         });

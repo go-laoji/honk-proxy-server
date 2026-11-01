@@ -81,6 +81,8 @@ pub struct ProviderConfig {
     pub auth: ProviderAuth,
     pub protocol: ProxyProtocol,
     pub count: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub count_parameter: Option<String>,
     pub ttl_secs: Option<u64>,
     pub query_valid_time: bool,
     pub min_remaining_secs: u64,
@@ -110,6 +112,7 @@ impl Default for ProviderConfig {
             auth: ProviderAuth::None,
             protocol: ProxyProtocol::Http,
             count: 10,
+            count_parameter: None,
             ttl_secs: None,
             query_valid_time: false,
             min_remaining_secs: 30,
@@ -194,6 +197,30 @@ impl ProviderConfig {
             && self.ttl_secs.is_none()
         {
             return Err(invalid());
+        }
+        if self.count_parameter.as_ref().is_some_and(|key| {
+            key.is_empty()
+                || key.len() > 128
+                || !key
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b"_-".contains(&b))
+                || [
+                    "secret_id",
+                    "signature",
+                    "sign_type",
+                    "timestamp",
+                    "nonce",
+                    "format",
+                ]
+                .contains(&key.as_str())
+        }) {
+            return Err(invalid());
+        }
+        if self.refill.enabled
+            && matches!(self.kind, ProviderKind::Json | ProviderKind::Text)
+            && self.count_parameter.is_none()
+        {
+            return Err(ConfigError::Invalid("automatic generic sources require count_parameter for bounded extraction quantities".into()));
         }
         if self.query_valid_time && self.kind != ProviderKind::Kuaidaili {
             return Err(invalid());

@@ -1,3 +1,4 @@
+mod controller;
 mod providers;
 use arc_swap::ArcSwap;
 use hps_config::DaemonConfig;
@@ -27,6 +28,10 @@ pub enum ApplicationError {
     Worker,
     #[error("provider not found or disabled")]
     ProviderUnavailable,
+    #[error("maximum concurrent supplier fetches reached")]
+    ExtractionCapacity,
+    #[error("system clock is behind the running lease clock; correct it before extracting")]
+    ClockRollback,
     #[error("provider operation failed: {0}")]
     Provider(#[from] hps_provider::FetchError),
 }
@@ -74,6 +79,7 @@ pub struct Supervisor {
     provider_tasks: tokio_util::task::TaskTracker,
     provider_cancel: tokio_util::sync::CancellationToken,
     provider_slots: Arc<tokio::sync::Semaphore>,
+    controller_started: std::sync::atomic::AtomicBool,
 }
 impl Supervisor {
     pub async fn boot(
@@ -116,6 +122,7 @@ impl Supervisor {
             provider_tasks: tokio_util::task::TaskTracker::new(),
             provider_cancel: tokio_util::sync::CancellationToken::new(),
             provider_slots: Arc::new(tokio::sync::Semaphore::new(8)),
+            controller_started: std::sync::atomic::AtomicBool::new(false),
         });
         service.refresh_pool().await?;
         Ok(service)
@@ -123,11 +130,12 @@ impl Supervisor {
     pub fn current(&self) -> Arc<RuntimeSnapshot> {
         self.current.load_full()
     }
-    pub async fn confirm_startup(&self) -> Result<(), ApplicationError> {
+    pub async fn confirm_startup(self: &Arc<Self>) -> Result<(), ApplicationError> {
         self.store
             .mark_applied(self.current().revision, None)
             .await?;
         self.prune().await?;
+        self.start_pool_controller();
         Ok(())
     }
     pub async fn workspace(&self) -> Result<ConfigWorkspace, ApplicationError> {

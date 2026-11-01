@@ -147,6 +147,19 @@ impl Store {
             let result=get_task(&tx,id)?;tx.commit()?;Ok((result,true))
         }).await
     }
+    pub async fn existing_extraction(
+        &self,
+        provider_id: String,
+        request_id: String,
+    ) -> Result<Option<ExtractionTask>, StorageError> {
+        self.call(move|c|Ok(c.query_row(&format!("SELECT {TASK_COLUMNS} FROM provider_tasks WHERE provider_id=?1 AND (request_id=?2 OR state IN ('accepted','requesting')) ORDER BY CASE WHEN request_id=?2 THEN 0 ELSE 1 END,id DESC LIMIT 1"),params![provider_id,request_id],task).optional()?)).await
+    }
+    pub async fn active_source_leases(
+        &self,
+        provider_id: String,
+    ) -> Result<Vec<StoredLease>, StorageError> {
+        self.call(move|c|Ok(c.prepare("SELECT id,batch_id,provider_id,fingerprint,document,received_at,state FROM provider_leases WHERE provider_id=?1 AND state='active' AND expires_at>?2 ORDER BY expires_at DESC,id DESC LIMIT 100000")?.query_map(params![provider_id,unix_now()],lease)?.collect::<Result<Vec<_>,_>>()?)).await
+    }
     pub async fn extraction_requesting(&self, id: i64) -> Result<(), StorageError> {
         self.call(move |c| {
             if c.execute(
@@ -197,8 +210,9 @@ impl Store {
             let nodes=result.nodes.into_iter().filter(|node|{let valid=node.expires_at>now.saturating_add(config.min_remaining_secs as i64);if !valid {rejected+=1;} valid}).collect::<Vec<_>>();
             let old:i64=tx.query_row("SELECT count(DISTINCT json_extract(document,'$.upstream.protocol') || '|' || json_extract(document,'$.upstream.host') || '|' || json_extract(document,'$.upstream.port')) FROM provider_leases WHERE provider_id=?1 AND state='active' AND expires_at>?2",params![config.id,now],|r|r.get(0))?;
             if nodes.is_empty() || (config.mode==LeaseMode::ReplaceSnapshot && nodes.len()*100<(old as usize)*usize::from(config.minimum_snapshot_percent)) {
-                tx.execute("UPDATE provider_tasks SET state='failed',finished_at=?2,error_code='snapshot_or_empty_result_protection',rejected=?3 WHERE id=?1",params![id,now,rejected as i64])?;
-                super::controller::failure(&tx,id,&FetchError{code:"snapshot_or_empty_result_protection",outcome_unknown:false,retry_after_secs:None},now)?;
+                let code=if nodes.is_empty(){"leases_too_short"}else{"snapshot_or_empty_result_protection"};
+                tx.execute("UPDATE provider_tasks SET state='failed',finished_at=?2,error_code=?4,rejected=?3 WHERE id=?1",params![id,now,rejected as i64,code])?;
+                super::controller::failure(&tx,id,&FetchError{code,outcome_unknown:false,retry_after_secs:None},now)?;
                 let result=get_task(&tx,id)?;tx.commit()?;return Ok(result);
             }
             let removed=if config.mode==LeaseMode::ReplaceSnapshot {tx.execute("UPDATE provider_leases SET state='revoked' WHERE provider_id=?1 AND state='active' AND expires_at>?2",params![config.id,now])?}else{0};
@@ -257,7 +271,10 @@ mod tests {
         store
             .call(|db| {
                 db.execute("UPDATE provider_tasks SET started_at=started_at-120", [])?;
-                db.execute("UPDATE provider_control SET next_allowed_at=0", [])?;
+                db.execute(
+                    "UPDATE provider_control SET next_allowed_at=0,paused_reason=NULL",
+                    [],
+                )?;
                 Ok(())
             })
             .await

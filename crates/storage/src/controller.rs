@@ -90,6 +90,8 @@ pub(super) fn failure(
             "vendor_auth_or_parameters",
             "http_auth_or_whitelist",
             "order_unavailable",
+            "no_admissible_leases",
+            "leases_too_short",
         ]
         .contains(&error.code)
     {
@@ -114,8 +116,15 @@ impl Store {
         &self,
         provider_id: String,
     ) -> Result<ControllerSnapshot, StorageError> {
+        self.controller_snapshot_at(provider_id, unix_now()).await
+    }
+    pub async fn controller_snapshot_at(
+        &self,
+        provider_id: String,
+        now: i64,
+    ) -> Result<ControllerSnapshot, StorageError> {
         self.call(move|c| {
-            let now=unix_now();let day=budget_day(c,now)?;
+            let day=budget_day(c,now)?;
             let usage=c.query_row("SELECT requests,reserved_nodes FROM provider_daily_usage WHERE provider_id=?1 AND day=?2",params![provider_id,day],|r|Ok((r.get::<_,u32>(0)?,r.get::<_,u32>(1)?))).optional()?.unwrap_or_default();
             let row=c.query_row("SELECT refilling,next_allowed_at,failure_count,paused_reason,last_task_id,acknowledged_at FROM provider_control WHERE provider_id=?1",[&provider_id],|r|Ok((r.get::<_,bool>(0)?,r.get::<_,i64>(1)?,r.get::<_,u32>(2)?,r.get::<_,Option<String>>(3)?,r.get::<_,Option<i64>>(4)?,r.get::<_,Option<i64>>(5)?))).optional()?.unwrap_or_default();
             let inflight=c.query_row(&format!("SELECT {} FROM provider_tasks WHERE provider_id=?1 AND state IN ('accepted','requesting') ORDER BY id DESC LIMIT 1",super::provider::TASK_COLUMNS),[&provider_id],super::provider::task).optional()?;
@@ -316,6 +325,34 @@ mod tests {
             store.controller_snapshot(c.id.clone()).await.unwrap().day,
             before.day + 1
         );
+        store.close().await.unwrap();
+    }
+    #[tokio::test]
+    async fn schema_four_requests_are_backfilled_into_budget_and_uncertain_pause() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = Connection::open(dir.path().join("hps.sqlite3")).unwrap();
+        c.execute_batch(include_str!("../migrations/0001_configuration.up.sql"))
+            .unwrap();
+        c.execute_batch(include_str!("../migrations/0002_known_good.up.sql"))
+            .unwrap();
+        c.execute_batch(include_str!("../migrations/0003_provider_leases.up.sql"))
+            .unwrap();
+        c.execute_batch(include_str!("../migrations/0004_lease_clock.up.sql"))
+            .unwrap();
+        c.execute_batch("CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY,applied_at INTEGER NOT NULL);INSERT INTO schema_migrations VALUES(4,0)").unwrap();
+        c.execute(
+            "INSERT INTO provider_clock(singleton,observed_at,clean_shutdown) VALUES(1,?1,1)",
+            [unix_now()],
+        )
+        .unwrap();
+        for (key, state) in [("legacy-a", "failed"), ("legacy-b", "outcome_unknown")] {
+            c.execute("INSERT INTO provider_tasks(provider_id,request_id,fingerprint,state,requested_count,started_at) VALUES('source',?1,?2,?3,3,?4)",params![key,"a".repeat(64),state,unix_now()]).unwrap();
+        }
+        drop(c);
+        let store = Store::open(Some(dir.path()), DaemonConfig::default()).unwrap();
+        let snapshot = store.controller_snapshot("source".into()).await.unwrap();
+        assert_eq!((snapshot.used_requests, snapshot.reserved_nodes), (2, 6));
+        assert_eq!(snapshot.paused_reason.as_deref(), Some("outcome_unknown"));
         store.close().await.unwrap();
     }
 }

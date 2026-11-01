@@ -703,6 +703,7 @@ name = "hps-application"
 version = "0.1.0"
 dependencies = [
  "arc-swap",
+ "axum",
  "bytes",
  "hps-config",
  "hps-domain",
@@ -724,6 +725,7 @@ dependencies = [
  "tokio-util",
  "toml",
  "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]
@@ -841,6 +843,7 @@ dependencies = [
  "encoding_rs",
  "hmac",
  "hps-config",
+ "httpdate",
  "reqwest",
  "scraper",
  "serde",

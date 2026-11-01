@@ -118,6 +118,7 @@ impl Engine {
         let mut dialer = Dialer::new(&config).map_err(|_| EngineError::Tls)?;
         if let Some(old) = previous {
             dialer.pool = old.dialer.pool.clone();
+            dialer.demand = old.dialer.demand.clone();
         }
         let dialer = Arc::new(dialer);
         let mut entries = BTreeMap::new();
@@ -178,6 +179,9 @@ impl Engine {
             cancel: CancellationToken::new(),
             generation: std::sync::atomic::AtomicI64::new(0),
         }))
+    }
+    pub fn demand_age(&self) -> Option<Duration> {
+        self.dialer.demand.age()
     }
     pub fn dynamic_pool(&self) -> Arc<crate::pool::DynamicPool> {
         self.dialer.pool.clone()
