@@ -85,6 +85,10 @@ export default function NodesPage() {
   }, [document]);
   function navigate(next: URLSearchParams) {
     const search = next.toString();
+    if (window.location.pathname.endsWith("/node-detail.html")) {
+      window.location.assign(`./nodes.html${search ? `?${search}` : ""}`);
+      return;
+    }
     const url = `${window.location.pathname}${search ? `?${search}` : ""}`;
     window.history.pushState(null, "", url);
     setQuery(window.location.search);
@@ -102,13 +106,6 @@ export default function NodesPage() {
   function page(offset: number) {
     const next = new URLSearchParams(query);
     next.set("offset", String(offset));
-    navigate(next);
-  }
-  function detail(id: string | null) {
-    const next = new URLSearchParams(query);
-    next.delete("offset");
-    if (id) next.set("id", id);
-    else next.delete("id");
     navigate(next);
   }
   function changed() {
@@ -525,10 +522,10 @@ export default function NodesPage() {
         <section className="panel" aria-label="节点详情">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 p-5 dark:border-slate-800">
             <h2 className="break-all font-semibold">节点详情 · {selectedId}</h2>
-            <button className="btn" onClick={() => detail(null)}>
+            <a className="btn" href="./nodes.html">
               <ArrowLeft size={15} />
               返回列表
-            </button>
+            </a>
           </div>
           {selected ? (
             <>
@@ -634,12 +631,12 @@ export default function NodesPage() {
             aria-label={`节点 ${node.id}`}
           >
             <div className="flex flex-wrap items-start justify-between gap-2">
-              <button
+              <a
                 className="break-all text-left font-semibold text-blue-600"
-                onClick={() => detail(node.id)}
+                href={`./node-detail.html?id=${encodeURIComponent(node.id)}`}
               >
                 {node.id}
-              </button>
+              </a>
               <Badge active={node.eligible}>
                 {node.eligible ? "可准入" : "不可准入"}
               </Badge>

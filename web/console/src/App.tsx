@@ -280,7 +280,7 @@ export default function App() {
                   refreshService={service.refresh}
                 />
               </Suspense>
-            ) : current.id === "nodes" ? (
+            ) : current.id === "nodes" || current.id === "node-detail" ? (
               <Suspense fallback={<p className="muted">正在读取节点…</p>}>
                 <NodesPage key={service.data.endpoint} />
               </Suspense>

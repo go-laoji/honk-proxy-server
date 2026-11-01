@@ -53,6 +53,7 @@ test("nodes MPA previews imports, restores filters, gates actual proxy traffic a
               endpoint: "http://127.0.0.1:9/list",
               ttl_secs: 300,
               count: 1,
+              count_parameter: "num",
               refill: {
                 enabled: true,
                 min_nodes: 1,
@@ -191,7 +192,8 @@ test("nodes MPA previews imports, restores filters, gates actual proxy traffic a
     await card.getByRole("button", { name: "解除限制", exact: true }).click();
     await expect(page.getByRole("status")).toContainText("已解除人工限制");
     expect(await throughProxy(listenPort)).toBe(200);
-    await card.getByRole("button", { name: node.id, exact: true }).click();
+    await card.getByRole("link", { name: node.id, exact: true }).click();
+    await expect(page).toHaveURL(/node-detail\.html\?id=/);
     await expect(page.getByLabel("节点详情", { exact: true })).toContainText(
       "已配置（隐藏）",
     );

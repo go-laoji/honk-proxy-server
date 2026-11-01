@@ -572,7 +572,7 @@ export default function ProvidersPage({
                       <td className="p-4">
                         <a
                           className="text-blue-600"
-                          href={`./nodes.html?id=${encodeURIComponent(lease.upstream_id)}`}
+                          href={`./node-detail.html?id=${encodeURIComponent(lease.upstream_id)}`}
                         >
                           #{lease.id} / #{lease.batch_id}
                         </a>
