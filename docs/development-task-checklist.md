@@ -15,7 +15,7 @@
 
 ## 2. 依赖与开发顺序
 
-先完成 T01 独立服务基础及 T02 共享页面骨架；同步尽早准备 T03 的真实 Linux 验证环境。T04 在 T03 集成决策通过后进入完整代理交付；不会因只完成 CLI 或 Web 骨架就声称 M0/正式 Linux 版本完成。
+先完成 T01 独立服务基础及 T02 共享页面骨架；同步尽早准备 T03 的真实 Linux 验证环境。T04 自研显式代理可独立推进，与 T03 共享流量接口；不会因只完成 CLI 或 Web 骨架就声称 M0/正式 Linux 版本完成。
 
 T05 配置基础后推进 T06/T07 短效 API 与补池。T08–T14 逐步闭合健康、DNS、选点、规则、节点、连接及任务链；T15/T16 完成 Linux 与桌面生命周期，T17 统一验收。T18–T21 为增强或储备。
 
@@ -25,8 +25,8 @@ T05 配置基础后推进 T06/T07 短效 API 与补池。T08–T14 逐步闭合�
 | --- | --- | --- | --- | --- |
 | T01 | P0 | [#6](https://github.com/go-laoji/honk-proxy-server/issues/6) Rust 工作区与独立 CLI/Daemon 基础 | 无 | 已完成基础交付 |
 | T02 | P0 | [#7](https://github.com/go-laoji/honk-proxy-server/issues/7) 共享 React Tailwind MPA 与 Desktop 桥骨架 | T01 | 已完成基础验收 |
-| T03 | P0 | [#8](https://github.com/go-laoji/honk-proxy-server/issues/8) honk 集成与真实 Linux eBPF 前置验证 | T01 | 环境预检与集成中 |
-| T04 | P0 | [#9](https://github.com/go-laoji/honk-proxy-server/issues/9) HTTP HTTPS SOCKS5 核心代理与资源控制 | T01, T03 | 待开发 |
+| T03 | P0 | [#8](https://github.com/go-laoji/honk-proxy-server/issues/8) 自研 Rust 核心与 Linux eBPF 前置验证 | T01 | 自研方案与环境预检中 |
+| T04 | P0 | [#9](https://github.com/go-laoji/honk-proxy-server/issues/9) HTTP HTTPS SOCKS5 核心代理与资源控制 | T01 | 待开发 |
 | T05 | P0 | [#10](https://github.com/go-laoji/honk-proxy-server/issues/10) SQLite 配置版本、校验、激活与回滚 | T01 | 待开发 |
 | T06 | P0 | [#11](https://github.com/go-laoji/honk-proxy-server/issues/11) 短效提取 API、批次租约与安全重试 | T05 | 待开发 |
 | T07 | P0 | [#12](https://github.com/go-laoji/honk-proxy-server/issues/12) 到期预测、水位与预算驱动补池 | T06 | 待开发 |
@@ -61,12 +61,12 @@ T05 配置基础后推进 T06/T07 短效 API 与补池。T08–T14 逐步闭合�
 - 工作：接管现有前端模板，建立18个真实HTML入口、共用布局/主题/API transport和页面清单；Rust Daemon与Tauri嵌入同一dist；Desktop原生桥处理目标连接，浏览器同源API，无登录。
 - 验收：前端类型/生产构建通过；18页独立可访问、刷新、无登录、未知页404；两端同一web_build_id；Desktop cargo check通过，基础页面连接真实Daemon。
 
-### T03 honk 集成与真实 Linux eBPF 前置验证
+### T03 自研 Rust 核心与 Linux eBPF 前置验证
 
 - Issue：[#8](https://github.com/go-laoji/honk-proxy-server/issues/8)。
 - 功能：LINUX-01、LINUX-02。
-- 工作：固定honk基线并确认共享运行时接入边界；实现真实环境预检，准备Linux6.12+隔离测试；验证BPF对象、hooks/maps、TCP/UDP真实出口和清理。
-- 验收：真实Linux挂载与出口证据；不能使用mock或仅预检替代数据面；非Linux明确unsupported；记录直接crate集成或必要fork决策。
+- 工作：定义本项目流量/拨号接口；自研Rust/Aya eBPF程序、公共ABI和loader；实现只读环境预检，验证真实挂载/maps与回收。不集成honk，初始Linux验证基线不等同最终最低内核要求。
+- 验收：真实Linux上的自有eBPF程序挂载、map交互与清理证据；预检不等于接管；透明TCP/UDP出口由T04/T15联合验收。非Linux如实报告；无honk依赖、对象或fork。
 
 ### T04 HTTP HTTPS SOCKS5 核心代理与资源控制
 
@@ -150,7 +150,7 @@ T05 配置基础后推进 T06/T07 短效 API 与补池。T08–T14 逐步闭合�
 - Issue：[#20](https://github.com/go-laoji/honk-proxy-server/issues/20)。
 - 功能：LINUX-03、LINUX-04、LINUX-05、LINUX-06。
 - 工作：本机/LAN接管范围、bypass、网卡/路由变化、热更新、启停与对象所有权；真实TCP/UDP和DNS；API/CLI/页面。
-- 验收：Linux6.12+ x86_64/aarch64真实出口矩阵；失败不假报ready；清理不损伤其他网络对象；异常退出可恢复。
+- 验收：以6.12 LTS及当前可用Linux内核为初始验证目标，完成x86_64/aarch64真实出口矩阵；失败不假报ready；清理不损伤其他网络对象；异常退出可恢复。最终最低内核要求由本项目程序与测试决定。
 
 ### T16 Desktop 本地远程档案与系统服务集成
 
@@ -209,3 +209,5 @@ T02 随后接管现有模板：共享页面清单、Tailwind 布局与 API trans
 - 2026-11-01：T01 基础交付通过 Rust 单测、clippy、独立进程/CLI 冒烟和无 GUI 依赖检查。代理与 eBPF 尚未接入，proxy_ready=false；开始 T02。
 
 - 2026-11-01：T02 的 18 页 MPA、共享构建清单、Daemon 嵌入及 Desktop 原生桥通过编译、4 项浏览器 E2E 和实际打包窗口验收，详见 [基础验收](validation/runtime-foundation-2026-11-01.md)。开始 T03；尚未加载真实 eBPF。
+
+- 2026-11-01：按用户澄清修正 T03：honk 仅供能力学习，自研 Rust engine、eBPF 与 loader；T04 不再等待 honk 集成。保留真实 Linux 发布门槛，按验证切片及时提交。

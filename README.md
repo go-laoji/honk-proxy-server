@@ -1,6 +1,8 @@
 # honk-proxy-server
 
-Rust 代理池服务，提供独立 CLI、无桌面 Daemon 和共享 React/Tailwind 多页面控制台。当前已开始工程基础开发，**尚未提供可用的代理数据面**。
+自主实现的 Rust 代理池服务，提供独立 CLI、无桌面 Daemon 和共享 React/Tailwind 多页面控制台。当前已开始工程基础开发，**尚未提供可用的代理数据面**。
+
+honk 仅作为能力参考；项目不集成其 crate、二进制或 fork。
 
 ## 开发与任务
 
