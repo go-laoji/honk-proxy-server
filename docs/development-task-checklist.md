@@ -36,7 +36,7 @@ T05 配置基础后推进 T06/T07 短效 API 与补池。T08–T14 逐步闭合�
 | T11 | P0 | [#16](https://github.com/go-laoji/honk-proxy-server/issues/16) 规则 CRUD、模拟与一致性发布 | T05, T09, T10 | 显式路由及三端实现完成，Linux 联合验收待 T15 |
 | T12 | P0 | [#17](https://github.com/go-laoji/honk-proxy-server/issues/17) 节点管理与来源详情控制台闭环 | T02, T06, T08, T10 | 已完成三端、排空与真实连接关联验收 |
 | T13 | P0 | [#18](https://github.com/go-laoji/honk-proxy-server/issues/18) 活跃连接、流量统计与路由解释 | T04, T10, T11 | 显式代理与实际窗口通过，待 T11/T15 联合门槛 |
-| T14 | P0 | [#19](https://github.com/go-laoji/honk-proxy-server/issues/19) 后台任务、SSE 与结构化事件 | T05, T06 | 后端、CLI、原生订阅完成，共用 MPA 回归中 |
+| T14 | P0 | [#19](https://github.com/go-laoji/honk-proxy-server/issues/19) 后台任务、SSE 与结构化事件 | T05, T06 | 已完成持久任务、三端事件流与实际窗口验收 |
 | T15 | P0 | [#20](https://github.com/go-laoji/honk-proxy-server/issues/20) Linux 透明数据面产品化与恢复 | T03, T09, T11, T13, T14 | 待开发 |
 | T16 | P0 | [#21](https://github.com/go-laoji/honk-proxy-server/issues/21) Desktop 本地远程档案与系统服务集成 | T02, T05, T15 | 待开发 |
 | T17 | P0 | [#22](https://github.com/go-laoji/honk-proxy-server/issues/22) 分包发行、端到端与发布门槛 | T01, T02, T04, T05, T06, T07, T08, T09, T10, T11, T12, T13, T14, T15, T16 | 待开发 |

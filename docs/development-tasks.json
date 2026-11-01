@@ -294,7 +294,7 @@
       "acceptance": "客户端离开不丢后台任务；游标过期补快照；切实例不收旧事件；无项目登录或已认证操作人假设。",
       "issue": 19,
       "url": "https://github.com/go-laoji/honk-proxy-server/issues/19",
-      "status": "in_progress"
+      "status": "completed"
     },
     {
       "id": "T15",
