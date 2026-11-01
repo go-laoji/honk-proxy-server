@@ -202,3 +202,34 @@ export interface ProviderDetail {
   tasks: ExtractionTask[];
   leases: LeaseInfo[];
 }
+
+export interface ProviderControllerStatus {
+  provider_id: string;
+  enabled: boolean;
+  mode: "on_demand" | "maintain";
+  min_nodes: number;
+  target_nodes: number;
+  max_nodes: number;
+  current_inventory: number;
+  projected_inventory: number;
+  inflight_nodes: number;
+  demand_active: boolean;
+  refilling: boolean;
+  decision: string;
+  planned_count: number;
+  day_started_at: number;
+  resets_at: number;
+  used_requests: number;
+  request_budget: number;
+  reserved_nodes: number;
+  node_budget: number;
+  next_allowed_at: number;
+  failure_count: number;
+  paused_reason: string | null;
+  last_task_id: number | null;
+  acknowledged_at: number | null;
+}
+export interface ControllerEvaluation {
+  status: ProviderControllerStatus;
+  task: ExtractionTask | null;
+}
