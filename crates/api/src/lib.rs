@@ -6,6 +6,9 @@ use std::{
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
+#[cfg(feature = "web-ui")]
+mod web;
+
 pub struct AppState {
     pub config: DaemonConfig,
     instance_id: String,
@@ -31,7 +34,16 @@ impl AppState {
             service: "honk-proxy-server".into(),
             version: env!("CARGO_PKG_VERSION").into(),
             api_version: hps_domain::API_VERSION.into(),
-            web_build_id: None,
+            web_build_id: {
+                #[cfg(feature = "web-ui")]
+                {
+                    Some(hps_web_assets::BUILD_ID.into())
+                }
+                #[cfg(not(feature = "web-ui"))]
+                {
+                    None
+                }
+            },
         }
     }
 
@@ -51,7 +63,7 @@ impl AppState {
 }
 
 pub fn router(state: Arc<AppState>) -> Router {
-    Router::new()
+    let router = Router::new()
         .route("/healthz", get(|| async { Json(serde_json::json!({"alive": true})) }))
         .route("/readyz", get(|| async {
             (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"ready": false, "reason": "proxy runtime is not initialized"})))
@@ -59,9 +71,12 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/v1/status", get(status))
         .route("/api/v1/version", get(version))
         .route("/api/v1/capabilities", get(capabilities))
-        .route("/api/v1/config", get(config))
-        .fallback(not_found)
-        .with_state(state)
+        .route("/api/v1/config", get(config));
+    #[cfg(feature = "web-ui")]
+    let router = router.fallback(web::serve);
+    #[cfg(not(feature = "web-ui"))]
+    let router = router.fallback(not_found);
+    router.with_state(state)
 }
 
 async fn status(State(state): State<Arc<AppState>>) -> Json<ServiceStatus> {

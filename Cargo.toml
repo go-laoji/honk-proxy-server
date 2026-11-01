@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["apps/cli", "apps/daemon", "crates/domain", "crates/config", "crates/client", "crates/api"]
+members = ["apps/cli", "apps/daemon", "crates/domain", "crates/config", "crates/client", "crates/api", "crates/web-assets"]
 default-members = ["apps/cli", "apps/daemon"]
 exclude = ["src-tauri"]
 
