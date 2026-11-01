@@ -1,0 +1,17 @@
+[package]
+name = "hps-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "hps"
+path = "src/main.rs"
+
+[dependencies]
+hps-client.workspace = true
+hps-config.workspace = true
+clap.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+toml.workspace = true

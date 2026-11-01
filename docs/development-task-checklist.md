@@ -23,8 +23,8 @@ T05 配置基础后推进 T06/T07 短效 API 与补池。T08–T14 逐步闭合�
 
 | 任务 | 优先级 | Issue 与工作项 | 依赖 | 状态 |
 | --- | --- | --- | --- | --- |
-| T01 | P0 | [#6](https://github.com/go-laoji/honk-proxy-server/issues/6) Rust 工作区与独立 CLI/Daemon 基础 | 无 | 待开发 |
-| T02 | P0 | [#7](https://github.com/go-laoji/honk-proxy-server/issues/7) 共享 React Tailwind MPA 与 Desktop 桥骨架 | T01 | 待开发 |
+| T01 | P0 | [#6](https://github.com/go-laoji/honk-proxy-server/issues/6) Rust 工作区与独立 CLI/Daemon 基础 | 无 | 已完成基础交付 |
+| T02 | P0 | [#7](https://github.com/go-laoji/honk-proxy-server/issues/7) 共享 React Tailwind MPA 与 Desktop 桥骨架 | T01 | 开发中 |
 | T03 | P0 | [#8](https://github.com/go-laoji/honk-proxy-server/issues/8) honk 集成与真实 Linux eBPF 前置验证 | T01 | 待开发 |
 | T04 | P0 | [#9](https://github.com/go-laoji/honk-proxy-server/issues/9) HTTP HTTPS SOCKS5 核心代理与资源控制 | T01, T03 | 待开发 |
 | T05 | P0 | [#10](https://github.com/go-laoji/honk-proxy-server/issues/10) SQLite 配置版本、校验、激活与回滚 | T01 | 待开发 |
@@ -206,3 +206,4 @@ T02 随后接管现有模板：共享页面清单、Tailwind 布局与 API trans
 
 - 2026-11-01：完成 21 个子 Issue 及全部 99 项功能的唯一映射，准备开始 T01。
 
+- 2026-11-01：T01 基础交付通过 Rust 单测、clippy、独立进程/CLI 冒烟和无 GUI 依赖检查。代理与 eBPF 尚未接入，proxy_ready=false；开始 T02。

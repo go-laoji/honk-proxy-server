@@ -18,7 +18,7 @@
       "acceptance": "cargo test/clippy 通过；不编译 Tauri 可运行 hpsd 与 hps；真实 HTTP 请求与 CLI JSON 输出验证；无数据面时 proxy_ready=false。",
       "issue": 6,
       "url": "https://github.com/go-laoji/honk-proxy-server/issues/6",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "T02",
@@ -32,7 +32,7 @@
       "acceptance": "前端类型/生产构建通过；18页独立可访问、刷新、无登录、未知页404；两端同一web_build_id；Desktop cargo check通过，基础页面连接真实Daemon。",
       "issue": 7,
       "url": "https://github.com/go-laoji/honk-proxy-server/issues/7",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "id": "T03",
@@ -448,4 +448,3 @@
     }
   ]
 }
-

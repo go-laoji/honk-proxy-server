@@ -1,0 +1,18 @@
+[package]
+name = "hps-daemon"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "hpsd"
+path = "src/main.rs"
+
+[dependencies]
+hps-api.workspace = true
+hps-config.workspace = true
+axum.workspace = true
+clap.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
