@@ -43,12 +43,20 @@ impl Upstream {
             hash.update(fp.as_bytes());
         }
         let identity = format!("{:x}", hash.finalize());
+        let instant = std::time::Instant::now();
+        let deadline = config.expires_at_unix.map(|expiry| {
+            let remaining = std::time::UNIX_EPOCH
+                .checked_add(Duration::from_secs(expiry))
+                .and_then(|date| date.duration_since(SystemTime::now()).ok())
+                .unwrap_or(Duration::ZERO);
+            instant.checked_add(remaining).unwrap_or(instant)
+        });
         Ok(Self {
             config,
             identity,
             tls,
             source: None,
-            deadline: None,
+            deadline,
             minimum_lifetime: 0,
         })
     }
@@ -171,6 +179,32 @@ pub struct Connected {
     pub proxy_authorization: Option<HeaderValue>,
 }
 impl Dialer {
+    pub(crate) fn preserve_static_deadlines(&mut self, previous: &Self) {
+        let deadlines = previous
+            .upstreams
+            .iter()
+            .map(|up| {
+                (
+                    (
+                        up.config.id.clone(),
+                        up.identity.clone(),
+                        up.config.expires_at_unix,
+                    ),
+                    up.deadline,
+                )
+            })
+            .collect::<std::collections::HashMap<_, _>>();
+        for up in &mut self.upstreams {
+            if let Some(Some(old)) = deadlines.get(&(
+                up.config.id.clone(),
+                up.identity.clone(),
+                up.config.expires_at_unix,
+            )) && let Some(up) = Arc::get_mut(up)
+            {
+                up.deadline = up.deadline.map(|current| current.min(*old));
+            }
+        }
+    }
     pub fn new(config: &ProxyConfig) -> Result<Self, ProxyError> {
         let upstreams = config
             .upstreams
@@ -251,6 +285,9 @@ impl Dialer {
     }
     pub fn group_last_choices(&self) -> std::collections::HashMap<String, String> {
         self.selector.last()
+    }
+    pub(crate) fn retire_selection(&self) {
+        self.selector.retire();
     }
     pub fn selection(&self, query: &hps_domain::SelectionQuery) -> hps_domain::SelectionDecision {
         self.select(query, false).0
@@ -340,6 +377,24 @@ impl Dialer {
         query.destination_port = Some(target.port);
         let (_, upstream) = self.select(&query, true);
         let upstream = upstream.ok_or(ProxyError::NoUpstream)?;
+        if remaining(&upstream).is_some_and(|r| {
+            r <= Duration::from_secs(self.min_lifetime.max(upstream.minimum_lifetime))
+        }) || !self.health_usable(
+            &upstream.identity,
+            query
+                .destination_host
+                .as_ref()
+                .and_then(|h| h.parse::<std::net::IpAddr>().ok())
+                .map(|ip| {
+                    if ip.is_ipv4() {
+                        hps_domain::IpFamily::Ipv4
+                    } else {
+                        hps_domain::IpFamily::Ipv6
+                    }
+                }),
+        ) {
+            return Err(ProxyError::NoUpstream);
+        }
         let progress = Progress::new();
         let outcome = tokio::time::timeout(
             self.timeout,
@@ -582,6 +637,24 @@ fn socket_error(error: std::io::Error) -> ProxyError {
 #[cfg(all(test, unix))]
 mod resource_tests {
     use super::*;
+    #[test]
+    fn unchanged_static_expiry_keeps_monotonic_deadline_across_generations() {
+        let now = SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let config=hps_config::DaemonConfig::from_toml(&format!("[[proxy.upstreams]]\nid='a'\nprotocol='http'\nhost='127.0.0.1'\nport=9\nexpires_at_unix={}\n",now+60)).unwrap();
+        let mut old = Dialer::new(&config.proxy).unwrap();
+        Arc::get_mut(&mut old.upstreams[0]).unwrap().deadline = Some(std::time::Instant::now());
+        let mut next = Dialer::new(&config.proxy).unwrap();
+        next.preserve_static_deadlines(&old);
+        assert_eq!(next.eligible_count(), 0);
+        let mut changed = config.proxy;
+        changed.upstreams[0].expires_at_unix = Some(now + 120);
+        let mut renewed = Dialer::new(&changed).unwrap();
+        renewed.preserve_static_deadlines(&old);
+        assert_eq!(renewed.eligible_count(), 1);
+    }
     #[test]
     fn local_exhaustion_is_separate_from_remote_refusal() {
         for code in [libc::EMFILE, libc::ENFILE, libc::ENOMEM, libc::ENOBUFS] {

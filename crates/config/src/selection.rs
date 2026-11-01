@@ -86,10 +86,13 @@ impl SelectionConfig {
         {
             return Err(invalid());
         }
-        let known_node = |id: &str| {
-            valid_node_id(id)
-                && (id.starts_with("lease:") || proxy.upstreams.iter().any(|u| u.id == id))
-        };
+        let static_nodes = proxy
+            .upstreams
+            .iter()
+            .map(|u| u.id.as_str())
+            .collect::<HashSet<_>>();
+        let known_node =
+            |id: &str| valid_node_id(id) && (id.starts_with("lease:") || static_nodes.contains(id));
         let valid_tags =
             |tags: &[String]| tags.len() <= 32 && tags.iter().all(|t| crate::valid_id(t));
         let mut ids = HashSet::new();

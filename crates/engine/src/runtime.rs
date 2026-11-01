@@ -120,6 +120,7 @@ impl Engine {
         config.validate().map_err(|_| EngineError::Configuration)?;
         let mut dialer = Dialer::new(&config).map_err(|_| EngineError::Tls)?;
         if let Some(old) = previous {
+            dialer.preserve_static_deadlines(&old.dialer);
             dialer.pool = old.dialer.pool.clone();
             dialer.demand = old.dialer.demand.clone();
             dialer.health = old.dialer.health.clone();
@@ -264,6 +265,7 @@ impl Engine {
     }
     /// Stop accepting, retaining existing sessions and their generation budget.
     pub async fn drain_acceptors(&self) {
+        self.dialer.retire_selection();
         for entry in self.entries.values() {
             let control = entry.control.lock().await;
             if let Some(run) = control.as_ref() {
@@ -375,6 +377,7 @@ impl Engine {
         Ok(entry.status())
     }
     pub async fn shutdown(&self) {
+        self.dialer.retire_selection();
         self.cancel.cancel();
         for id in self.entries.keys() {
             let _ = self.stop(id).await;

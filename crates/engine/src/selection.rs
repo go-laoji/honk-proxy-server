@@ -28,6 +28,7 @@ struct State {
     sessions: HashMap<String, Binding>,
     last: HashMap<String, String>,
     last_prune: Option<Instant>,
+    retired: bool,
 }
 pub(crate) struct Selector {
     config: SelectionConfig,
@@ -42,6 +43,11 @@ impl Selector {
     }
     pub fn last(&self) -> HashMap<String, String> {
         self.state.lock().unwrap().last.clone()
+    }
+    pub fn retire(&self) {
+        let mut state = self.state.lock().unwrap();
+        state.retired = true;
+        state.sessions.clear();
     }
     pub fn decide(
         &self,
@@ -266,6 +272,7 @@ impl Selector {
             if let (Some(key), Some(session)) =
                 (key.as_ref(), group.and_then(|g| g.session.as_ref()))
                 && !session_reused
+                && !state.retired
             {
                 let duration =
                     choices[index]
@@ -576,5 +583,7 @@ mod tests {
             .0;
         assert!(d.selected.is_none());
         assert_eq!(d.reason, "unknown_group");
+        s.retire();
+        assert_eq!(s.decide(choices(), &other, true).0.sessions, 0);
     }
 }
