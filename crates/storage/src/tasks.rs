@@ -113,7 +113,10 @@ fn text(value: &Option<String>, maximum: usize) -> bool {
     value.as_ref().is_none_or(|s| identifier(s, maximum))
 }
 fn valid_task_query(q: &TaskQuery) -> bool {
-    q.before.is_none_or(|n| n > 0)
+    q.source_ref
+        .as_ref()
+        .is_none_or(|s| hps_domain::valid_task_source_ref(s))
+        && q.before.is_none_or(|n| n > 0)
         && q.limit.is_none_or(|n| (1..=200).contains(&n))
         && q.kind
             .as_ref()
@@ -234,8 +237,8 @@ impl Store {
         let epoch = self.epoch.clone();
         self.call(move |c| {
             let limit=query.limit.unwrap_or(50);
-            let mut records=c.prepare(&format!("SELECT {TASK_COLUMNS},NULL FROM task_records WHERE (?1 IS NULL OR id<?1) AND (?2 IS NULL OR kind=?2) AND (?3 IS NULL OR state=?3) AND (?4 IS NULL OR resource_kind=?4) AND (?5 IS NULL OR resource_id=?5) AND (?6 IS NULL OR request_id=?6) AND (?7 IS NULL OR created_at>=?7) ORDER BY id DESC LIMIT ?8"))?
-                .query_map(params![query.before,query.kind,query.state,query.resource_kind,query.resource_id,query.request_id,query.created_after_unix_ms.map(|n|n as i64),limit+1],task_row)?.collect::<Result<Vec<_>,_>>()?;
+            let mut records=c.prepare(&format!("SELECT {TASK_COLUMNS},NULL FROM task_records WHERE (?1 IS NULL OR id<?1) AND (?2 IS NULL OR kind=?2) AND (?3 IS NULL OR state=?3) AND (?4 IS NULL OR resource_kind=?4) AND (?5 IS NULL OR resource_id=?5) AND (?6 IS NULL OR request_id=?6) AND (?7 IS NULL OR created_at>=?7) AND (?8 IS NULL OR source_ref=?8) ORDER BY id DESC LIMIT ?9"))?
+                .query_map(params![query.before,query.kind,query.state,query.resource_kind,query.resource_id,query.request_id,query.created_after_unix_ms.map(|n|n as i64),query.source_ref,limit+1],task_row)?.collect::<Result<Vec<_>,_>>()?;
             let more=records.len()>limit as usize;
             records.truncate(limit as usize);
             Ok(TasksOverview {epoch, observed_at_unix_ms:unix_ms(),next_before:if more {records.last().map(|t|t.id)} else {None},records,terminal_retention_limit:TASK_RETENTION})

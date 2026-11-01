@@ -164,6 +164,24 @@ async fn source_tasks_project_actual_provider_health_and_activation_without_cred
         && t.terminal
         && t.total == 0));
     let provider = records.iter().find(|t| t.kind == "provider").unwrap();
+    let exact = store
+        .tasks(TaskQuery {
+            source_ref: Some(format!("provider:{}", source.id)),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    assert_eq!(exact.records.len(), 1);
+    assert_eq!(exact.records[0].id, provider.id);
+    assert!(matches!(
+        store
+            .tasks(TaskQuery {
+                source_ref: Some("provider:01".into()),
+                ..Default::default()
+            })
+            .await,
+        Err(StorageError::Invalid)
+    ));
     assert_eq!(provider.state, "outcome_unknown");
     assert_eq!(provider.configuration_revision, Some(1));
     let activation = store.activate(1, 1, false).await.unwrap();

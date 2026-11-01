@@ -2,9 +2,10 @@ use hps_client::HpsClient;
 use std::{sync::Mutex, time::Duration};
 use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
+mod events;
 
 struct Connection(Mutex<String>);
-#[derive(serde::Serialize)]
+#[derive(Debug, serde::Serialize)]
 struct NativeApiError {
     message: String,
     code: String,
@@ -54,10 +55,14 @@ fn set_endpoint(
     app: tauri::AppHandle,
     state: tauri::State<'_, Connection>,
     endpoint: String,
+    subscriptions: tauri::State<'_, events::NativeEvents>,
 ) -> Result<(), String> {
     let client = HpsClient::new(&endpoint, Duration::from_secs(10)).map_err(|e| e.to_string())?;
     let endpoint = client.endpoint().as_str().to_owned();
     let mut current = state.0.lock().map_err(|_| "connection state unavailable")?;
+    subscriptions
+        .ensure_target_generation()
+        .map_err(|e| e.message)?;
     let directory = app.path().app_config_dir().map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
     let temporary = directory.join("connection.json.tmp");
@@ -67,6 +72,7 @@ fn set_endpoint(
     )
     .map_err(|e| e.to_string())?;
     std::fs::rename(temporary, directory.join("connection.json")).map_err(|e| e.to_string())?;
+    subscriptions.change_target().map_err(|e| e.message)?;
     *current = endpoint;
     Ok(())
 }
@@ -88,6 +94,7 @@ fn supported_api(path: &str) -> bool {
             | "api/v1/providers"
             | "api/v1/groups"
     ) || supported_health_get(path)
+        || events::supported_get(path)
         || supported_connections_get(path)
         || supported_nodes_get(path)
         || supported_rules_get(path)
@@ -328,6 +335,7 @@ fn supported_action(path: &str) -> bool {
     if matches!(
         path,
         "api/v1/health/probe"
+            | "api/v1/tasks"
             | "api/v1/rules/save"
             | "api/v1/rules/upsert"
             | "api/v1/rules/delete"
@@ -470,7 +478,22 @@ pub fn run() {
             app.manage(Connection(Mutex::new(
                 saved.unwrap_or_else(|| "http://127.0.0.1:17900/".into()),
             )));
+            app.manage(events::NativeEvents::default());
             Ok(())
+        })
+        .on_page_load(|webview, payload| {
+            if payload.event() == tauri::webview::PageLoadEvent::Started
+                && let Some(state) = webview.app_handle().try_state::<events::NativeEvents>()
+            {
+                let _ = state.navigate(webview.label());
+            }
+        })
+        .on_window_event(|window, event| {
+            if matches!(event, tauri::WindowEvent::Destroyed)
+                && let Some(state) = window.app_handle().try_state::<events::NativeEvents>()
+            {
+                let _ = state.navigate(window.label());
+            }
         })
         .invoke_handler(tauri::generate_handler![
             get_endpoint,
@@ -478,7 +501,11 @@ pub fn run() {
             api_get,
             api_post,
             save_config_export,
-            get_web_build_id
+            get_web_build_id,
+            events::events_context,
+            events::events_subscribe,
+            events::events_cancel,
+            events::events_ack,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

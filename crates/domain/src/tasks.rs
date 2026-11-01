@@ -35,6 +35,7 @@ pub struct TaskInfo {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct TaskQuery {
+    pub source_ref: Option<String>,
     pub expected_epoch: Option<String>,
     pub before: Option<i64>,
     pub kind: Option<String>,
@@ -166,6 +167,14 @@ pub const EVENT_MODULES: &[&str] = &[
 
 pub fn event_cursor(epoch: &str, sequence: i64) -> String {
     format!("{epoch}:{sequence}")
+}
+pub fn valid_task_source_ref(value: &str) -> bool {
+    value.split_once(':').is_some_and(|(kind, id)| {
+        ["provider", "health", "activation"].contains(&kind)
+            && id
+                .parse::<i64>()
+                .is_ok_and(|n| n > 0 && n.to_string() == id)
+    })
 }
 pub fn parse_event_cursor(value: &str) -> Option<(&str, i64)> {
     let (epoch, sequence) = value.split_once(':')?;

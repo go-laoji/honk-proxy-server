@@ -37,6 +37,8 @@ pub(super) enum TaskCommand {
 #[derive(Args)]
 pub(super) struct TaskListArgs {
     #[arg(long)]
+    source_ref: Option<String>,
+    #[arg(long)]
     expected_epoch: Option<String>,
     #[arg(long,value_parser=clap::value_parser!(i64).range(1..))]
     before: Option<i64>,
@@ -58,6 +60,7 @@ pub(super) struct TaskListArgs {
 impl TaskListArgs {
     fn query(&self) -> TaskQuery {
         TaskQuery {
+            source_ref: self.source_ref.clone(),
             expected_epoch: self.expected_epoch.clone(),
             before: self.before,
             kind: self.kind.clone(),
