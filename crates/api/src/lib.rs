@@ -90,7 +90,7 @@ async fn capabilities() -> Json<Capabilities> {
     Json(Capabilities::foundation())
 }
 async fn config(State(state): State<Arc<AppState>>) -> Json<DaemonConfig> {
-    Json(state.config.clone())
+    Json(state.config.redacted())
 }
 
 async fn linux_preflight() -> Result<Json<hps_domain::LinuxPreflight>, (StatusCode, Json<ApiError>)>
