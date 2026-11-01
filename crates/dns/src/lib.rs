@@ -113,6 +113,8 @@ pub struct Overview<C> {
     pub listener: Option<std::net::SocketAddr>,
     pub cache: CachePage,
     pub linux_capture_active: bool,
+    #[serde(default)]
+    pub linux_capture: Option<hps_domain::DnsCaptureStatus>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DomainContext {

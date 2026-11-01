@@ -56,6 +56,7 @@ pub struct DnsConfig {
     pub routes: Vec<DnsRoute>,
     pub default_upstream: String,
     pub listen: Option<SocketAddr>,
+    pub capture: Option<DnsCaptureConfig>,
     pub timeout_ms: u64,
     pub max_parallel: usize,
     pub cache_entries: usize,
@@ -78,6 +79,7 @@ impl Default for DnsConfig {
             routes: vec![],
             default_upstream: "system".into(),
             listen: None,
+            capture: None,
             timeout_ms: 5000,
             max_parallel: 64,
             cache_entries: 2048,
@@ -102,6 +104,24 @@ impl DnsConfig {
             ));
         }
         let mut ids = HashSet::new();
+        if let Some(capture) = &self.capture
+            && (!self.enabled
+                || capture.object.as_os_str().is_empty()
+                || capture.object.as_os_str().len() > 4096
+                || !capture.cgroup.is_absolute()
+                || capture.cgroup.as_os_str().len() > 4096
+                || capture.port == 0
+                || capture.port == 53
+                || self.listen.is_some_and(|a| a.port() == capture.port)
+                || proxy
+                    .inbounds
+                    .iter()
+                    .any(|p| p.enabled && p.listen.port() == capture.port))
+        {
+            return Err(invalid(
+                "capture needs enabled DNS, an object, absolute cgroup v2 path and a dedicated nonzero port different from 53 and all inlets",
+            ));
+        }
         let mut proxy_bootstrap = std::collections::HashMap::new();
         for up in &self.upstreams {
             if !crate::valid_id(&up.id) || !ids.insert(up.id.as_str()) {
@@ -127,7 +147,7 @@ impl DnsConfig {
                     || up.ca_certificate.is_some()
                     || up.proxy_id.is_some()
                     || !up.proxy_bootstrap_ips.is_empty()
-                    || (self.enabled && self.listen.is_some())
+                    || (self.enabled && (self.listen.is_some() || self.capture.is_some()))
                 {
                     return Err(invalid(
                         "system resolver has no wire TTL or egress options and cannot serve a DNS listener",
@@ -137,6 +157,15 @@ impl DnsConfig {
             }
             if up.addresses.is_empty() {
                 return Err(invalid("wire upstreams need explicit IP socket addresses"));
+            }
+            if self
+                .capture
+                .as_ref()
+                .is_some_and(|capture| up.addresses.iter().any(|a| a.port() == capture.port))
+            {
+                return Err(invalid(
+                    "wire upstream ports must differ from the dedicated capture listener port",
+                ));
             }
             let encrypted = matches!(up.protocol, DnsProtocol::Tls | DnsProtocol::Https);
             if encrypted {
@@ -196,6 +225,7 @@ impl DnsConfig {
                     up.addresses.iter().any(|a| {
                         *a == listen
                             || (listen.ip().is_unspecified()
+                                && a.ip().is_loopback()
                                 && a.port() == listen.port()
                                 && a.is_ipv4() == listen.is_ipv4())
                     })
@@ -253,6 +283,17 @@ pub fn valid_query_type(s: &str) -> bool {
         .and_then(|n| n.parse::<u16>().ok())
         .is_some_and(|n| !matches!(n, 0 | 41 | 249..=255))
 }
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DnsCaptureConfig {
+    pub object: PathBuf,
+    pub cgroup: PathBuf,
+    #[serde(default = "capture_port")]
+    pub port: u16,
+}
+const fn capture_port() -> u16 {
+    1053
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -275,6 +316,14 @@ mod tests {
         config.upstreams[0].addresses = vec!["127.0.0.1:1053".parse().unwrap()];
         assert!(config.validate(&ProxyConfig::default()).is_err());
         config.upstreams[0].addresses = vec!["1.1.1.1:53".parse().unwrap()];
+        assert!(config.validate(&ProxyConfig::default()).is_ok());
+        config.listen = Some("0.0.0.0:53".parse().unwrap());
+        assert!(config.validate(&ProxyConfig::default()).is_ok());
+        config.capture = Some(DnsCaptureConfig {
+            object: "object".into(),
+            cgroup: "/sys/fs/cgroup".into(),
+            port: 1053,
+        });
         assert!(config.validate(&ProxyConfig::default()).is_ok());
         config.upstreams[0].proxy_id = Some("missing".into());
         assert!(config.validate(&ProxyConfig::default()).is_err());

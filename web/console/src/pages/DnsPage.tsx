@@ -34,6 +34,7 @@ type Policy = {
   }[];
   default_upstream: string;
   listen: string | null;
+  capture: { object: string; cgroup: string; port: number } | null;
   timeout_ms: number;
   max_parallel: number;
   cache_entries: number;
@@ -55,6 +56,19 @@ type Overview = {
   configuration: Policy;
   listener: string | null;
   linux_capture_active: boolean;
+  linux_capture: {
+    cgroup: string;
+    port: number;
+    peers: number;
+    program_ids: number[];
+    object_sha256: string;
+    stats: {
+      family: string;
+      redirected: number;
+      restored: number;
+      errors: number;
+    }[];
+  } | null;
   cache: {
     entries: Entry[];
     next_after: string | null;
@@ -240,7 +254,11 @@ export default function DnsPage({
               title="DNS 服务"
               value={data.configuration.enabled ? "已启用" : "停用"}
               detail={
-                data.listener ? `监听 ${data.listener}` : "未启动 DNS 监听"
+                data.listener
+                  ? `监听 ${data.listener}`
+                  : data.linux_capture
+                    ? `Linux 双栈捕获端口 ${data.linux_capture.port}`
+                    : "未启动 DNS 监听"
               }
               icon={Network}
             />
@@ -361,6 +379,13 @@ export default function DnsPage({
                   server_name；代理出口只可引用已启用的静态节点，域名节点需要
                   proxy_bootstrap_ips。保存前检查配置、信任证书和监听端口，其他用户已改配置时会提示冲突。
                 </p>
+                <p className="muted text-xs leading-6">
+                  Linux DNS 捕获配置在 capture 字段填写 object（自有 eBPF
+                  对象绝对路径）、cgroup（已有 cgroup v2
+                  路径）、port（专用端口，默认
+                  1053）。启用前服务会验证内核并准备监听；运行中修改或关闭捕获需要重启
+                  Daemon，上游、路由和缓存策略可热更新。
+                </p>
                 <div className="flex gap-2">
                   <button
                     className="btn-primary"
@@ -443,6 +468,10 @@ export default function DnsPage({
             </form>
             {lookup && (
               <div className="mt-5 space-y-3 text-xs" aria-live="polite">
+                <p className="break-all font-medium">
+                  {lookup.name} · {lookup.query_type} ·{" "}
+                  {purposes[lookup.purpose]}
+                </p>
                 <p>
                   {lookup.response_code} · {lookup.elapsed_ms} ms ·{" "}
                   {lookup.source} · {lookup.protocol.toUpperCase()} /{" "}
@@ -597,6 +626,34 @@ export default function DnsPage({
               观测不能证明网关客户端的进程身份。Linux DNS 接管：
               {data.linux_capture_active ? "已启用" : "未启用"}。
             </p>
+            {data.linux_capture && (
+              <details className="mt-4 rounded-xl bg-slate-50 p-4 text-xs leading-6 dark:bg-slate-800">
+                <summary className="cursor-pointer font-medium">
+                  Linux DNS 内核证据
+                </summary>
+                <p className="mt-2 break-all">
+                  cgroup：{data.linux_capture.cgroup} · 端口{" "}
+                  {data.linux_capture.port} · 已记录 {data.linux_capture.peers}{" "}
+                  个 DNS peer
+                </p>
+                {data.linux_capture.stats.map((stats) => (
+                  <p key={stats.family}>
+                    {stats.family.toUpperCase()} · 重定向 {stats.redirected} ·
+                    地址恢复 {stats.restored} · 错误 {stats.errors}
+                  </p>
+                ))}
+                <p className="break-all">
+                  Program ID：{data.linux_capture.program_ids.join("、")}
+                </p>
+                <p className="break-all font-mono">
+                  对象 SHA256：{data.linux_capture.object_sha256}
+                </p>
+                <p className="muted mt-2">
+                  这是所配置 cgroup 的本机应用 DNS 捕获；网关及完整透明 TCP/UDP
+                  的状态在 Linux 专用页面显示。
+                </p>
+              </details>
+            )}
           </section>
         </>
       )}

@@ -271,6 +271,10 @@ fn application_error(error: ApplicationError) -> (StatusCode, Json<ApiError>) {
         }
         ApplicationError::ProviderUnavailable => (StatusCode::NOT_FOUND, "provider_unavailable"),
         ApplicationError::Provider(error) => (StatusCode::BAD_GATEWAY, error.code),
+        ApplicationError::Capture(_) => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "dns_capture_preparation_failed",
+        ),
         ApplicationError::Dns(error) => {
             use hps_dns::DnsError;
             match error {

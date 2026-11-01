@@ -132,12 +132,18 @@ impl Supervisor {
         limit: usize,
     ) -> Result<DnsOverview, ApplicationError> {
         let current = self.current();
+        let linux_capture = current
+            .capture
+            .as_ref()
+            .map(|capture| capture.status())
+            .transpose()?;
         Ok(DnsOverview {
             running_revision: current.revision,
             configuration: current.config.dns.clone(),
             listener: current.dns_server.as_ref().map(|s| s.local_address()),
             cache: current.dns.cache(after, limit)?,
-            linux_capture_active: false,
+            linux_capture_active: linux_capture.as_ref().is_some_and(|s| s.attached),
+            linux_capture,
         })
     }
     pub async fn edit_dns(

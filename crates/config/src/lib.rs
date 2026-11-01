@@ -70,6 +70,11 @@ impl DaemonConfig {
     }
 
     pub fn resolve_paths(&mut self, parent: &Path) {
+        if let Some(capture) = &mut self.dns.capture
+            && capture.object.is_relative()
+        {
+            capture.object = parent.join(&capture.object);
+        }
         for upstream in &mut self.dns.upstreams {
             if let Some(path) = &mut upstream.ca_certificate
                 && path.is_relative()

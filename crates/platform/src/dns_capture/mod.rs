@@ -80,10 +80,12 @@ impl PreparedCapture {
             port,
         })
     }
-    pub fn load(self) -> Result<DnsCapture, String> {
+    pub fn verify(&self) -> Result<(), String> {
+        let _ = self.prepare_bpf()?;
+        Ok(())
+    }
+    fn prepare_bpf(&self) -> Result<(Ebpf, DnsPolicy), String> {
         let netns_cookie = netns_cookie()?;
-        let ownership = ownership(netns_cookie)?;
-        let cgroup = File::open(&self.cgroup).map_err(|e| error("open cgroup", e))?;
         let mut ebpf = EbpfLoader::new()
             .map_max_entries("HPS_DNS_POLICY", 1)
             .map_max_entries("HPS_DNS_ALLOC", 1)
@@ -143,11 +145,29 @@ impl PreparedCapture {
                 .map_err(|e| error("program type", e))?;
             program.load().map_err(|e| error("kernel verifier", e))?;
         }
+        Ok((ebpf, policy))
+    }
+    pub fn load(self) -> Result<DnsCapture, String> {
+        let ownership = ownership(netns_cookie()?)?;
+        let cgroup = File::open(&self.cgroup).map_err(|e| error("open cgroup", e))?;
+        let (mut ebpf, policy) = self.prepare_bpf()?;
+        // Attach with the redirect policy disabled. Kernel attachment failures
+        // are discovered before a configuration head can be committed.
+        for name in PROGRAMS {
+            let program: &mut CgroupSockAddr = ebpf
+                .program_mut(name)
+                .ok_or("DNS program missing")?
+                .try_into()
+                .map_err(|e| error("program type", e))?;
+            program
+                .attach(&cgroup, CgroupAttachMode::Single)
+                .map_err(|e| error("attach disabled hooks", e))?;
+        }
         let route = route::LocalRoute::prepare(IPV6_ALIAS_PREFIX)
             .map_err(|e| error("owned IPv6 local route", e))?;
         Ok(DnsCapture {
             ebpf: Mutex::new(Some(ebpf)),
-            cgroup,
+            _cgroup: cgroup,
             scope: self.cgroup,
             policy,
             fingerprint: self.fingerprint,
@@ -159,7 +179,7 @@ impl PreparedCapture {
 }
 pub struct DnsCapture {
     ebpf: Mutex<Option<Ebpf>>,
-    cgroup: File,
+    _cgroup: File,
     scope: PathBuf,
     policy: DnsPolicy,
     fingerprint: String,
@@ -174,18 +194,6 @@ impl DnsCapture {
         let ebpf = guard.as_mut().ok_or("DNS capture is shut down")?;
         if self.attached.load(std::sync::atomic::Ordering::Acquire) {
             return Ok(());
-        }
-        for name in PROGRAMS {
-            let program: &mut CgroupSockAddr = ebpf
-                .program_mut(name)
-                .ok_or("DNS program missing")?
-                .try_into()
-                .map_err(|e| error("program type", e))?;
-            if let Err(e) = program.attach(&self.cgroup, CgroupAttachMode::Single) {
-                // Taking Ebpf detaches any earlier links from this partial activation.
-                guard.take();
-                return Err(error("attach cgroup hooks", e));
-            }
         }
         let mut policy = self.policy;
         policy.flags = DNS_ENABLED;

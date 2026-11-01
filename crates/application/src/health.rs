@@ -11,13 +11,35 @@ use std::{
     time::Duration,
 };
 
-#[derive(Default)]
 pub(super) struct HealthRuntime {
     started: AtomicBool,
     active: AtomicUsize,
     bootstrap_blocked: AtomicBool,
     cursor: AtomicUsize,
     states: Mutex<HashMap<(String, String), HealthState>>,
+    bootstrap_checked: Mutex<Option<(String, std::time::Instant)>>,
+}
+impl Default for HealthRuntime {
+    fn default() -> Self {
+        Self {
+            started: AtomicBool::new(false),
+            active: AtomicUsize::new(0),
+            bootstrap_blocked: AtomicBool::new(true),
+            cursor: AtomicUsize::new(0),
+            states: Mutex::new(HashMap::new()),
+            bootstrap_checked: Mutex::new(None),
+        }
+    }
+}
+impl HealthRuntime {
+    pub(super) fn publish_generation(&self, changed: bool, publish: impl FnOnce()) {
+        let mut checked = self.bootstrap_checked.lock().unwrap();
+        if changed {
+            self.bootstrap_blocked.store(true, Ordering::Release);
+            *checked = None;
+        }
+        publish();
+    }
 }
 impl Supervisor {
     pub(super) async fn load_health(&self) -> Result<(), ApplicationError> {
@@ -105,22 +127,54 @@ impl Supervisor {
             return Ok(());
         }
         let config = &current.config.health;
-        let mut bootstrap = false;
-        for profile in &current.health_profiles {
-            if tokio::time::timeout(
-                Duration::from_millis(config.timeout_ms),
-                profile.bootstrap_ready(),
-            )
-            .await
-            .unwrap_or(false)
+        let key = current
+            .health_profiles
+            .iter()
+            .map(|p| p.fingerprint.as_str())
+            .collect::<Vec<_>>()
+            .join(":");
+        let check = self
+            .health
+            .bootstrap_checked
+            .lock()
+            .unwrap()
+            .as_ref()
+            .is_none_or(|(old, when)| *old != key || when.elapsed() >= Duration::from_secs(5));
+        if check {
+            let mut bootstrap = false;
+            for profile in &current.health_profiles {
+                if tokio::time::timeout(
+                    Duration::from_millis(config.timeout_ms),
+                    profile.bootstrap_ready(),
+                )
+                .await
+                .unwrap_or(false)
+                {
+                    bootstrap = true;
+                    break;
+                }
+            }
+            let mut checked = self.health.bootstrap_checked.lock().unwrap();
+            let latest = self.current();
+            if current.dns.fingerprint() == latest.dns.fingerprint()
+                && current
+                    .health_profiles
+                    .iter()
+                    .map(|p| &p.fingerprint)
+                    .eq(latest.health_profiles.iter().map(|p| &p.fingerprint))
             {
-                bootstrap = true;
-                break;
+                self.health
+                    .bootstrap_blocked
+                    .store(!bootstrap, Ordering::Release);
+                // Scheduling cadence is separate from DNS data. System getaddrinfo
+                // answers retain TTL=unknown and actual probes resolve afresh.
+                *checked = Some((key, std::time::Instant::now()));
             }
         }
-        self.health
-            .bootstrap_blocked
-            .store(!bootstrap, Ordering::Release);
+        if self.current().revision != current.revision {
+            return Ok(());
+        }
+        let bootstrap = !self.health.bootstrap_blocked.load(Ordering::Acquire);
         let usage = self.store.health_usage().await?;
         let pending = self
             .store
@@ -627,5 +681,55 @@ impl Supervisor {
             defer_until_restart: false,
         })
         .await
+    }
+}
+
+#[cfg(test)]
+mod dns_cadence_tests {
+    use super::*;
+    #[tokio::test]
+    async fn bootstrap_cadence_does_not_invent_dns_ttl_and_changes_recheck_before_buying() {
+        let mut config = DaemonConfig::default();
+        config.health.profiles[0].url = "http://localhost:18081/health".into();
+        let service = Supervisor::boot(
+            Store::open(None, config).unwrap(),
+            StartupOverrides::default(),
+        )
+        .await
+        .unwrap();
+        assert!(service.health.bootstrap_blocked.load(Ordering::Acquire));
+        for _ in 0..8 {
+            service.health_tick().await.unwrap();
+        }
+        assert!(!service.health.bootstrap_blocked.load(Ordering::Acquire));
+        let view = service.dns_overview(None, 50).unwrap();
+        assert_eq!(view.cache.misses, 1);
+        assert_eq!(view.cache.total, 0);
+        let result = service
+            .current()
+            .dns
+            .diagnose(hps_dns::LookupInput {
+                name: "localhost".into(),
+                query_type: "A".into(),
+                purpose: hps_net::ResolvePurpose::Health,
+            })
+            .await
+            .unwrap();
+        assert_eq!(result.remaining_ttl, None);
+        assert_eq!(service.dns_overview(None, 50).unwrap().cache.misses, 2);
+        let mut policy = view.configuration;
+        policy.timeout_ms = 3000;
+        service
+            .edit_dns(hps_config::DnsSave {
+                configuration: policy,
+                expected_revision: 1,
+            })
+            .await
+            .unwrap();
+        assert!(service.health.bootstrap_blocked.load(Ordering::Acquire));
+        service.health_tick().await.unwrap();
+        assert!(!service.health.bootstrap_blocked.load(Ordering::Acquire));
+        assert_eq!(service.dns_overview(None, 50).unwrap().cache.misses, 1);
+        service.shutdown().await.unwrap();
     }
 }

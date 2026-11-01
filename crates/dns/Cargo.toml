@@ -7,6 +7,7 @@ rust-version.workspace = true
 [dependencies]
 hps-config.workspace = true
 hps-net.workspace = true
+hps-domain.workspace = true
 tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true

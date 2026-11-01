@@ -787,6 +787,7 @@ version = "0.1.0"
 dependencies = [
  "arc-swap",
  "axum",
+ "aya",
  "bytes",
  "hickory-proto",
  "hps-config",
@@ -795,6 +796,7 @@ dependencies = [
  "hps-engine",
  "hps-health",
  "hps-net",
+ "hps-platform",
  "hps-provider",
  "hps-storage",
  "http",
@@ -890,6 +892,7 @@ dependencies = [
  "bytes",
  "hickory-proto",
  "hps-config",
+ "hps-domain",
  "hps-engine",
  "hps-net",
  "http",

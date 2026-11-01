@@ -8,19 +8,25 @@ parser = argparse.ArgumentParser()
 parser.add_argument("report", type=Path)
 parser.add_argument("--kernel-prefix", required=True)
 parser.add_argument("--write-json", type=Path)
+parser.add_argument("--application", action="store_true")
 args = parser.parse_args()
 text = args.report.read_text()
-if "HPS_DNS_CAPTURE_EVIDENCE=" in text:
-    lines = [line for line in text.splitlines() if line.startswith("HPS_DNS_CAPTURE_EVIDENCE=")]
+prefix = "HPS_DNS_APPLICATION_EVIDENCE=" if args.application else "HPS_DNS_CAPTURE_EVIDENCE="
+if prefix in text:
+    lines = [line for line in text.splitlines() if line.startswith(prefix)]
     assert len(lines) == 1, "expected exactly one real kernel evidence record"
     result = json.loads(lines[0].split("=", 1)[1])
 else:
     result = json.loads(text)
 assert result["kernel"].startswith(args.kernel_prefix)
-for key in ["ipv4_udp_tcp", "ipv6_udp_tcp", "parallel_udp_peer_restoration", "getpeername_restored",
-            "programs_removed", "maps_removed", "route_removed", "namespace_ownership_reacquired", "cgroup_removed", "daemon_pid_namespace_exclusion"]:
+required = (["boot_and_real_dns", "hot_policy_keeps_hooks", "capture_disable_pending_restart", "pending_rollback",
+             "invalid_object_keeps_head", "bind_failure_keeps_head", "shutdown_and_restart_reacquire", "programs_removed", "cgroup_removed"]
+            if args.application else ["ipv4_udp_tcp", "ipv6_udp_tcp", "parallel_udp_peer_restoration", "getpeername_restored",
+            "programs_removed", "maps_removed", "route_removed", "namespace_ownership_reacquired", "cgroup_removed", "daemon_pid_namespace_exclusion"])
+for key in required:
     assert result[key] is True, f"missing kernel proof: {key}"
-assert result["full_transparent_datapath_ready"] is False
+if not args.application:
+    assert result["full_transparent_datapath_ready"] is False
 capture = result["capture"]
 assert capture["attached"] is True
 assert capture["scope"] == "cgroup_local_application_dns"
