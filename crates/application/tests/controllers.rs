@@ -244,7 +244,8 @@ async fn on_demand_refill_uses_real_dial_signal_hysteresis_inflight_and_requeste
 }
 #[tokio::test]
 async fn idle_source_does_not_purchase_again_after_its_short_leases_expire() {
-    let vendor = server(Mode::Good(2), None).await;
+    // TTL must outlast the idle window even if the immediate timer tick fetches at once.
+    let vendor = server(Mode::Good(4), None).await;
     let mut settings = config(&vendor, RefillMode::OnDemand);
     settings.providers[0].refill.target_nodes = 2;
     settings.providers[0].refill.idle_timeout_secs = 2;
@@ -253,7 +254,7 @@ async fn idle_source_does_not_purchase_again_after_its_short_leases_expire() {
     until(async || vendor.mock.calls.load(Ordering::Relaxed) == 1).await;
     until(async || app.provider_detail("source").await.unwrap().tasks[0].state == "succeeded")
         .await;
-    tokio::time::sleep(Duration::from_secs(3)).await;
+    tokio::time::sleep(Duration::from_secs(5)).await;
     let status = app.provider_controller("source").await.unwrap();
     assert_eq!(status.decision, "idle");
     assert_eq!(vendor.mock.calls.load(Ordering::Relaxed), 1);
