@@ -1,6 +1,6 @@
 # T12 节点管理验收
 
-Issue：[#17](https://github.com/go-laoji/honk-proxy-server/issues/17)。后端、CLI 和共享页面已实现；**独立桌面窗口，以及与 T13 逐连接列表的关联仍待验收，Issue 保持开放**。
+Issue：[#17](https://github.com/go-laoji/honk-proxy-server/issues/17)。后端、CLI 和共享页面已实现；T13 已用真实隧道验证逐连接关联。**独立桌面窗口仍待验收，Issue 保持开放**。
 
 ## 实现与真实用例
 
@@ -39,4 +39,4 @@ CLI 可复现：先构建 `hps-cli`/`hps-daemon`，运行 `python3 tests/cli/nod
 
 用户回复已解锁后，计算机工具仍返回 `Mac is locked and automatic unlock could not unlock it`；未操作窗口，打包和原生桥测试不能代替窗口验收。已异步报告，并继续不依赖桌面的工作。
 
-逐连接记录、流量、主动断开和详情列表跳转由 T13 在同一登记表上接续。当前计数来自真实拨号/套接字，无演示连接。Linux 本机进程及内核/用户态代际一致性继续与 T15 联合验收。
+T13 已在同一登记表上接入逐连接记录、流量、主动断开和详情跳转。浏览器真实隧道在节点详情显示 1 条活动业务，进入筛选后的连接列表，并可返回该节点的独立详情文档；见 [连接验收](connections-2026-11-02.md)。计数覆盖拨号、业务交换和实际隧道生命周期，无演示连接。Linux 本机进程及内核/用户态代际一致性继续与 T15 联合验收。
