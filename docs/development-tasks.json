@@ -247,7 +247,7 @@
       "acceptance": "URL恢复筛选；批次归属不误删；过期与健康分开；敏感数据脱敏；界面不是静态演示数据。",
       "issue": 17,
       "url": "https://github.com/go-laoji/honk-proxy-server/issues/17",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "id": "T13",
