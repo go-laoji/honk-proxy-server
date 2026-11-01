@@ -58,6 +58,18 @@ impl HpsClient {
             .join(path)
             .map_err(|_| ClientError::InvalidEndpoint)?;
         let response = self.http.get(url).send().await?;
+        Self::decode(response).await
+    }
+
+    pub async fn post_json<T: DeserializeOwned>(&self, path: &str) -> Result<T, ClientError> {
+        let url = self
+            .endpoint
+            .join(path)
+            .map_err(|_| ClientError::InvalidEndpoint)?;
+        Self::decode(self.http.post(url).send().await?).await
+    }
+
+    async fn decode<T: DeserializeOwned>(response: reqwest::Response) -> Result<T, ClientError> {
         if !response.status().is_success() {
             let status = response.status().as_u16();
             let error = response
@@ -92,6 +104,30 @@ impl HpsClient {
 
     pub async fn linux_preflight(&self) -> Result<hps_domain::LinuxPreflight, ClientError> {
         self.get_json("api/v1/linux/preflight").await
+    }
+    pub async fn inbounds(&self) -> Result<hps_domain::ProxyStatus, ClientError> {
+        self.get_json("api/v1/inbounds").await
+    }
+    pub async fn start_inbound(&self, id: &str) -> Result<hps_domain::InboundStatus, ClientError> {
+        self.inbound_action(id, "start").await
+    }
+    pub async fn stop_inbound(&self, id: &str) -> Result<hps_domain::InboundStatus, ClientError> {
+        self.inbound_action(id, "stop").await
+    }
+    async fn inbound_action(
+        &self,
+        id: &str,
+        action: &str,
+    ) -> Result<hps_domain::InboundStatus, ClientError> {
+        if id.is_empty()
+            || !id
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-')
+        {
+            return Err(ClientError::InvalidEndpoint);
+        }
+        self.post_json(&format!("api/v1/inbounds/{id}/{action}"))
+            .await
     }
 }
 

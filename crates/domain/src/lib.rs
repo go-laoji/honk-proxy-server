@@ -50,6 +50,17 @@ pub struct Capabilities {
 }
 
 impl Capabilities {
+    pub fn explicit_proxy() -> Self {
+        let mut capabilities = Self::foundation();
+        let available = FeatureCapability {
+            available: true,
+            reason: None,
+        };
+        capabilities.http_proxy = available.clone();
+        capabilities.https_proxy = available.clone();
+        capabilities.socks5_proxy = available;
+        capabilities
+    }
     pub fn foundation() -> Self {
         let pending = FeatureCapability {
             available: false,

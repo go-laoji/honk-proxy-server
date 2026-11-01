@@ -204,6 +204,7 @@ impl Engine {
                 let acceptor=run.tls.clone(); let protocol=run.config.protocol; let child=session.clone();
                 session.spawn_io(async move {
                     let _=tcp.set_nodelay(true);
+                    let tcp=ActiveIo::new(tcp,child.activity.clone());
                     let io:BoxIo=if let Some(acceptor)=acceptor {
                         match tokio::time::timeout(child.handshake_timeout(),acceptor.accept(tcp)).await {
                             Ok(Ok(tls))=>Box::new(tls),_=>{child.failed();return;}
@@ -250,10 +251,13 @@ impl Engine {
     pub fn ready(&self) -> bool {
         !self.cancel.is_cancelled()
             && self.dialer.eligible_count() > 0
-            && self
-                .entries
-                .values()
-                .any(|entry| entry.running.load(Ordering::Acquire))
+            && self.entries.values().any(|entry| {
+                entry.running.load(Ordering::Acquire)
+                    && entry
+                        .status()
+                        .certificate
+                        .is_none_or(|certificate| certificate.valid_now)
+            })
     }
 }
 impl Entry {

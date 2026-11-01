@@ -338,3 +338,125 @@ async fn upstream_handshake_timeout_and_lost_post_response_never_replay() {
     engine.shutdown().await;
     broken.abort();
 }
+
+#[tokio::test]
+async fn chunked_framing_host_rewrite_and_header_rejection_are_bounded() {
+    let origin = support::origin(None).await;
+    let upstream = support::http_proxy(None, None, 200).await;
+    let mut config = ProxyConfig {
+        inbounds: vec![support::inbound("http", ProxyProtocol::Http, None)],
+        upstreams: vec![support::upstream(upstream.address, ProxyProtocol::Http)],
+        ..Default::default()
+    };
+    config.limits.max_header_bytes = 8192;
+    let engine = Engine::new(config).unwrap();
+    engine.start_enabled().await.unwrap();
+    let address = engine.status().inbounds[0].listen.clone().unwrap();
+    let mut io: BoxIo = Box::new(TcpStream::connect(&address).await.unwrap());
+    io.write_all(format!("POST http://{}/stream HTTP/1.1\r\nHost: forged.test\r\nTransfer-Encoding: chunked\r\nTrailer: X-End\r\n\r\n3\r\nabc\r\n2\r\nde\r\n0\r\nX-End: done\r\n\r\n",origin.address).as_bytes()).await.unwrap();
+    let head = support::head(&mut io).await;
+    assert!(head.starts_with(b"HTTP/1.1 200"));
+    let mut body = [0; 5];
+    io.read_exact(&mut body).await.unwrap();
+    assert_eq!(&body, b"abcde");
+    assert!(!String::from_utf8_lossy(&origin.requests.lock().unwrap()[0]).contains("forged.test"));
+    for (request,status) in [
+        ("GET http://127.0.0.1:99999/ HTTP/1.1\r\nHost: example.test\r\n\r\n".to_string(),400),
+        ("POST http://origin.test/ HTTP/1.1\r\nHost: origin.test\r\nContent-Length: 3\r\nContent-Length: 5\r\n\r\nabcde".to_string(),400),
+        ("GET http://origin.test/ HTTP/1.1\r\nHost: origin.test\r\nConnection: upgrade\r\nUpgrade: websocket\r\n\r\n".to_string(),501),
+        (format!("GET http://origin.test/ HTTP/1.1\r\nHost: origin.test\r\nX-Large: {}\r\n\r\n","a".repeat(16000)),431),
+    ] {
+        let mut io:BoxIo=Box::new(TcpStream::connect(&address).await.unwrap());let _=io.write_all(request.as_bytes()).await;
+        let head=tokio::time::timeout(Duration::from_secs(2),support::head(&mut io)).await.unwrap();
+        assert!(head.starts_with(format!("HTTP/1.1 {status}").as_bytes()),"{}",String::from_utf8_lossy(&head));
+    }
+    assert_eq!(upstream.requests.lock().unwrap().len(), 1);
+    engine.shutdown().await;
+}
+
+#[tokio::test]
+async fn cancellation_and_partial_start_failure_release_all_runtime_resources() {
+    let blocked = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let first = support::inbound("a", ProxyProtocol::Http, None);
+    let mut second = support::inbound("b", ProxyProtocol::Http, None);
+    second.listen = blocked.local_addr().unwrap();
+    let engine = Engine::new(ProxyConfig {
+        inbounds: vec![first, second],
+        ..Default::default()
+    })
+    .unwrap();
+    assert!(engine.start_enabled().await.is_err());
+    assert!(
+        engine
+            .status()
+            .inbounds
+            .iter()
+            .all(|i| !i.running && i.listen.is_none())
+    );
+    assert_eq!(engine.status().active_connections, 0);
+    let destination = support::echo(false).await;
+    let upstream = support::http_proxy(None, None, 200).await;
+    let engine = Engine::new(ProxyConfig {
+        inbounds: vec![support::inbound("http", ProxyProtocol::Http, None)],
+        upstreams: vec![support::upstream(upstream.address, ProxyProtocol::Http)],
+        ..Default::default()
+    })
+    .unwrap();
+    engine.start_enabled().await.unwrap();
+    let mut io: BoxIo = Box::new(
+        TcpStream::connect(engine.status().inbounds[0].listen.as_ref().unwrap())
+            .await
+            .unwrap(),
+    );
+    io.write_all(
+        format!(
+            "CONNECT {} HTTP/1.1\r\nHost: {}\r\n\r\n",
+            destination.address, destination.address
+        )
+        .as_bytes(),
+    )
+    .await
+    .unwrap();
+    assert!(support::head(&mut io).await.starts_with(b"HTTP/1.1 200"));
+    drop(io);
+    wait_for(|| engine.status().active_connections == 0).await;
+    engine.shutdown().await;
+}
+
+#[tokio::test]
+async fn global_bandwidth_is_shared_by_simultaneous_connections() {
+    let destination = support::echo(false).await;
+    let upstream = support::http_proxy(None, None, 200).await;
+    let mut config = ProxyConfig {
+        inbounds: vec![support::inbound("http", ProxyProtocol::Http, None)],
+        upstreams: vec![support::upstream(upstream.address, ProxyProtocol::Http)],
+        ..Default::default()
+    };
+    config.limits.bytes_per_second = 64 * 1024;
+    let engine = Engine::new(config).unwrap();
+    engine.start_enabled().await.unwrap();
+    let address = engine.status().inbounds[0].listen.clone().unwrap();
+    let started = tokio::time::Instant::now();
+    let transfer = || async {
+        let mut io: BoxIo = Box::new(TcpStream::connect(&address).await.unwrap());
+        io.write_all(
+            format!(
+                "CONNECT {} HTTP/1.1\r\nHost: {}\r\n\r\n",
+                destination.address, destination.address
+            )
+            .as_bytes(),
+        )
+        .await
+        .unwrap();
+        assert!(support::head(&mut io).await.starts_with(b"HTTP/1.1 200"));
+        let data = vec![5; 16 * 1024];
+        io.write_all(&data).await.unwrap();
+        io.shutdown().await.unwrap();
+        let mut body = Vec::new();
+        io.read_to_end(&mut body).await.unwrap();
+        assert_eq!(body, data);
+    };
+    tokio::join!(transfer(), transfer());
+    assert!(started.elapsed() >= Duration::from_millis(900));
+    engine.shutdown().await;
+}

@@ -9,6 +9,7 @@ hps-web-assets = { path = "../web-assets", optional = true }
 hps-domain.workspace = true
 hps-config.workspace = true
 hps-platform.workspace = true
+hps-engine.workspace = true
 tokio.workspace = true
 axum.workspace = true
 serde_json.workspace = true

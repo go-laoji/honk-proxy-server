@@ -1,6 +1,13 @@
-use axum::{Json, Router, extract::State, http::StatusCode, routing::get};
+use axum::{
+    Json, Router,
+    extract::{Path, State},
+    http::StatusCode,
+    routing::{get, post},
+};
 use hps_config::DaemonConfig;
 use hps_domain::{ApiError, Capabilities, ServiceStatus, VersionInfo};
+use hps_domain::{InboundStatus, ProxyStatus};
+use hps_engine::runtime::{Engine, EngineError};
 use std::{
     sync::Arc,
     time::{Instant, SystemTime, UNIX_EPOCH},
@@ -11,6 +18,7 @@ mod web;
 
 pub struct AppState {
     pub config: DaemonConfig,
+    pub engine: Option<Arc<Engine>>,
     instance_id: String,
     started_at: Instant,
     started_at_unix: u64,
@@ -20,6 +28,7 @@ impl AppState {
     pub fn new(config: DaemonConfig) -> Self {
         Self {
             config,
+            engine: None,
             instance_id: uuid::Uuid::new_v4().to_string(),
             started_at: Instant::now(),
             started_at_unix: SystemTime::now()
@@ -27,6 +36,12 @@ impl AppState {
                 .unwrap_or_default()
                 .as_secs(),
         }
+    }
+
+    pub fn with_engine(config: DaemonConfig, engine: Arc<Engine>) -> Self {
+        let mut state = Self::new(config);
+        state.engine = Some(engine);
+        state
     }
 
     pub fn version(&self) -> VersionInfo {
@@ -52,8 +67,25 @@ impl AppState {
             instance_id: self.instance_id.clone(),
             instance_name: self.config.instance_name.clone(),
             management_ready: true,
-            proxy_ready: false,
-            engine_state: "not_initialized".into(),
+            proxy_ready: self.engine.as_ref().is_some_and(|engine| engine.ready()),
+            engine_state: self
+                .engine
+                .as_ref()
+                .map_or("not_initialized", |engine| {
+                    if engine.ready() {
+                        "running"
+                    } else {
+                        let status = engine.status();
+                        if status.shutting_down {
+                            "stopping"
+                        } else if status.inbounds.iter().any(|entry| entry.running) {
+                            "no_eligible_upstream"
+                        } else {
+                            "no_running_inbound"
+                        }
+                    }
+                })
+                .into(),
             started_at_unix: self.started_at_unix,
             uptime_seconds: self.started_at.elapsed().as_secs(),
             platform: std::env::consts::OS.into(),
@@ -64,14 +96,18 @@ impl AppState {
 
 pub fn router(state: Arc<AppState>) -> Router {
     let router = Router::new()
-        .route("/healthz", get(|| async { Json(serde_json::json!({"alive": true})) }))
-        .route("/readyz", get(|| async {
-            (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"ready": false, "reason": "proxy runtime is not initialized"})))
-        }))
+        .route(
+            "/healthz",
+            get(|| async { Json(serde_json::json!({"alive": true})) }),
+        )
+        .route("/readyz", get(ready))
         .route("/api/v1/status", get(status))
         .route("/api/v1/version", get(version))
         .route("/api/v1/capabilities", get(capabilities))
         .route("/api/v1/linux/preflight", get(linux_preflight))
+        .route("/api/v1/inbounds", get(inbounds))
+        .route("/api/v1/inbounds/{id}/start", post(start_inbound))
+        .route("/api/v1/inbounds/{id}/stop", post(stop_inbound))
         .route("/api/v1/config", get(config));
     #[cfg(feature = "web-ui")]
     let router = router.fallback(web::serve);
@@ -86,8 +122,76 @@ async fn status(State(state): State<Arc<AppState>>) -> Json<ServiceStatus> {
 async fn version(State(state): State<Arc<AppState>>) -> Json<VersionInfo> {
     Json(state.version())
 }
-async fn capabilities() -> Json<Capabilities> {
-    Json(Capabilities::foundation())
+async fn capabilities(State(state): State<Arc<AppState>>) -> Json<Capabilities> {
+    Json(if state.engine.is_some() {
+        Capabilities::explicit_proxy()
+    } else {
+        Capabilities::foundation()
+    })
+}
+
+async fn ready(State(state): State<Arc<AppState>>) -> (StatusCode, Json<serde_json::Value>) {
+    let ready = state.engine.as_ref().is_some_and(|engine| engine.ready());
+    (
+        if ready {
+            StatusCode::OK
+        } else {
+            StatusCode::SERVICE_UNAVAILABLE
+        },
+        Json(
+            serde_json::json!({"ready":ready,"reason":if ready {"explicit ingress running with eligible configured upstream; health is not implied"} else {"no ready inbound/upstream or runtime stopping"}}),
+        ),
+    )
+}
+async fn inbounds(State(state): State<Arc<AppState>>) -> Json<ProxyStatus> {
+    Json(state.engine.as_ref().map_or_else(
+        || ProxyStatus {
+            inbounds: vec![],
+            active_connections: 0,
+            eligible_upstreams: 0,
+            limits: state.config.proxy.limits.clone(),
+            shutting_down: false,
+        },
+        |engine| engine.status(),
+    ))
+}
+type ApiResult<T> = Result<Json<T>, (StatusCode, Json<ApiError>)>;
+fn engine_error(error: EngineError) -> (StatusCode, Json<ApiError>) {
+    let (status, code) = match error {
+        EngineError::NotFound => (StatusCode::NOT_FOUND, "inbound_not_found"),
+        EngineError::Bind => (StatusCode::CONFLICT, "listen_failed"),
+        EngineError::ShuttingDown => (StatusCode::SERVICE_UNAVAILABLE, "runtime_stopping"),
+        _ => (StatusCode::INTERNAL_SERVER_ERROR, "runtime_unavailable"),
+    };
+    (
+        status,
+        Json(ApiError {
+            code: code.into(),
+            message: error.to_string(),
+            request_id: uuid::Uuid::new_v4().to_string(),
+            retryable: false,
+        }),
+    )
+}
+async fn start_inbound(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> ApiResult<InboundStatus> {
+    let engine = state
+        .engine
+        .as_ref()
+        .ok_or_else(|| engine_error(EngineError::ShuttingDown))?;
+    engine.start(&id).await.map(Json).map_err(engine_error)
+}
+async fn stop_inbound(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> ApiResult<InboundStatus> {
+    let engine = state
+        .engine
+        .as_ref()
+        .ok_or_else(|| engine_error(EngineError::ShuttingDown))?;
+    engine.stop(&id).await.map(Json).map_err(engine_error)
 }
 async fn config(State(state): State<Arc<AppState>>) -> Json<DaemonConfig> {
     Json(state.config.redacted())
@@ -170,6 +274,62 @@ mod tests {
         assert_eq!(preflight.platform, std::env::consts::OS);
         assert_eq!(preflight.scope, "read_only_prerequisites");
         assert!(!preflight.datapath_ready);
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn inbound_controls_and_readiness_follow_runtime_without_credentials() {
+        let config=DaemonConfig::from_toml("[[proxy.inbounds]]\nid='browser'\nprotocol='http'\nlisten='127.0.0.1:0'\nenabled=false\n[[proxy.upstreams]]\nid='bootstrap'\nprotocol='http'\nhost='127.0.0.1'\nport=18080\n[proxy.upstreams.credentials]\nusername='supplier-private'\npassword='credential-private'\n").unwrap();
+        let engine = Engine::new(config.proxy.clone()).unwrap();
+        engine.start_enabled().await.unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let runtime = engine.clone();
+        let task = tokio::spawn(async move {
+            axum::serve(
+                listener,
+                router(Arc::new(AppState::with_engine(config, runtime))),
+            )
+            .await
+            .unwrap();
+        });
+        let base = format!("http://{address}");
+        let client = HpsClient::new(&base, Duration::from_secs(2)).unwrap();
+        assert!(!client.status().await.unwrap().proxy_ready);
+        assert!(!client.inbounds().await.unwrap().inbounds[0].running);
+        let redacted = serde_json::to_string(&client.config().await.unwrap()).unwrap();
+        assert!(!redacted.contains("credential-private"));
+        assert!(!redacted.contains("supplier-private"));
+        assert!(client.start_inbound("browser").await.unwrap().running);
+        assert!(client.status().await.unwrap().proxy_ready);
+        let caps = client.capabilities().await.unwrap();
+        assert!(
+            caps.http_proxy.available && caps.https_proxy.available && caps.socks5_proxy.available
+        );
+        assert!(!caps.requires_authentication && !caps.linux_ebpf.ready);
+        let http = reqwest::Client::builder().no_proxy().build().unwrap();
+        assert_eq!(
+            http.get(format!("{base}/readyz"))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            200
+        );
+        assert!(!client.stop_inbound("browser").await.unwrap().running);
+        assert_eq!(
+            http.get(format!("{base}/readyz"))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            503
+        );
+        assert!(matches!(
+            client.start_inbound("missing").await,
+            Err(hps_client::ClientError::Api { status: 404, .. })
+        ));
+        engine.shutdown().await;
         task.abort();
     }
 }

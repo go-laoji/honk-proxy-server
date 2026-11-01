@@ -111,12 +111,26 @@ async fn handle(mut request: Request<Incoming>, session: Session) -> Response<Bo
     let Some(authority) = request.uri().authority() else {
         return error(StatusCode::BAD_REQUEST, "Missing destination\n");
     };
-    if authority.as_str().contains('@')
-        || (authority.port().is_some() && authority.port_u16().is_none())
-    {
+    if authority.as_str().contains('@') {
         return error(StatusCode::BAD_REQUEST, "Invalid destination authority\n");
     }
-    let target = match Target::new(authority.host(), authority.port_u16().unwrap_or(80)) {
+    // Authority::port() also returns None for an invalid/out-of-range port;
+    // distinguish an omitted port from a malformed explicit one.
+    let suffix = authority
+        .as_str()
+        .strip_prefix(authority.host())
+        .unwrap_or("invalid");
+    let port = if suffix.is_empty() {
+        Some(80)
+    } else {
+        suffix
+            .strip_prefix(':')
+            .and_then(|value| value.parse::<u16>().ok())
+    };
+    let Some(port) = port else {
+        return error(StatusCode::BAD_REQUEST, "Invalid destination port\n");
+    };
+    let target = match Target::new(authority.host(), port) {
         Ok(target) => target,
         Err(_) => return error(StatusCode::BAD_REQUEST, "Invalid destination\n"),
     };

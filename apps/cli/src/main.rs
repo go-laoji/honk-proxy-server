@@ -36,6 +36,10 @@ enum Command {
     Status,
     Version,
     Capabilities,
+    Inbound {
+        #[command(subcommand)]
+        command: InboundCommand,
+    },
     Linux {
         #[command(subcommand)]
         command: LinuxCommand,
@@ -63,6 +67,12 @@ enum ConfigCommand {
 #[derive(Subcommand)]
 enum LinuxCommand {
     Preflight,
+}
+#[derive(Subcommand)]
+enum InboundCommand {
+    List,
+    Start { id: String },
+    Stop { id: String },
 }
 
 #[tokio::main]
@@ -128,6 +138,17 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
         Command::Capabilities => {
             serde_json::to_value(client.capabilities().await.map_err(client_error)?)
         }
+        Command::Inbound { command } => match command {
+            InboundCommand::List => {
+                serde_json::to_value(client.inbounds().await.map_err(client_error)?)
+            }
+            InboundCommand::Start { id } => {
+                serde_json::to_value(client.start_inbound(id).await.map_err(client_error)?)
+            }
+            InboundCommand::Stop { id } => {
+                serde_json::to_value(client.stop_inbound(id).await.map_err(client_error)?)
+            }
+        },
         Command::Linux {
             command: LinuxCommand::Preflight,
         } => serde_json::to_value(client.linux_preflight().await.map_err(client_error)?),

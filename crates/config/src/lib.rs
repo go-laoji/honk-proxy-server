@@ -43,7 +43,26 @@ impl DaemonConfig {
     }
 
     pub fn load(path: &Path) -> Result<Self, ConfigError> {
-        Self::from_toml(&std::fs::read_to_string(path)?)
+        let mut config = Self::from_toml(&std::fs::read_to_string(path)?)?;
+        let parent = path.parent().unwrap_or_else(|| Path::new("."));
+        for inbound in &mut config.proxy.inbounds {
+            if let Some(tls) = &mut inbound.tls {
+                if tls.certificate.is_relative() {
+                    tls.certificate = parent.join(&tls.certificate);
+                }
+                if tls.private_key.is_relative() {
+                    tls.private_key = parent.join(&tls.private_key);
+                }
+            }
+        }
+        for upstream in &mut config.proxy.upstreams {
+            if let Some(ca) = &mut upstream.ca_certificate
+                && ca.is_relative()
+            {
+                *ca = parent.join(&*ca);
+            }
+        }
+        Ok(config)
     }
 
     pub fn validate(&self) -> Result<(), ConfigError> {
