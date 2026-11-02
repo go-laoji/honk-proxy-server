@@ -1,7 +1,8 @@
 # Honk Proxy Logo 设计评审
 
 - 关联任务：[#28](https://github.com/go-laoji/honk-proxy-server/issues/28)
-- 分支：`feature/brand-logo`，使用 `git flow feature start brand-logo develop` 从 `develop` 创建。
+- 分支：`feature/brand-logo-review`，使用 `git flow feature start brand-logo-review develop` 从 `develop` 创建。
+- 独立 worktree：`/private/tmp/hps-brand-logo-review-20261102`。
 - 状态：第一版概念图已完成，等待用户确认后才能替换产品资源。
 
 ## 第一版预览
@@ -11,6 +12,10 @@
 预览文件：`docs/design/brand-logo-concept-v1.png`，1536 × 1024 PNG，使用内置 imagegen 生成。保留 H 的整体轮廓，以一对相反方向的弯曲箭头表达流量进出和转发；同时展示浅色、深色、单色与蓝色圆角应用图标。用户确认后将按选定图形制作 SVG 母版，统一重复图形的精确几何，并实际检查 16/20/32 像素用途。
 
 当前已检查评审图的品牌拼写、H 与双向通路意象、深浅底适配和单色呈现。图中的缩小示意不代表已通过真实 favicon 或托盘像素验收。尚未接入页面、替换现有图标、构建 Tauri 或覆盖任何已安装应用。
+
+## Worktree 隔离记录
+
+初始在原 managed worktree 从 `develop` 创建了 `feature/brand-logo`。生成预览期间，同一 checkout 被另一并发会话写入控制台配色提交 `8f1fdd7`。发现后保留原 checkout、分支与所有提交，另建上述独立 worktree，再从 `develop` 创建 `feature/brand-logo-review`，只 cherry-pick 两笔 Logo 设计提交。评审分支的变更范围仅为本说明与预览图，不包含该配色提交；后续 Logo 工作应在独立 worktree 继续。
 
 ## 设计方向
 
