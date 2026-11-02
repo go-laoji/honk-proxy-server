@@ -44,6 +44,11 @@ impl Selector {
         if query.node.is_some() || self.state.lock().unwrap().retired {
             return false;
         }
+        if query.transport == SelectionTransport::Udp
+            && protocol != Some(hps_config::ProxyProtocol::Socks5)
+        {
+            return false;
+        }
         let group = query
             .group
             .as_ref()
@@ -171,7 +176,9 @@ impl Selector {
                     reasons.push("no_fresh_latency".into());
                 }
             }
-            if query.transport == SelectionTransport::Udp {
+            if query.transport == SelectionTransport::Udp
+                && up.config.protocol != hps_config::ProxyProtocol::Socks5
+            {
                 reasons.push("tcp_only".into());
             }
             rows.push(GroupCandidate {

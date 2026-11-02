@@ -76,12 +76,29 @@ impl SocksUdpAssociation {
         max_payload: usize,
         deadline: Instant,
     ) -> Result<Self, ProxyError> {
+        Self::associate_with_progress(control, credentials, resolver, max_payload, deadline, || {})
+            .await
+    }
+    pub(crate) async fn associate_with_progress(
+        control: TcpStream,
+        credentials: Option<&UpstreamCredentials>,
+        resolver: Option<Arc<dyn hps_net::NameResolver>>,
+        max_payload: usize,
+        deadline: Instant,
+        on_authenticated: impl FnOnce(),
+    ) -> Result<Self, ProxyError> {
         if max_payload == 0 || max_payload > MAX_WIRE {
             return Err(ProxyError::Protocol);
         }
         tokio::time::timeout_at(
             deadline,
-            Self::prepare(control, credentials, resolver, max_payload),
+            Self::prepare(
+                control,
+                credentials,
+                resolver,
+                max_payload,
+                on_authenticated,
+            ),
         )
         .await
         .map_err(|_| ProxyError::Timeout)?
@@ -91,12 +108,14 @@ impl SocksUdpAssociation {
         credentials: Option<&UpstreamCredentials>,
         resolver: Option<Arc<dyn hps_net::NameResolver>>,
         max_payload: usize,
+        on_authenticated: impl FnOnce(),
     ) -> Result<Self, ProxyError> {
         let peer = control.peer_addr()?;
         let local = control.local_addr()?;
         let socket = UdpSocket::bind(SocketAddr::new(local.ip(), 0)).await?;
         let mut control: BoxIo = Box::new(control);
         crate::socks_client::authenticate(&mut control, credentials).await?;
+        on_authenticated();
         // External/NAT endpoint is not known. RFC 1928 requires all zeros when
         // the expected client UDP endpoint cannot be supplied reliably.
         let mut request = vec![5, 3, 0, if peer.is_ipv4() { 1 } else { 4 }];

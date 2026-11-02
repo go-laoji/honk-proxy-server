@@ -71,3 +71,11 @@ CIDR/UDP 端口旁路使用独占 mark 的精确 GOTO 规则与自有 NOP 恢复
 帧编解码支持 IPv4、IPv6、域名和空业务报文；非零 FRAG、非法地址/端口/保留位、异常长度拒绝。SOCKS 完整帧保守上限 65507 B，业务上限扣除真实地址头；接收缓冲为 65536 B，防止内核截断大报文后误认为有效短报文。调用方缓冲不足则消费并拒绝整个报文，既不返回部分业务内容，也不重放。失败认证、拒绝 UDP 命令和超时都不产生可用 association。
 
 Linux/macOS 真实本地 socket 测试覆盖双栈匿名/供应商认证、wildcard/domain relay、实际 UDP 目标收发、陌生 relay 来源丢弃、FRAG 消费拒绝后仍可收正常报文、尺寸边界、控制 TCP 关闭、超时与拒绝。完整 engine 回归 Linux 43 / macOS 42 通过，零失败/忽略，两端 Clippy 通过。本批仅为出站传输基础，尚未接入共享 UDP 规则/池/会话 owner；控制台 UDP 数据面能力仍保持不可用，不据此关闭 T15 或 T19。
+
+## 共享 UDP 出站策略与事实（第七批）
+
+`Dialer::for_datagrams` / `open_udp_routed` 接入相同首匹配规则、固定/显式 fallback 组、动态池、租约/健康与节点操作门槛；TCP 与 UDP 共用同一 admission、endpoint dial、失败分类与反馈方法。UDP 只选择 SOCKS5 潜在出口，HTTP/HTTPS 标记 tcp_only；UDP 补池信号只发送给明确声明 SOCKS5 的供应商，不能激活 HTTP 或未知协议供应商的采购。Direct/Reject 不产生采购信号。UDP 支持明确 Direct，报文不重传；Socks 控制连接、DemandGuard 与 NodeGuard 生命周期由实际 DatagramConnection 持有。
+
+UDP 连接观察使用原有全局事实源；业务字节只在发送成功和有效来源回复后增加，SOCKS 头/握手、错误地址和无效数据报不计入。主动断开立即唤醒 UDP I/O 并回收节点占用；drain 阻止新 association，已有 association 可继续收发。当前健康门槛沿用既有 TCP 健康事实，**并未增加 UDP 健康探测或把 TCP Healthy 宣称为 UDP Healthy**；association 可用性还必须经过真实 UDP ASSOCIATE，实际目标收发由业务结果验证。
+
+普通双栈测试使用实际 SOCKS5 UDP relay 和 UDP echo：健康未知拒绝、有效健康后固定组显式 fallback、错误回复来源拒绝且不计数、真实字节、drain 保留已有会话、主动断开、到期节点不连接、Direct/Reject 不补池、UDP 仅产生 SOCKS5 供应商需求信号。完整 engine 回归 Linux 46 / macOS 45 通过，零失败/忽略，两端 Clippy 通过。还没有 Linux UDP owner/全局排队预算/代际和透明回复的联合证据，控制台 UDP 数据面能力保持不可用。
