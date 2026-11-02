@@ -233,3 +233,83 @@ async fn udp_targets_share_global_entry_limits_and_inbound_stop_releases_all() {
     }
     entry.shutdown().await;
 }
+
+struct BusinessResolver(std::sync::Mutex<Vec<(String, hps_net::ResolvePurpose)>>);
+impl hps_net::NameResolver for BusinessResolver {
+    fn lookup(
+        &self,
+        host: String,
+        purpose: hps_net::ResolvePurpose,
+    ) -> hps_net::NetworkFuture<'_, Vec<std::net::IpAddr>> {
+        self.0.lock().unwrap().push((host.clone(), purpose));
+        Box::pin(async move {
+            if host == "echo.test" {
+                Ok(vec!["127.0.0.1".parse().unwrap()])
+            } else {
+                Err(hps_net::NetworkError("unexpected test host"))
+            }
+        })
+    }
+}
+#[tokio::test]
+async fn udp_domain_datagrams_use_business_resolver_and_per_target_rules_without_direct_fallback() {
+    let mut config = ProxyConfig::default();
+    config
+        .inbounds
+        .push(support::inbound("socks", ProxyProtocol::Socks5, None));
+    config.routing.default_action = RouteAction::Reject;
+    config.routing.rules.push(hps_config::RuleConfig {
+        id: "allow-domain".into(),
+        enabled: true,
+        conditions: hps_config::RuleConditions {
+            domains: vec!["echo.test".into()],
+            transports: vec![hps_domain::SelectionTransport::Udp],
+            ..Default::default()
+        },
+        action: RouteAction::Direct,
+    });
+    let entry = Engine::new(config).unwrap();
+    let resolver = Arc::new(BusinessResolver(Default::default()));
+    entry.configure_resolver(Some(resolver.clone()));
+    entry.start_enabled().await.unwrap();
+    let (origin, task) = echo(false).await;
+    let socket = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    let (tcp, relay, code) = associate(&entry, socket.local_addr().unwrap()).await;
+    assert_eq!(code, 0);
+    let target = Target::new("echo.test", origin.port()).unwrap();
+    socket
+        .send_to(
+            &encode_datagram(&target, b"business-domain").unwrap(),
+            relay,
+        )
+        .await
+        .unwrap();
+    let mut packet = vec![0; 1000];
+    let n = tokio::time::timeout(Duration::from_secs(3), socket.recv(&mut packet))
+        .await
+        .unwrap()
+        .unwrap();
+    let (reported, payload) = decode_datagram(&packet[..n]).unwrap();
+    assert_eq!(reported.host, "127.0.0.1");
+    assert_eq!(payload, b"business-domain");
+    let forbidden = Target::new(&origin.ip().to_string(), origin.port()).unwrap();
+    socket
+        .send_to(
+            &encode_datagram(&forbidden, b"must-not-bypass-rule").unwrap(),
+            relay,
+        )
+        .await
+        .unwrap();
+    assert!(
+        tokio::time::timeout(Duration::from_millis(80), socket.recv(&mut packet))
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        resolver.0.lock().unwrap().as_slice(),
+        &[("echo.test".into(), hps_net::ResolvePurpose::Business)]
+    );
+    drop(tcp);
+    entry.shutdown().await;
+    task.abort();
+}

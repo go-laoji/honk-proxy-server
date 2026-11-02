@@ -53,3 +53,7 @@ SOCKS5 仅提供无认证 CONNECT，支持 IPv4、IPv6 和域名。BIND/UDP ASSO
 - HTTP Upgrade 显式返回 501；SOCKS5 UDP 和 Linux 透明 UDP 各有独立验收，不由 TCP 测试代替。
 
 `/healthz` 只代表管理进程存活。`/readyz` 为 200 表示至少一个入口运行、HTTPS 入口证书处于有效期且有可准入的配置上游，不代表上游已通过健康探测；配置为空、入口停止、租约到期或正在关闭时返回 503。Linux eBPF 的 compiled/attached/ready 单独报告，显式代理可用不能证明已接管 Linux 流量。
+
+## T19 SOCKS5 UDP ASSOCIATE
+
+SOCKS5 入站现支持 UDP ASSOCIATE，TCP 控制连接拥有 UDP relay 与其全部目标流；来源 IP/端口受关联约束，FRAG 不支持，HTTP/HTTPS 不伪装成 UDP 出口。详细限制和验收见 [协议、订阅与高级分组](protocol-subscriptions-usage.md)。

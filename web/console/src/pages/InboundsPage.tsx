@@ -255,9 +255,11 @@ export default function InboundsPage({
               <strong className="text-slate-700 dark:text-slate-200">
                 SOCKS5 TCP / UDP：
               </strong>
-              选择无认证 SOCKS5；支持域名、IPv4、IPv6 CONNECT，BIND / UDP
-              尚不支持。socks5h 将域名传至上游；浏览器自身的 DoH、DNS
-              与绕过配置仍会影响流量。
+              选择无认证 SOCKS5；支持域名、IPv4、IPv6 CONNECT 与 UDP
+              ASSOCIATE。BIND 和 UDP 分片不支持。UDP
+              必须由客户端显式建立关联；控制 TCP 关闭即释放。HTTP/HTTPS
+              上游不承载 UDP，出口需 SOCKS5 或显式直连规则。浏览器自身的
+              DoH、DNS 与绕过配置仍会影响流量。
             </p>
             <p>
               0.0.0.0 / [::] 是监听范围，接入时替换为可达的 Daemon

@@ -59,7 +59,10 @@ impl DynamicPool {
     }
     /// Prepare before replacing. Re-publishing a lease never extends its monotonic deadline.
     pub fn replace(&self, nodes: Vec<PoolNode>) -> Result<(), ProxyError> {
-        if nodes.len() > 100000 {
+        // Short-lived storage reserves at most 100000 leases; independent standard
+        // snapshots have a separate 20000-node configuration budget. Neither source
+        // can displace valid nodes or borrow the other source's quota.
+        if nodes.len() > 120000 {
             return Err(ProxyError::Protocol);
         }
         let previous = self.snapshot();
