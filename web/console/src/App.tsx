@@ -70,6 +70,11 @@ const current =
   manifest.find((page) => page.id === document.documentElement.dataset.page) ??
   manifest[0];
 
+const CurrentIcon =
+  icons[current.id] ??
+  icons[current.id.replace("-detail", "s")] ??
+  CircleDashed;
+
 export default function App() {
   const service = useService();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -99,9 +104,12 @@ export default function App() {
         />
       )}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-slate-200/70 bg-white transition-transform dark:border-slate-800 dark:bg-slate-900 lg:translate-x-0 ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}
+        className={`fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r sidebar transition-transform lg:translate-x-0 ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}
       >
-        <a href="./overview.html" className="flex h-20 items-center gap-3 px-6">
+        <a
+          href="./overview.html"
+          className="brand-link flex h-20 items-center gap-3 px-6"
+        >
           <BrandLogo />
           <span>
             <strong className="block text-base tracking-tight">
@@ -118,9 +126,7 @@ export default function App() {
         >
           {groups.map((group) => (
             <div key={group}>
-              <p className="mb-2 px-3 text-[10px] font-semibold tracking-widest text-slate-400">
-                {group}
-              </p>
+              <p className="nav-group-label">{group}</p>
               <div className="space-y-0.5">
                 {manifest
                   .filter((page) => page.group === group)
@@ -132,12 +138,14 @@ export default function App() {
                         key={page.id}
                         href={`./${page.file}`}
                         aria-current={active ? "page" : undefined}
-                        className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium transition-colors ${active ? "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300" : "text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800"}`}
+                        className="nav-link"
                       >
-                        <Icon size={17} />
+                        <span className="nav-icon" aria-hidden="true">
+                          <Icon size={17} />
+                        </span>
                         {page.title}
                         {active && (
-                          <span className="ml-auto size-1.5 rounded-full bg-blue-500" />
+                          <span className="ml-auto size-1.5 rounded-full bg-brand-600 dark:bg-brand-300" />
                         )}
                       </a>
                     );
@@ -146,7 +154,7 @@ export default function App() {
             </div>
           ))}
         </nav>
-        <div className="m-3 rounded-xl border border-slate-200/70 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/50">
+        <div className="sidebar-instance">
           <div className="flex items-center gap-2 text-xs font-medium">
             <span
               className={`size-2 rounded-full ${service.data ? "bg-emerald-500" : "bg-slate-400"}`}
@@ -165,7 +173,7 @@ export default function App() {
         </div>
       </aside>
       <div className="lg:pl-60">
-        <header className="flex h-16 items-center justify-between border-b border-slate-200/70 bg-white/80 px-5 backdrop-blur dark:border-slate-800 dark:bg-slate-900/80 sm:px-8">
+        <header className="app-header flex h-16 items-center justify-between border-b px-5 backdrop-blur sm:px-8">
           <div className="flex items-center gap-3 text-xs">
             <button
               aria-label="打开导航"
@@ -189,20 +197,27 @@ export default function App() {
               </Badge>
             </span>
             <button
-              className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+              className="icon-button"
               aria-label={dark ? "切换浅色模式" : "切换深色模式"}
               onClick={() => setDark(!dark)}
             >
-              {dark ? <Sun size={18} /> : <Moon size={18} />}
+              <span className="theme-icon inline-flex" aria-hidden="true">
+                {dark ? <Sun size={18} /> : <Moon size={18} />}
+              </span>
             </button>
           </div>
         </header>
         <main className="mx-auto max-w-[1440px] p-5 sm:p-8 xl:p-10">
           <div className="mb-7 flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-semibold tracking-tight">
-                {current.title}
-              </h1>
+              <div className="flex items-center gap-3">
+                <span className="page-heading-mark" aria-hidden="true">
+                  <CurrentIcon size={21} />
+                </span>
+                <h1 className="text-2xl font-semibold tracking-tight">
+                  {current.title}
+                </h1>
+              </div>
               <p className="muted mt-2 text-sm">{current.description}</p>
             </div>
             <button
@@ -210,10 +225,13 @@ export default function App() {
               disabled={service.loading}
               onClick={() => void service.refresh()}
             >
-              <RefreshCw
-                size={15}
-                className={service.loading ? "animate-spin" : ""}
-              />
+              <span
+                className="action-icon inline-flex"
+                data-spinning={service.loading}
+                aria-hidden="true"
+              >
+                <RefreshCw size={15} />
+              </span>
               刷新状态
             </button>
           </div>
@@ -239,7 +257,13 @@ export default function App() {
             <ConnectPage data={service.data} refreshService={service.refresh} />
           ) : service.loading && !service.data ? (
             <div className="panel flex items-center justify-center gap-3 p-16 text-sm text-slate-500">
-              <RefreshCw size={18} className="animate-spin" />
+              <span
+                className="action-icon inline-flex"
+                data-spinning="true"
+                aria-hidden="true"
+              >
+                <RefreshCw size={18} />
+              </span>
               正在读取服务状态…
             </div>
           ) : service.data ? (
