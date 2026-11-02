@@ -3,6 +3,7 @@ pub mod controller;
 pub mod health;
 pub mod nodes;
 pub mod provider;
+pub mod tasks;
 use fs2::FileExt;
 use hps_config::DaemonConfig;
 use rusqlite::{Connection, OptionalExtension, params};
@@ -41,6 +42,8 @@ pub enum StorageError {
     PoolFull,
     #[error("health probe queue or daily budget exhausted")]
     HealthCapacity,
+    #[error("background work capacity exhausted")]
+    TaskCapacity,
     #[error("storage worker is unavailable")]
     Closed,
 }
@@ -93,6 +96,7 @@ enum Message {
 pub struct Store {
     tx: mpsc::Sender<Message>,
     pub database_path: Option<PathBuf>,
+    pub epoch: String,
 }
 
 pub fn unix_now() -> i64 {
@@ -140,6 +144,8 @@ impl Store {
     /// Blocking startup; async callers should use spawn_blocking.
     pub fn open(directory: Option<&Path>, bootstrap: DaemonConfig) -> Result<Self, StorageError> {
         let bootstrap = document(&bootstrap)?;
+        let epoch = uuid::Uuid::new_v4().to_string();
+        let worker_epoch = epoch.clone();
         let directory = directory.map(Path::to_owned);
         let (tx, mut rx) = mpsc::channel::<Message>(128);
         let (ready_tx, ready_rx) = std::sync::mpsc::sync_channel(1);
@@ -159,7 +165,7 @@ impl Store {
                         connection.pragma_update(None, "journal_mode", "WAL")?;
                         connection.pragma_update(None, "synchronous", "FULL")?;
                     }
-                    migrate(&mut connection, &bootstrap)?;
+                    migrate(&mut connection, &bootstrap, &worker_epoch)?;
                     Ok::<_, StorageError>((connection, lock, path))
                 })();
                 let (mut connection, lock, path) = match setup {
@@ -186,7 +192,11 @@ impl Store {
                 }
             })?;
         let database_path = ready_rx.recv().map_err(|_| StorageError::Closed)??;
-        Ok(Self { tx, database_path })
+        Ok(Self {
+            tx,
+            database_path,
+            epoch,
+        })
     }
     async fn call<T: Send + 'static>(
         &self,
@@ -359,14 +369,14 @@ fn check_head(connection: &Connection, expected: i64) -> Result<(), StorageError
         Err(StorageError::Conflict)
     }
 }
-fn migrate(connection: &mut Connection, bootstrap: &str) -> Result<(), StorageError> {
+fn migrate(connection: &mut Connection, bootstrap: &str, epoch: &str) -> Result<(), StorageError> {
     connection.execute_batch("CREATE TABLE IF NOT EXISTS schema_migrations(version INTEGER PRIMARY KEY,applied_at INTEGER NOT NULL)")?;
     let version: i64 = connection.query_row(
         "SELECT coalesce(max(version),0) FROM schema_migrations",
         [],
         |row| row.get(0),
     )?;
-    if version > 7 {
+    if version > 8 {
         return Err(StorageError::SchemaTooNew);
     }
     let transaction =
@@ -392,7 +402,6 @@ fn migrate(connection: &mut Connection, bootstrap: &str) -> Result<(), StorageEr
             [unix_now()],
         )?;
     }
-    transaction.execute("UPDATE provider_tasks SET state=CASE WHEN state='accepted' THEN 'failed' ELSE 'outcome_unknown' END,finished_at=?1,error_code='process_interrupted' WHERE state IN ('accepted','requesting')",[unix_now()])?;
     if version < 4 {
         transaction.execute_batch(include_str!("../migrations/0004_lease_clock.up.sql"))?;
         transaction.execute(
@@ -423,6 +432,19 @@ fn migrate(connection: &mut Connection, bootstrap: &str) -> Result<(), StorageEr
             [unix_now()],
         )?;
     }
+    if version < 8 {
+        transaction.execute_batch(include_str!("../migrations/0008_tasks_events.up.sql"))?;
+        transaction.execute(
+            "INSERT INTO schema_migrations(version,applied_at) VALUES(8,?1)",
+            [unix_now()],
+        )?;
+    }
+    transaction.execute(
+        "UPDATE event_context SET epoch=?1 WHERE singleton=1",
+        [epoch],
+    )?;
+    transaction.execute("UPDATE task_records SET version=version+1,state='interrupted',phase='process_interrupted',terminal=1,finished_at=?1,updated_at=max(updated_at,?1),error_code='process_interrupted' WHERE source_ref IS NULL AND terminal=0", [unix_now().saturating_mul(1000)])?;
+    transaction.execute("UPDATE provider_tasks SET state=CASE WHEN state='accepted' THEN 'failed' ELSE 'outcome_unknown' END,finished_at=?1,error_code='process_interrupted' WHERE state IN ('accepted','requesting')",[unix_now()])?;
     transaction.execute("UPDATE health_runs SET state='interrupted',finished_at=?1 WHERE state IN ('queued','probing')",[unix_now()])?;
     transaction
         .execute_batch("CREATE INDEX IF NOT EXISTS health_state_age ON health_state(checked_at)")?;

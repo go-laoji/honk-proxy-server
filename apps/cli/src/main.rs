@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use hps_client::{ClientError, HpsClient};
 use hps_config::DaemonConfig;
 use std::{io::Write, path::PathBuf, process::ExitCode, time::Duration};
+mod tasks;
 
 #[derive(Parser)]
 #[command(
@@ -35,6 +36,14 @@ enum Output {
 
 #[derive(Subcommand)]
 enum Command {
+    Task {
+        #[command(subcommand)]
+        command: tasks::TaskCommand,
+    },
+    Event {
+        #[command(subcommand)]
+        command: tasks::EventCommand,
+    },
     Status,
     Version,
     Capabilities,
@@ -632,7 +641,10 @@ fn client_error(error: ClientError) -> (u8, String) {
     let code = match &error {
         ClientError::InvalidEndpoint
         | ClientError::InvalidCertificate
-        | ClientError::InvalidConnectionId => 2,
+        | ClientError::InvalidConnectionId
+        | ClientError::InvalidTaskId
+        | ClientError::InvalidEventCursor => 2,
+        ClientError::EventProtocol => 5,
         ClientError::Transport(e) if e.is_timeout() => 6,
         ClientError::Transport(_) => 3,
         ClientError::Api { status: 409, .. } => 7,
@@ -709,6 +721,10 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
     )
     .map_err(client_error)?;
     let value = match &args.command {
+        Command::Task { command } => return tasks::run_task(&client, command).await,
+        Command::Event { command } => {
+            return tasks::run_events(&client, command, args.output).await;
+        }
         Command::Status => serde_json::to_value(client.status().await.map_err(client_error)?),
         Command::Version => serde_json::to_value(client.version().await.map_err(client_error)?),
         Command::Capabilities => {

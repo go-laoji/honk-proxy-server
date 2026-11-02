@@ -41,6 +41,8 @@ const RulesPage = lazy(() => import("./pages/RulesPage"));
 const NodesPage = lazy(() => import("./pages/NodesPage"));
 const ConnectionsPage = lazy(() => import("./pages/ConnectionsPage"));
 const ConfigPage = lazy(() => import("./pages/ConfigPage"));
+const TasksPage = lazy(() => import("./pages/TasksPage"));
+const EventsPage = lazy(() => import("./pages/EventsPage"));
 
 const icons: Record<
   string,
@@ -253,13 +255,16 @@ export default function App() {
                 <ProvidersPage
                   detailPage={current.id === "provider-detail"}
                   serviceEndpoint={service.data.endpoint}
+                  serviceEpoch={service.data.status.instance_id}
                   refreshService={service.refresh}
                 />
               </Suspense>
             ) : current.id === "health" ? (
               <Suspense fallback={<p className="muted">正在读取健康检测…</p>}>
                 <HealthPage
+                  key={service.data.endpoint}
                   serviceEndpoint={service.data.endpoint}
+                  serviceEpoch={service.data.status.instance_id}
                   refreshService={service.refresh}
                 />
               </Suspense>
@@ -288,6 +293,14 @@ export default function App() {
             ) : current.id === "connections" ? (
               <Suspense fallback={<p className="muted">正在读取连接…</p>}>
                 <ConnectionsPage key={service.data.endpoint} />
+              </Suspense>
+            ) : current.id === "tasks" ? (
+              <Suspense fallback={<p className="muted">正在读取后台任务…</p>}>
+                <TasksPage key={service.data.endpoint} />
+              </Suspense>
+            ) : current.id === "events" ? (
+              <Suspense fallback={<p className="muted">正在读取服务事件…</p>}>
+                <EventsPage key={service.data.endpoint} />
               </Suspense>
             ) : current.id === "settings" ? (
               <SettingsPage data={service.data} />

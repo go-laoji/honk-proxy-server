@@ -44,8 +44,14 @@ async fn probe(
         .map(|task| (StatusCode::ACCEPTED, Json(task)))
         .map_err(application_error)
 }
-async fn task(State(state): State<Arc<AppState>>, Path(id): Path<i64>) -> ApiResult<HealthTask> {
-    application(&state)?
+async fn task(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+    Query(query): Query<super::tasks::EpochQuery>,
+) -> ApiResult<HealthTask> {
+    let service = application(&state)?;
+    query.check(service)?;
+    service
         .health_task(id)
         .await
         .map(Json)

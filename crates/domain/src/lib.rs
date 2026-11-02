@@ -7,6 +7,8 @@ mod nodes;
 pub use nodes::*;
 mod connections;
 pub use connections::*;
+mod tasks;
+pub use tasks::*;
 
 pub const API_VERSION: &str = "v1";
 
@@ -292,7 +294,7 @@ pub struct ConfigValidation {
     pub changes: Vec<ConfigChange>,
     pub restart_required: Vec<String>,
 }
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct ConfigInput {
     pub toml: String,
     pub expected_revision: i64,
@@ -302,6 +304,17 @@ pub struct ConfigInput {
     pub note: String,
     #[serde(default)]
     pub use_draft_credentials: bool,
+}
+impl std::fmt::Debug for ConfigInput {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ConfigInput")
+            .field("toml", &"[REDACTED]")
+            .field("note", &"[REDACTED]")
+            .field("expected_revision", &self.expected_revision)
+            .field("expected_draft_version", &self.expected_draft_version)
+            .field("use_draft_credentials", &self.use_draft_credentials)
+            .finish()
+    }
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConfigActivate {

@@ -93,9 +93,11 @@ function Evidence({ result }: { result: ProbeResult }) {
 }
 export default function HealthPage({
   serviceEndpoint,
+  serviceEpoch,
   refreshService,
 }: {
   serviceEndpoint: string;
+  serviceEpoch: string;
   refreshService: () => Promise<void>;
 }) {
   const [data, setData] = useState<HealthOverview | null>(null);
@@ -107,7 +109,12 @@ export default function HealthPage({
   );
   const [expanded, setExpanded] = useState(nodeFilter);
   const [task, setTask] = useState<HealthTask | null>(null);
-  const taskId = useRef<number | null>(null);
+  const linked = new URLSearchParams(window.location.search);
+  const linkedTask = linked.get("task") ?? "";
+  const taskId = useRef<number | null>(
+    /^[1-9]\d*$/.test(linkedTask) ? Number(linkedTask) : null,
+  );
+  const taskEpoch = useRef(linked.get("epoch") ?? serviceEpoch);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [loadError, setLoadError] = useState("");
@@ -150,7 +157,7 @@ export default function HealthPage({
         setLoadError("");
         if (taskId.current) {
           const detail = await getJson<HealthTask>(
-            `api/v1/health/tasks/${taskId.current}`,
+            `api/v1/health/tasks/${taskId.current}?expected_epoch=${encodeURIComponent(taskEpoch.current)}`,
             controller.signal,
           );
           if (!controller.signal.aborted) setTask(detail);
@@ -198,6 +205,7 @@ export default function HealthPage({
     if (!mounted.current) return;
     setTask(value);
     taskId.current = value.id;
+    taskEpoch.current = serviceEpoch;
     setPending(null);
     try {
       sessionStorage.removeItem(storageKey);
@@ -536,10 +544,11 @@ export default function HealthPage({
                       onClick={() =>
                         void action("task", async () => {
                           const value = await getJson<HealthTask>(
-                            `api/v1/health/tasks/${item.id}`,
+                            `api/v1/health/tasks/${item.id}?expected_epoch=${encodeURIComponent(serviceEpoch)}`,
                           );
                           if (mounted.current) {
                             taskId.current = value.id;
+                            taskEpoch.current = serviceEpoch;
                             setTask(value);
                           }
                         })
@@ -571,6 +580,12 @@ export default function HealthPage({
                     <p className="muted mt-2 break-all text-xs">
                       请求 ID：{task.request_id}
                     </p>
+                    <a
+                      className="mt-2 inline-flex text-xs text-blue-600"
+                      href={`./tasks.html?source_ref=health:${task.id}&epoch=${encodeURIComponent(taskEpoch.current)}`}
+                    >
+                      查看统一任务与关联事件 →
+                    </a>
                     <p className="mt-3 text-xs">
                       可达 {task.healthy} · 失败 {task.failed} · 跳过{" "}
                       {task.skipped} · 合并在途 {task.merged}

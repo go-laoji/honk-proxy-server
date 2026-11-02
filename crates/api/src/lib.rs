@@ -15,6 +15,7 @@ use std::{
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
+mod audit;
 mod configuration;
 mod connections;
 mod dns;
@@ -23,6 +24,7 @@ mod health;
 mod nodes;
 mod providers;
 mod rules;
+mod tasks;
 #[cfg(feature = "web-ui")]
 mod web;
 
@@ -58,6 +60,7 @@ impl AppState {
     pub fn with_application(application: Arc<Supervisor>) -> Self {
         let snapshot = application.current();
         let mut state = Self::with_engine(snapshot.config.clone(), snapshot.engine.clone());
+        state.instance_id = application.event_epoch().into();
         state.application = Some(application);
         state
     }
@@ -157,12 +160,18 @@ pub fn router(state: Arc<AppState>) -> Router {
         .merge(groups::router())
         .merge(nodes::router())
         .merge(rules::router())
+        .merge(tasks::router())
         .layer(axum::extract::DefaultBodyLimit::max(4 * 1024 * 1024));
     #[cfg(feature = "web-ui")]
     let router = router.fallback(web::serve);
     #[cfg(not(feature = "web-ui"))]
     let router = router.fallback(not_found);
-    router.with_state(state)
+    router
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            audit::management,
+        ))
+        .with_state(state)
 }
 
 async fn status(State(state): State<Arc<AppState>>) -> Json<ServiceStatus> {
@@ -217,7 +226,8 @@ fn engine_error(error: EngineError) -> (StatusCode, Json<ApiError>) {
         Json(ApiError {
             code: code.into(),
             message: error.to_string(),
-            request_id: uuid::Uuid::new_v4().to_string(),
+            request_id: hps_application::current_request_id()
+                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
             retryable: false,
         }),
     )
@@ -262,6 +272,16 @@ async fn config(State(state): State<Arc<AppState>>) -> Json<DaemonConfig> {
 
 fn application_error(error: ApplicationError) -> (StatusCode, Json<ApiError>) {
     let (status, code) = match &error {
+        ApplicationError::TaskInput => (StatusCode::UNPROCESSABLE_ENTITY, "task_event_input"),
+        ApplicationError::TaskEpoch => (StatusCode::CONFLICT, "task_instance_changed"),
+        ApplicationError::TaskUnavailable => (StatusCode::NOT_FOUND, "task_not_retained"),
+        ApplicationError::TaskExisting(_) => (StatusCode::CONFLICT, "task_already_accepted"),
+        ApplicationError::TaskCapacity | ApplicationError::Storage(StorageError::TaskCapacity) => {
+            (StatusCode::TOO_MANY_REQUESTS, "task_event_capacity")
+        }
+        ApplicationError::TaskPersistence => {
+            (StatusCode::SERVICE_UNAVAILABLE, "task_result_unavailable")
+        }
         ApplicationError::Storage(StorageError::Conflict) => {
             (StatusCode::CONFLICT, "configuration_conflict")
         }
@@ -353,7 +373,8 @@ fn application_error(error: ApplicationError) -> (StatusCode, Json<ApiError>) {
         Json(ApiError {
             code: code.into(),
             message: error.to_string(),
-            request_id: uuid::Uuid::new_v4().to_string(),
+            request_id: hps_application::current_request_id()
+                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
             retryable: false,
         }),
     )

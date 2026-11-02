@@ -183,6 +183,18 @@ impl Supervisor {
         self.activate(input).await
     }
     pub async fn simulate_rules(
+        self: &Arc<Self>,
+        mut input: RulesSimulationInput,
+    ) -> Result<RouteSimulation, ApplicationError> {
+        let revision = input.revision.unwrap_or(self.current().revision);
+        input.revision = Some(revision);
+        let metadata = tasks::work_spec("rules_diagnostic", &input, Some(revision), None)?;
+        self.owned_work(metadata,move|s|async move{s.simulate_rules_inner(input).await},|value|hps_storage::tasks::WorkResult {
+            state:"completed",error_code:None,result_ref:Some(format!("config:{}",value.decision.configuration_revision)),
+            result:Some(serde_json::json!({"configuration_revision":value.decision.configuration_revision,"rule_id":value.decision.rule_id,"action":value.decision.action,"action_supported":value.action_supported,"selected":value.selection.as_ref().and_then(|s|s.selected.as_ref())})),
+        }).await
+    }
+    async fn simulate_rules_inner(
         &self,
         mut input: RulesSimulationInput,
     ) -> Result<RouteSimulation, ApplicationError> {

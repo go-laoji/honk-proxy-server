@@ -18,32 +18,29 @@ impl Supervisor {
             .clone()
             .try_acquire_owned()
             .map_err(|_| ApplicationError::NodeCapacity)?;
-        let service = self.clone();
         // This task owns the permit even when its HTTP/desktop caller goes away.
-        self.provider_tasks
-            .spawn(async move {
-                let current = service.current();
-                let leases = service.store.node_inventory_leases().await?;
-                let tasks = service
-                    .store
-                    .latest_provider_tasks(
-                        current
-                            .config
-                            .providers
-                            .iter()
-                            .map(|p| p.id.clone())
-                            .collect(),
-                    )
-                    .await?;
-                tokio::task::spawn_blocking(move || {
-                    let _permit = permit;
-                    inventory(&current, leases, query, tasks)
-                })
-                .await
-                .map_err(|_| ApplicationError::Worker)?
+        self.tracked(move |service| async move {
+            let current = service.current();
+            let leases = service.store.node_inventory_leases().await?;
+            let tasks = service
+                .store
+                .latest_provider_tasks(
+                    current
+                        .config
+                        .providers
+                        .iter()
+                        .map(|p| p.id.clone())
+                        .collect(),
+                )
+                .await?;
+            tokio::task::spawn_blocking(move || {
+                let _permit = permit;
+                inventory(&current, leases, query, tasks)
             })
             .await
             .map_err(|_| ApplicationError::Worker)?
+        })
+        .await
     }
     pub async fn node(self: &Arc<Self>, id: String) -> Result<NodesOverview, ApplicationError> {
         if !hps_config::valid_node_id(&id) {
@@ -84,77 +81,74 @@ impl Supervisor {
             .clone()
             .try_acquire_owned()
             .map_err(|_| ApplicationError::NodeCapacity)?;
-        let service = self.clone();
-        self.provider_tasks
-            .spawn(async move {
-                let _permit = permit;
-                let _operation = service.operation.lock().await;
-                if service.closed.load(std::sync::atomic::Ordering::Acquire) {
-                    return Err(EngineError::ShuttingDown.into());
-                }
-                let current = service.current();
-                if current.revision != input.expected_revision {
+        self.tracked(move |service| async move {
+            let _permit = permit;
+            let _operation = service.operation.lock().await;
+            if service.closed.load(std::sync::atomic::Ordering::Acquire) {
+                return Err(EngineError::ShuttingDown.into());
+            }
+            let current = service.current();
+            if current.revision != input.expected_revision {
+                return Err(StorageError::Conflict.into());
+            }
+            let lease = if let Some(raw) = input.id.strip_prefix("lease:") {
+                let id = raw.parse::<i64>().map_err(|_| ApplicationError::Invalid)?;
+                let row = service.store.node_lease(id).await?;
+                if input.lease_id != Some(row.id)
+                    || input.batch_id != Some(row.batch_id)
+                    || input.provider_id.as_deref() != Some(row.provider_id.as_str())
+                {
                     return Err(StorageError::Conflict.into());
                 }
-                let lease = if let Some(raw) = input.id.strip_prefix("lease:") {
-                    let id = raw.parse::<i64>().map_err(|_| ApplicationError::Invalid)?;
-                    let row = service.store.node_lease(id).await?;
-                    if input.lease_id != Some(row.id)
-                        || input.batch_id != Some(row.batch_id)
-                        || input.provider_id.as_deref() != Some(row.provider_id.as_str())
-                    {
-                        return Err(StorageError::Conflict.into());
-                    }
-                    Some(LeaseScope {
-                        id: row.id,
-                        batch_id: row.batch_id,
-                        provider_id: row.provider_id,
-                    })
-                } else {
-                    if input.lease_id.is_some()
-                        || input.batch_id.is_some()
-                        || input.provider_id.is_some()
-                    {
-                        return Err(ApplicationError::Invalid);
-                    }
-                    if !current
-                        .config
-                        .proxy
-                        .upstreams
-                        .iter()
-                        .any(|n| n.id == input.id)
-                    {
-                        return Err(StorageError::NotFound.into());
-                    }
-                    None
-                };
-                let control = service
-                    .store
-                    .set_node_control(
-                        input.id,
-                        state,
-                        input.expected_control_version,
-                        input.expected_revision,
-                        lease,
-                    )
-                    .await?;
-                let registry = current.engine.node_registry();
-                registry.publish(control.clone());
-                // Storage may have pruned controls whose lease history no longer exists.
-                // The just-committed restriction is already applied if this diagnostic reload fails.
-                if let Ok(controls) = service.store.node_controls().await {
-                    registry.reconcile(controls);
-                }
-                let pool_refreshed = service.refresh_pool().await.is_ok();
-                Ok(NodeActionResult {
-                    pool_refreshed,
-                    running_revision: current.revision,
-                    control: Some(control),
-                    configuration_activation: None,
+                Some(LeaseScope {
+                    id: row.id,
+                    batch_id: row.batch_id,
+                    provider_id: row.provider_id,
                 })
+            } else {
+                if input.lease_id.is_some()
+                    || input.batch_id.is_some()
+                    || input.provider_id.is_some()
+                {
+                    return Err(ApplicationError::Invalid);
+                }
+                if !current
+                    .config
+                    .proxy
+                    .upstreams
+                    .iter()
+                    .any(|n| n.id == input.id)
+                {
+                    return Err(StorageError::NotFound.into());
+                }
+                None
+            };
+            let control = service
+                .store
+                .set_node_control(
+                    input.id,
+                    state,
+                    input.expected_control_version,
+                    input.expected_revision,
+                    lease,
+                )
+                .await?;
+            let registry = current.engine.node_registry();
+            registry.publish(control.clone());
+            // Storage may have pruned controls whose lease history no longer exists.
+            // The just-committed restriction is already applied if this diagnostic reload fails.
+            if let Ok(controls) = service.store.node_controls().await {
+                registry.reconcile(controls);
+            }
+            let pool_refreshed = service.refresh_pool().await.is_ok();
+            Ok(NodeActionResult {
+                pool_refreshed,
+                running_revision: current.revision,
+                control: Some(control),
+                configuration_activation: None,
             })
-            .await
-            .map_err(|_| ApplicationError::Worker)?
+        })
+        .await
     }
 }
 

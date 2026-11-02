@@ -10,7 +10,7 @@ export class ApiRequestError extends Error {
   }
 }
 
-async function native<T>(
+export async function native<T>(
   command: string,
   args?: Record<string, unknown>,
 ): Promise<T> {

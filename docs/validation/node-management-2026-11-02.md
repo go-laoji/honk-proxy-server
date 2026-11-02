@@ -1,6 +1,6 @@
 # T12 节点管理验收
 
-Issue：[#17](https://github.com/go-laoji/honk-proxy-server/issues/17)。后端、CLI 和共享页面已实现；T13 已用真实隧道验证逐连接关联。**独立桌面窗口仍待验收，Issue 保持开放**。
+Issue：[#17](https://github.com/go-laoji/honk-proxy-server/issues/17)。后端、CLI、共享页面、真实逐连接关联与独立桌面窗口已完成验收。
 
 ## 实现与真实用例
 
@@ -33,10 +33,16 @@ Linux 忽略项为需要特权内核环境的 DNS 核心/应用验收及子进�
 
 CLI 可复现：先构建 `hps-cli`/`hps-daemon`，运行 `python3 tests/cli/nodes.py`。使用随机端口、唯一实例名和临时内存库，清理自身子进程和目录；不启动桌面、不调用供应商。
 
-## 桌面及未关闭门槛
+## 实际桌面验收
 
 独立 `HPS Node Validation.app` 已构建，路径 `src-tauri/target/debug/bundle/macos/HPS Node Validation.app`；bundle ID `dev.hps.node-validation`，独立连接偏好。临时验收服务 `127.0.0.1:17998` 无供应商、入口与静态节点默认禁用。API 与打包页面的 `web_build_id` 均为 `d1bf3cb9f011186c86c01479e90f30d9434e8376f804e4a5ded94e5a101911c7`。原用户 `17900` 预览与原桌面进程保持不动。
 
-用户回复已解锁后，计算机工具仍返回 `Mac is locked and automatic unlock could not unlock it`；未操作窗口，打包和原生桥测试不能代替窗口验收。已异步报告，并继续不依赖桌面的工作。
+此前计算机工具持续报告锁屏。2026-11-02 解锁期间，最终 T13 的 `HPS Connection Validation.app` 连接 17999 隔离服务，完成以下实际操作：
+
+- 导入一条带合成凭据的 HTTP 节点与一条不支持的 vmess 行；预览显示有效 1 / 无效 1，确认按钮停用。显式选择第 1 行并重新预览后，确认导入并激活 r3。返回内容没有展示凭据。
+- 使用该节点建立真实 CONNECT 隧道；窗口显示业务连接计数 1。点击“排空”后人工状态为排空中，可准入数归零；旧隧道继续回显，新隧道返回 503。点击“解除限制”后，新隧道恢复 200。
+- 节点详情显示“上游凭据：已配置（隐藏）”、组 validation 与实际业务连接链接；点击链接进入携带 node 筛选的独立 connections 文档，显示真实源端口、节点和字节数。
+
+后续 `HPS Final Validation.app`（build ID `5aeeffb9c6138494acb0136b50bab2f9503daae555157e024e368467da085bbb`）进一步完成该节点真实连接详情和断开。原应用、17900 预览与其配置均未修改。
 
 T13 已在同一登记表上接入逐连接记录、流量、主动断开和详情跳转。浏览器真实隧道在节点详情显示 1 条活动业务，进入筛选后的连接列表，并可返回该节点的独立详情文档；见 [连接验收](connections-2026-11-02.md)。计数覆盖拨号、业务交换和实际隧道生命周期，无演示连接。Linux 本机进程及内核/用户态代际一致性继续与 T15 联合验收。

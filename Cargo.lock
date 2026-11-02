@@ -763,6 +763,7 @@ dependencies = [
 name = "hps-api"
 version = "0.1.0"
 dependencies = [
+ "async-stream",
  "axum",
  "hps-application",
  "hps-client",
@@ -832,6 +833,7 @@ dependencies = [
  "hps-domain",
  "hps-net",
  "hps-platform",
+ "serde",
  "serde_json",
  "tokio",
  "toml",
@@ -1052,6 +1054,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tokio",
+ "uuid",
 ]
 
 [[package]]

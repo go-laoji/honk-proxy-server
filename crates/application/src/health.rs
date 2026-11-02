@@ -281,7 +281,7 @@ impl Supervisor {
         }
         self.health.cursor.store(start + scanned, Ordering::Relaxed);
         if !probes.is_empty() {
-            let _ = self
+            let task = self
                 .store
                 .begin_health_task(
                     uuid::Uuid::new_v4().to_string(),
@@ -290,6 +290,9 @@ impl Supervisor {
                     config.queue_capacity,
                     config.daily_probe_budget,
                 )
+                .await?;
+            self.store
+                .annotate_task_source(format!("health:{}", task.id), current.revision)
                 .await?;
         }
         Ok(())
@@ -389,8 +392,7 @@ impl Supervisor {
         self: &Arc<Self>,
         input: HealthProbeInput,
     ) -> Result<HealthTask, ApplicationError> {
-        let service = self.clone();
-        tokio::spawn(async move {
+        self.tracked(move |service| async move {
             let _operation = service.operation.lock().await;
             if let Some(task) = service
                 .store
@@ -432,7 +434,7 @@ impl Supervisor {
                         })
                 })
                 .collect();
-            Ok(service
+            let task = service
                 .store
                 .begin_health_task(
                     input.request_id,
@@ -441,10 +443,14 @@ impl Supervisor {
                     current.config.health.queue_capacity,
                     current.config.health.daily_probe_budget,
                 )
-                .await?)
+                .await?;
+            service
+                .store
+                .annotate_task_source(format!("health:{}", task.id), current.revision)
+                .await?;
+            Ok(task)
         })
         .await
-        .map_err(|_| ApplicationError::Worker)?
     }
     pub(super) fn plan_health(
         &self,

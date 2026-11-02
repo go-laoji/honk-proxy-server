@@ -84,10 +84,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!(%address,proxy_ready=current.engine.ready(),configuration_revision=current.revision,management_tls=current.management_tls.is_some(),"management API listening; persisted runtime initialized");
     let stopping = application.clone();
     let result = axum::serve(
-        listener,
+        axum::serve::ListenerExt::tap_io(listener, |_| {}),
         hps_api::router(Arc::new(hps_api::AppState::with_application(
             application.clone(),
-        ))),
+        )))
+        .into_make_service_with_connect_info::<std::net::SocketAddr>(),
     )
     .with_graceful_shutdown(async move {
         shutdown().await;

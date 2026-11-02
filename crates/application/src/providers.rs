@@ -183,11 +183,8 @@ impl Supervisor {
         id: String,
         input: ExtractionInput,
     ) -> Result<ExtractionTask, ApplicationError> {
-        // Accept and spawn in an owned task so disconnecting cannot leave a new task stranded.
-        let service = self.clone();
-        tokio::spawn(async move { service.extract_inner(id, input).await })
+        self.tracked(move |service| async move { service.extract_inner(id, input).await })
             .await
-            .map_err(|_| ApplicationError::Worker)?
     }
     async fn extract_inner(
         self: &Arc<Self>,
@@ -251,6 +248,9 @@ impl Supervisor {
         if !new {
             return Ok(task);
         }
+        self.store
+            .annotate_task_source(format!("provider:{}", task.id), self.current().revision)
+            .await?;
         let service = self.clone();
         let task_id = task.id;
         self.provider_tasks.spawn(async move {
@@ -272,27 +272,52 @@ impl Supervisor {
         Ok(task)
     }
     pub async fn provider_diagnostic(
-        &self,
+        self: &Arc<Self>,
         id: &str,
         kind: &str,
     ) -> Result<serde_json::Value, ApplicationError> {
-        let config = self
-            .current()
+        let current = self.current();
+        let config = current
             .config
             .providers
             .iter()
             .find(|p| p.id == id && p.enabled)
             .cloned()
             .ok_or(ApplicationError::ProviderUnavailable)?;
-        let _permit = self
-            .provider_slots
-            .try_acquire()
-            .map_err(|_| ApplicationError::Worker)?;
-        Ok(
-            ProviderClient::with_resolver(&config, self.name_resolver())?
-                .diagnostic(&config, kind)
-                .await?,
+        let mut metadata = tasks::work_spec(
+            "provider_diagnostic",
+            &(id, kind, hps_provider::fingerprint(&config)),
+            Some(current.revision),
+            None,
+        )?;
+        metadata.resource_kind = Some("provider".into());
+        metadata.resource_id = Some(id.into());
+        let kind = kind.to_owned();
+        self.owned_work(
+            metadata,
+            move |s| async move {
+                let _permit = s
+                    .provider_slots
+                    .clone()
+                    .try_acquire_owned()
+                    .map_err(|_| ApplicationError::ExtractionCapacity)?;
+                let resolver = current
+                    .config
+                    .dns
+                    .enabled
+                    .then(|| Arc::new(current.dns.clone()) as Arc<dyn hps_net::NameResolver>);
+                Ok(ProviderClient::with_resolver(&config, resolver)?
+                    .diagnostic(&config, &kind)
+                    .await?)
+            },
+            |value| hps_storage::tasks::WorkResult {
+                state: "completed",
+                error_code: None,
+                result_ref: None,
+                result: Some(value.clone()),
+            },
         )
+        .await
     }
     /// Small convenience API over immutable configuration revisions, with the same CAS.
     pub async fn edit_provider(

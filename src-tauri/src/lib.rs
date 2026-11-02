@@ -2,9 +2,10 @@ use hps_client::HpsClient;
 use std::{sync::Mutex, time::Duration};
 use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
+mod events;
 
 struct Connection(Mutex<String>);
-#[derive(serde::Serialize)]
+#[derive(Debug, serde::Serialize)]
 struct NativeApiError {
     message: String,
     code: String,
@@ -54,10 +55,14 @@ fn set_endpoint(
     app: tauri::AppHandle,
     state: tauri::State<'_, Connection>,
     endpoint: String,
+    subscriptions: tauri::State<'_, events::NativeEvents>,
 ) -> Result<(), String> {
     let client = HpsClient::new(&endpoint, Duration::from_secs(10)).map_err(|e| e.to_string())?;
     let endpoint = client.endpoint().as_str().to_owned();
     let mut current = state.0.lock().map_err(|_| "connection state unavailable")?;
+    subscriptions
+        .ensure_target_generation()
+        .map_err(|e| e.message)?;
     let directory = app.path().app_config_dir().map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
     let temporary = directory.join("connection.json.tmp");
@@ -67,6 +72,7 @@ fn set_endpoint(
     )
     .map_err(|e| e.to_string())?;
     std::fs::rename(temporary, directory.join("connection.json")).map_err(|e| e.to_string())?;
+    subscriptions.change_target().map_err(|e| e.message)?;
     *current = endpoint;
     Ok(())
 }
@@ -88,14 +94,26 @@ fn supported_api(path: &str) -> bool {
             | "api/v1/providers"
             | "api/v1/groups"
     ) || supported_health_get(path)
+        || events::supported_get(path)
         || supported_connections_get(path)
         || supported_nodes_get(path)
         || supported_rules_get(path)
         || supported_dns_get(path)
         || supported_provider_get(path)
-        || path
-            .strip_prefix("api/v1/config/revisions/")
-            .is_some_and(|id| id.parse::<i64>().is_ok_and(|id| id > 0))
+        || supported_epoch_detail(path, "api/v1/config/revisions/")
+}
+fn supported_epoch_detail(path: &str, prefix: &str) -> bool {
+    let (base, query) = path
+        .split_once('?')
+        .map_or((path, None), |(base, q)| (base, Some(q)));
+    base.strip_prefix(prefix)
+        .is_some_and(|id| id.parse::<i64>().is_ok_and(|id| id > 0))
+        && query.is_none_or(|q| {
+            let pairs = url::form_urlencoded::parse(q.as_bytes()).collect::<Vec<_>>();
+            pairs.len() == 1
+                && pairs[0].0 == "expected_epoch"
+                && hps_domain::valid_connection_epoch(&pairs[0].1)
+        })
 }
 fn supported_connections_get(path: &str) -> bool {
     let (base, query) = path
@@ -105,7 +123,12 @@ fn supported_connections_get(path: &str) -> bool {
         return query.is_none();
     }
     if let Some(id) = base.strip_prefix("api/v1/connections/") {
-        return query.is_none() && hps_domain::valid_connection_id(id);
+        let encoded = format!("id={id}");
+        let pairs = url::form_urlencoded::parse(encoded.as_bytes()).collect::<Vec<_>>();
+        return query.is_none()
+            && pairs.len() == 1
+            && pairs[0].0 == "id"
+            && hps_domain::valid_connection_id(&pairs[0].1);
     }
     if base != "api/v1/connections" {
         return false;
@@ -260,7 +283,7 @@ fn supported_health_get(path: &str) -> bool {
         .split_once('?')
         .map_or((path, None), |(base, q)| (base, Some(q)));
     if let Some(id) = base.strip_prefix("api/v1/health/tasks/") {
-        return query.is_none() && id.parse::<i64>().is_ok_and(|id| id > 0);
+        return !id.is_empty() && supported_epoch_detail(path, "api/v1/health/tasks/");
     }
     if base != "api/v1/health" {
         return false;
@@ -328,6 +351,7 @@ fn supported_action(path: &str) -> bool {
     if matches!(
         path,
         "api/v1/health/probe"
+            | "api/v1/tasks"
             | "api/v1/rules/save"
             | "api/v1/rules/upsert"
             | "api/v1/rules/delete"
@@ -470,7 +494,22 @@ pub fn run() {
             app.manage(Connection(Mutex::new(
                 saved.unwrap_or_else(|| "http://127.0.0.1:17900/".into()),
             )));
+            app.manage(events::NativeEvents::default());
             Ok(())
+        })
+        .on_page_load(|webview, payload| {
+            if payload.event() == tauri::webview::PageLoadEvent::Started
+                && let Some(state) = webview.app_handle().try_state::<events::NativeEvents>()
+            {
+                let _ = state.navigate(webview.label());
+            }
+        })
+        .on_window_event(|window, event| {
+            if matches!(event, tauri::WindowEvent::Destroyed)
+                && let Some(state) = window.app_handle().try_state::<events::NativeEvents>()
+            {
+                let _ = state.navigate(window.label());
+            }
         })
         .invoke_handler(tauri::generate_handler![
             get_endpoint,
@@ -478,7 +517,11 @@ pub fn run() {
             api_get,
             api_post,
             save_config_export,
-            get_web_build_id
+            get_web_build_id,
+            events::events_context,
+            events::events_subscribe,
+            events::events_cancel,
+            events::events_ack,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -511,6 +554,14 @@ mod tests {
     #[test]
     fn transport_accepts_implemented_api_only() {
         assert!(supported_api("api/v1/status"));
+        let connection = "12345678-1234-4321-8234-123456789abc%3A00000000000000000001";
+        assert!(supported_api(&format!("api/v1/connections/{connection}")));
+        assert!(!supported_api(&format!(
+            "api/v1/connections/{connection}&id=other"
+        )));
+        assert!(!supported_api(
+            "api/v1/connections/12345678-1234-4321-8234-123456789abc%2F00000000000000000001"
+        ));
         assert!(supported_api("api/v1/groups"));
         assert!(supported_api("api/v1/rules"));
         assert!(supported_api(
@@ -533,6 +584,15 @@ mod tests {
         assert!(!supported_action("api/v1/groups/unknown"));
         assert!(supported_api("api/v1/health?after=lease%3A12&limit=50"));
         assert!(supported_api("api/v1/health/tasks/12"));
+        for prefix in ["api/v1/health/tasks/", "api/v1/config/revisions/"] {
+            let epoch = "12345678-1234-4321-8234-123456789abc";
+            assert!(supported_api(&format!("{prefix}12?expected_epoch={epoch}")));
+            assert!(!supported_api(&format!("{prefix}12?expected_epoch=bad")));
+            assert!(!supported_api(&format!(
+                "{prefix}12?expected_epoch={epoch}&expected_epoch={epoch}"
+            )));
+            assert!(!supported_api(&format!("{prefix}12?url=http://external")));
+        }
         assert!(supported_action("api/v1/health/probe"));
         assert!(supported_action("api/v1/health/save"));
         assert!(supported_api("api/v1/dns?limit=50"));
