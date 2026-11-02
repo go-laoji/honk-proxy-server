@@ -58,3 +58,5 @@
 每个合并均有两个父提交，内容树等于相应原 feature tip，原 tip 作为第二父提交保留。`main` 仍为 `18d5899`，没有 push 或远端删除，原始未跟踪文件未变。当前从 develop 开启 `feature/desktop-service` 推进 #21；上述第一批 retained 列表作为历史快照保留在 JSON 的 `retained_at_first_batch`，当前待 finish 列表为空。
 
 第三批：#21 按安全窗口与明确 OS 写入边界验收回复并关闭后，使用标准 finish 完成 `desktop-service`：原 tip `0321fe7`，双父合并 `43363f7`，树一致。随后回到 `release-packaging`，通过 merge 同步 develop；没有先 finish 后继分支、手动删除其他 feature、push 或改动 main。
+
+第四批：#22 回复发行候选的实际证据和平台限制后，`release-packaging` 原 tip `27b0060` 独立 finish 为双父合并 `82f6f5b`，内容树完全一致；本地候选标签 `v0.1.0-rc.1` 指向原 tip。随后通过 start 创建 `observability-history` 处理 #23。main 未改动、未 push；没有批量删分支。

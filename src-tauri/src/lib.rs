@@ -142,6 +142,8 @@ fn supported_api(path: &str) -> bool {
             | "api/v1/providers"
             | "api/v1/groups"
     ) || supported_health_get(path)
+        || supported_diagnostic_get(path)
+        || supported_observability_get(path)
         || events::supported_get(path)
         || supported_connections_get(path)
         || supported_nodes_get(path)
@@ -149,6 +151,59 @@ fn supported_api(path: &str) -> bool {
         || supported_dns_get(path)
         || supported_provider_get(path)
         || supported_epoch_detail(path, "api/v1/config/revisions/")
+}
+fn supported_diagnostic_get(path: &str) -> bool {
+    if supported_epoch_detail(path, "api/v1/diagnostics/") {
+        return true;
+    }
+    let (base, query) = path.split_once('?').map_or((path, ""), |(p, q)| (p, q));
+    let Some(id) = base
+        .strip_prefix("api/v1/tasks/")
+        .and_then(|p| p.strip_suffix("/controls"))
+    else {
+        return false;
+    };
+    supported_epoch_detail(
+        &format!(
+            "api/v1/tasks/{id}{}",
+            if query.is_empty() {
+                String::new()
+            } else {
+                format!("?{query}")
+            }
+        ),
+        "api/v1/tasks/",
+    )
+}
+fn supported_observability_get(path: &str) -> bool {
+    if path == "api/v1/observability/alerts" {
+        return true;
+    }
+    if let Some(query) = path.strip_prefix("api/v1/observability/alerts?") {
+        let mut keys = std::collections::HashSet::new();
+        return !query.is_empty()
+            && url::form_urlencoded::parse(query.as_bytes()).all(|(k, v)| {
+                keys.insert(k.to_string())
+                    && match k.as_ref() {
+                        "after" => v.parse::<u64>().is_ok(),
+                        "limit" => v.parse::<u32>().is_ok_and(|n| (1..=100).contains(&n)),
+                        _ => false,
+                    }
+            });
+    }
+    if path == "api/v1/observability" {
+        return true;
+    }
+    let Some(query) = path.strip_prefix("api/v1/observability?") else {
+        return false;
+    };
+    let pairs = url::form_urlencoded::parse(query.as_bytes()).collect::<Vec<_>>();
+    pairs.len() == 1
+        && pairs[0].0 == "window_secs"
+        && pairs[0]
+            .1
+            .parse::<u32>()
+            .is_ok_and(|n| (60..=3600).contains(&n))
 }
 fn supported_epoch_detail(path: &str, prefix: &str) -> bool {
     let (base, query) = path
@@ -316,10 +371,13 @@ fn supported_dns_get(path: &str) -> bool {
     })
 }
 fn supported_rules_get(path: &str) -> bool {
-    if path == "api/v1/rules" {
+    if path == "api/v1/rules" || path == "api/v1/rules/export" {
         return true;
     }
-    let Some(query) = path.strip_prefix("api/v1/rules?") else {
+    let Some(query) = path
+        .strip_prefix("api/v1/rules?")
+        .or_else(|| path.strip_prefix("api/v1/rules/export?"))
+    else {
         return false;
     };
     let pairs = url::form_urlencoded::parse(query.as_bytes()).collect::<Vec<_>>();
@@ -332,6 +390,22 @@ fn supported_health_get(path: &str) -> bool {
         .map_or((path, None), |(base, q)| (base, Some(q)));
     if let Some(id) = base.strip_prefix("api/v1/health/tasks/") {
         return !id.is_empty() && supported_epoch_detail(path, "api/v1/health/tasks/");
+    }
+    if base == "api/v1/health/history" {
+        return query.is_none_or(|query| {
+            let mut keys = std::collections::HashSet::new();
+            !query.is_empty()
+                && url::form_urlencoded::parse(query.as_bytes()).all(|(key, value)| {
+                    keys.insert(key.to_string())
+                        && match key.as_ref() {
+                            "node" => hps_config::valid_node_id(&value),
+                            "since_unix" => value.parse::<i64>().is_ok_and(|n| n >= 0),
+                            "before" => value.parse::<i64>().is_ok_and(|n| n > 0),
+                            "limit" => value.parse::<u32>().is_ok_and(|n| (1..=200).contains(&n)),
+                            _ => false,
+                        }
+                })
+        });
     }
     if base != "api/v1/health" {
         return false;
@@ -398,11 +472,15 @@ fn supported_action(path: &str) -> bool {
     }
     if matches!(
         path,
-        "api/v1/health/probe"
+        "api/v1/observability/alerts/save"
+            | "api/v1/diagnostics"
+            | "api/v1/health/probe"
             | "api/v1/linux/capture/control"
             | "api/v1/linux/capture/save"
             | "api/v1/tasks"
             | "api/v1/rules/save"
+            | "api/v1/rules/import/preview"
+            | "api/v1/rules/import/apply"
             | "api/v1/rules/upsert"
             | "api/v1/rules/delete"
             | "api/v1/rules/toggle"
@@ -433,6 +511,10 @@ fn supported_action(path: &str) -> bool {
         return true;
     }
     let parts: Vec<_> = path.split('/').collect();
+    if matches!(parts.as_slice(),["api","v1","tasks",id,"cancel"|"retry"] if id.parse::<i64>().is_ok_and(|id| id > 0))
+    {
+        return true;
+    }
     if matches!(parts.as_slice(),["api","v1","providers",id,"controller","pause"|"resume"|"evaluate"] if valid_resource_id(id))
         || matches!(parts.as_slice(),["api","v1","providers",id,"save"|"delete"|"extract"] if valid_resource_id(id))
         || matches!(parts.as_slice(),["api","v1","providers",id,"diagnose","quota"|"whitelist"] if valid_resource_id(id))
@@ -494,6 +576,9 @@ async fn save_config_export(
         .export_config(Some(revision))
         .await
         .map_err(|error| error.to_string())?;
+    subscriptions
+        .validate_context(window.label(), context)
+        .map_err(|e| e.message)?;
     let (sender, receiver) = tokio::sync::oneshot::channel();
     app.dialog()
         .file()
@@ -515,6 +600,109 @@ async fn save_config_export(
         .await
         .map_err(|_| "file save could not finish")?
         .map_err(|error| error.to_string())?;
+    Ok(true)
+}
+
+#[tauri::command]
+async fn save_rules_export(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Connection>,
+    subscriptions: tauri::State<'_, events::NativeEvents>,
+    window: tauri::WebviewWindow,
+    context: events::SubscriptionContext,
+    revision: i64,
+) -> Result<bool, String> {
+    let target = {
+        let target = state.0.lock().map_err(|_| "connection state unavailable")?;
+        subscriptions
+            .validate_context(window.label(), context)
+            .map_err(|e| e.message)?;
+        target.clone()
+    };
+    let exported = target
+        .client(Duration::from_secs(10))
+        .map_err(|e| e.to_string())?
+        .export_rules(Some(revision))
+        .await
+        .map_err(|e| e.to_string())?;
+    subscriptions
+        .validate_context(window.label(), context)
+        .map_err(|e| e.message)?;
+    let document =
+        serde_json::to_vec_pretty(&exported).map_err(|_| "rule export serialization failed")?;
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .file()
+        .set_file_name(format!("hps-rules-r{revision}.json"))
+        .add_filter("JSON", &["json"])
+        .save_file(move |path| {
+            let _ = sender.send(path);
+        });
+    let Some(path) = receiver.await.map_err(|_| "save dialog did not complete")? else {
+        return Ok(false);
+    };
+    subscriptions
+        .validate_context(window.label(), context)
+        .map_err(|e| e.message)?;
+    let path = path
+        .into_path()
+        .map_err(|_| "selected file path is unavailable")?;
+    tokio::task::spawn_blocking(move || std::fs::write(path, document))
+        .await
+        .map_err(|_| "file save could not finish")?
+        .map_err(|e| e.to_string())?;
+    Ok(true)
+}
+
+#[tauri::command]
+async fn save_diagnostic_export(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Connection>,
+    subscriptions: tauri::State<'_, events::NativeEvents>,
+    window: tauri::WebviewWindow,
+    context: events::SubscriptionContext,
+    id: i64,
+    epoch: String,
+) -> Result<bool, String> {
+    let target = {
+        let target = state.0.lock().map_err(|_| "connection state unavailable")?;
+        subscriptions
+            .validate_context(window.label(), context)
+            .map_err(|e| e.message)?;
+        target.clone()
+    };
+    let exported = target
+        .client(Duration::from_secs(10))
+        .map_err(|e| e.to_string())?
+        .diagnostic(id, Some(&epoch))
+        .await
+        .map_err(|e| e.to_string())?;
+    subscriptions
+        .validate_context(window.label(), context)
+        .map_err(|e| e.message)?;
+    let document = serde_json::to_vec_pretty(&exported)
+        .map_err(|_| "diagnostic export serialization failed")?;
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .file()
+        .set_file_name(format!("hps-diagnostic-{id}.json"))
+        .add_filter("JSON", &["json"])
+        .save_file(move |path| {
+            let _ = sender.send(path);
+        });
+    let Some(path) = receiver.await.map_err(|_| "save dialog did not complete")? else {
+        return Ok(false);
+    };
+    subscriptions
+        .validate_context(window.label(), context)
+        .map_err(|e| e.message)?;
+    let path = path
+        .into_path()
+        .map_err(|_| "selected file path is unavailable")?;
+    tokio::task::spawn_blocking(move || std::fs::write(path, document))
+        .await
+        .map_err(|_| "file save could not finish")?
+        .map_err(|e| e.to_string())?;
     Ok(true)
 }
 
@@ -595,6 +783,8 @@ pub fn run() {
             api_get,
             api_post,
             save_config_export,
+            save_rules_export,
+            save_diagnostic_export,
             get_web_build_id,
             local::profiles_get,
             local::profiles_change,
@@ -642,7 +832,32 @@ mod tests {
         assert!(supported_action("api/v1/linux/capture/control"));
         assert!(supported_action("api/v1/linux/capture/save"));
         assert!(!supported_action("api/v1/linux/capture/unknown"));
+        assert!(supported_api(
+            "api/v1/diagnostics/2?expected_epoch=abcdef12-3456-7890-abcd-ef1234567890"
+        ));
+        assert!(supported_api("api/v1/tasks/2/controls"));
+        assert!(!supported_api("api/v1/tasks/2/controls?expected_epoch=bad"));
+        assert!(!supported_api(
+            "api/v1/diagnostics/2?expected_epoch=bad&url=http://external"
+        ));
+        assert!(supported_action("api/v1/diagnostics"));
+        assert!(supported_action("api/v1/tasks/2/cancel"));
+        assert!(supported_action("api/v1/tasks/2/retry"));
+        assert!(!supported_action("api/v1/tasks/0/retry"));
         assert!(supported_api("api/v1/status"));
+        assert!(supported_api(
+            "api/v1/observability/alerts?limit=100&after=42"
+        ));
+        assert!(!supported_api("api/v1/observability/alerts?limit=101"));
+        assert!(!supported_api(
+            "api/v1/observability/alerts?after=1&after=2"
+        ));
+        assert!(supported_action("api/v1/observability/alerts/save"));
+        assert!(supported_api("api/v1/observability?window_secs=300"));
+        assert!(!supported_api("api/v1/observability?window_secs=3601"));
+        assert!(!supported_api(
+            "api/v1/observability?window_secs=60&window_secs=120"
+        ));
         let connection = "12345678-1234-4321-8234-123456789abc%3A00000000000000000001";
         assert!(supported_api(&format!("api/v1/connections/{connection}")));
         assert!(!supported_api(&format!(
@@ -653,6 +868,12 @@ mod tests {
         ));
         assert!(supported_api("api/v1/groups"));
         assert!(supported_api("api/v1/rules"));
+        assert!(supported_api("api/v1/rules/export?revision=42"));
+        assert!(!supported_api(
+            "api/v1/rules/export?revision=42&revision=43"
+        ));
+        assert!(supported_action("api/v1/rules/import/preview"));
+        assert!(supported_action("api/v1/rules/import/apply"));
         assert!(supported_api(
             "api/v1/nodes?provider=vendor&state=draining&limit=50&offset=0"
         ));
@@ -673,6 +894,12 @@ mod tests {
         assert!(!supported_action("api/v1/groups/unknown"));
         assert!(supported_api("api/v1/health?after=lease%3A12&limit=50"));
         assert!(supported_api("api/v1/health/tasks/12"));
+        assert!(supported_api(
+            "api/v1/health/history?node=lease%3A12&limit=100&since_unix=1&before=42"
+        ));
+        assert!(!supported_api("api/v1/health/history?limit=201"));
+        assert!(!supported_api("api/v1/health/history?before=0"));
+        assert!(!supported_api("api/v1/health/history?node=one&node=two"));
         for prefix in ["api/v1/health/tasks/", "api/v1/config/revisions/"] {
             let epoch = "12345678-1234-4321-8234-123456789abc";
             assert!(supported_api(&format!("{prefix}12?expected_epoch={epoch}")));

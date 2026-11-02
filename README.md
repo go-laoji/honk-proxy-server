@@ -1,6 +1,6 @@
 # honk-proxy-server
 
-自主实现的 Rust 代理池服务，提供独立 CLI、无桌面 Daemon 和共享 React/Tailwind 多页面控制台。当前已交付 HTTP/CONNECT、HTTPS 代理与 SOCKS5 TCP、配置版本、短效供应商提取、批次租约、预算补池、健康、DNS、分组、规则、连接和任务。Linux 自研 eBPF 支持明确本机/LAN 范围的双栈 TCP/UDP、可信本机进程、原子代际及故障恢复，已在 aarch64/x86_64 的 6.12.115 LTS 与 7.2.14 完成实际矩阵。Desktop 系统服务和正式分包发行继续按后续 Issue 交付。
+自主实现的 Rust 代理池服务，提供独立 CLI、无桌面 Daemon 和共享 React/Tailwind 多页面控制台。当前已交付 HTTP/CONNECT、HTTPS 代理与 SOCKS5 TCP、配置版本、短效供应商提取、批次租约、预算补池、健康、DNS、分组、规则、连接和任务。Linux 自研 eBPF 支持明确本机/LAN 范围的双栈 TCP/UDP、可信本机进程、原子代际及故障恢复，已在 aarch64/x86_64 的 6.12.115 LTS 与 7.2.14 完成实际矩阵。Desktop/独立系统服务及可验证分包已交付发行候选，平台和实际验收限制见发行文档。
 
 honk 仅作为能力参考；项目不集成其 crate、二进制或 fork。
 
@@ -102,3 +102,5 @@ pnpm test:e2e
 首次运行浏览器测试需要 `pnpm exec playwright install chromium`。测试会启动真实 Daemon，验证多页面导航、无账号访问、共享资源哈希、移动布局和状态准确性。`cargo test --workspace` 包含 Web 资源 crate，先执行 `pnpm build`；仅构建 CLI/Daemon 精简包则没有此要求。
 
 Linux 数据面需要在实际内核环境验证本项目自研 eBPF 程序及真实出口；macOS 的管理 API 测试或容器预检不能代替真实 eBPF 验收。只读条件和实际挂载分别验收，见 [eBPF 使用与隔离验证](docs/linux-ebpf-usage.md)、[实际内核验收](docs/validation/linux-ebpf-core-2026-11-01.md) 和 [前期只读预检](docs/validation/linux-preflight-2026-11-01.md)。
+
+[历史观测、脱敏诊断与告警](docs/observability-usage.md) 提供当前运行期有界趋势、健康持久历史、规则命中与批量导入导出、只读诊断后台任务和状态变化通知；取消/重试按实际阶段及版本开放，不重放采购。

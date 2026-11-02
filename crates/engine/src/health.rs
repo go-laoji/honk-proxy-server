@@ -204,6 +204,7 @@ mod tests {
             tunnel_established: true,
             http_status: Some(200),
             target_ok: Some(true),
+            exit_ip: None,
             latency_ms: 0,
             checked_at: unix_now(),
         }

@@ -28,7 +28,7 @@
   "current_free_source_health": "unverified; no public proxy endpoints dialed",
   "remote_ci_executed": false,
   "linux_desktop_deb_executed": false,
-  "x86_static_package": "still building; not counted as a passed release target",
+  "x86_static_package": "initial build stopped before editing compiler inputs; cached dependencies retained for final source freeze, not a passed release target",
   "runtime_reports": {
     "macos_install": {
       "passed": true,

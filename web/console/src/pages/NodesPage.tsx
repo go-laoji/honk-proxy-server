@@ -3,6 +3,7 @@ import { Globe2, RefreshCw, Upload, Filter, ArrowLeft } from "lucide-react";
 import { Badge, Details } from "../components/ui";
 import { NodeStats, SourceStats } from "../components/NodeSummary";
 import { getJson, postJson } from "../platform";
+import HealthHistoryPanel from "../components/HealthHistoryPanel";
 import {
   nodeAddress,
   nodeReasons,
@@ -632,6 +633,7 @@ export default function NodesPage() {
           )}
         </section>
       )}
+      {selectedId && <HealthHistoryPanel key={selectedId} node={selectedId} />}
       {loading && <p className="muted text-sm">正在读取实际节点库存…</p>}
       <div className="grid gap-4 lg:grid-cols-2" aria-label="节点列表">
         {value?.nodes.map((node) => (

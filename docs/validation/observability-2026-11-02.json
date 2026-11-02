@@ -1,0 +1,41 @@
+{
+  "date": "2026-11-02",
+  "issue": 23,
+  "code_revision": "e6981cc21c25d16d5dbebfed386d330d450f8319",
+  "workspace_before_final_focused_fix": {
+    "passed": 198,
+    "failed": 0,
+    "ignored": 0
+  },
+  "diagnostic_final_focused_tests": 3,
+  "native_tests_passed": 9,
+  "chromium_tests_passed": 22,
+  "workspace_clippy": true,
+  "final_diagnostic_clippy": true,
+  "native_clippy": true,
+  "rust_fmt": true,
+  "typescript": true,
+  "frontend_format": true,
+  "shared_mpa_build": true,
+  "real_cli": {
+    "real_cli": true,
+    "task_id": 1,
+    "diagnostic_format": 1,
+    "same_persisted_result": true,
+    "completed_not_cancellable": true,
+    "alerts_same_epoch": true,
+    "host_network_writes": false
+  },
+  "linux_kernel_matrix_rerun_this_issue": false,
+  "host_network_writes": false,
+  "paid_supplier_live_calls": false,
+  "native_file_dialog_visible_validation": false,
+  "review_fix": "SQLite terminal write trigger failure remains cancellable after retry TTL and cache pressure until durable terminal transition",
+  "limitations": [
+    "In-memory trends and alerts reset on daemon epoch; bounded retention and truncation reported",
+    "Exit IP capture is optional configured plain IP evidence; region remains unknown without configured evidence",
+    "No implicit cancellation or replay of purchases/configuration activation",
+    "Desktop OS notice adapter belongs to T20; macOS network writes remain unverified and prohibited on development host",
+    "Linux data-plane tests will be repeated at combined T19/T20 integration; no new kernel test is claimed here"
+  ]
+}

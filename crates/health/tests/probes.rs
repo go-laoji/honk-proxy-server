@@ -7,6 +7,98 @@ use hps_health::PreparedProfile;
 use std::sync::Arc;
 
 #[tokio::test]
+async fn explicit_exit_ip_probe_is_bounded_and_bad_portraits_do_not_kill_working_nodes() {
+    use tokio::{
+        io::{AsyncReadExt, AsyncWriteExt},
+        net::TcpListener,
+    };
+    let proxy = support::http_proxy(None, None, 200).await;
+    let dialer = Arc::new(
+        Dialer::new(&ProxyConfig {
+            upstreams: vec![support::upstream(proxy.address, ProxyProtocol::Http)],
+            ..Default::default()
+        })
+        .unwrap(),
+    );
+    for (value, delay, expected, error) in [
+        ("203.0.113.8\n".to_owned(), false, Some("203.0.113.8"), None),
+        ("2001:db8::8\n".to_owned(), false, Some("2001:db8::8"), None),
+        (
+            "portrait-private-invalid".to_owned(),
+            false,
+            None,
+            Some("exit_ip_response_invalid"),
+        ),
+        (
+            "x".repeat(129),
+            false,
+            None,
+            Some("exit_ip_response_oversized"),
+        ),
+        ("x".into(), true, None, Some("exit_ip_response_timeout")),
+    ] {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut tcp, _) = listener.accept().await.unwrap();
+            let mut header = vec![];
+            while !header.ends_with(b"\r\n\r\n") {
+                header.push(tcp.read_u8().await.unwrap());
+            }
+            tcp.write_all(
+                format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    value.len()
+                )
+                .as_bytes(),
+            )
+            .await
+            .unwrap();
+            if delay {
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            }
+            let _ = tcp.write_all(value.as_bytes()).await;
+        });
+        let profile = PreparedProfile::prepare(ProbeProfile {
+            url: format!("http://{address}/"),
+            capture_exit_ip: true,
+            ..Default::default()
+        })
+        .unwrap();
+        let result = profile
+            .probe(
+                &dialer.probe_plans()[0],
+                &HealthConfig {
+                    timeout_ms: 200,
+                    ..Default::default()
+                },
+            )
+            .await;
+        assert_eq!(result.exit_ip, expected.map(|s| s.parse().unwrap()));
+        assert_eq!(result.error_code.as_deref(), error);
+        assert_eq!(result.verdict, HealthVerdict::Healthy);
+        assert!(
+            !serde_json::to_string(&result)
+                .unwrap()
+                .contains("portrait-private-invalid")
+        );
+        server.abort();
+    }
+    let legacy = serde_json::json!({"node_id":"n","identity":"i","profile_fingerprint":"f","transport":"tcp","family":"ipv4","verdict":"healthy","phase":"complete","error_code":null,"endpoint_reachable":true,"authenticated":true,"tunnel_established":true,"http_status":200,"target_ok":true,"latency_ms":1,"checked_at":1});
+    assert!(
+        serde_json::from_value::<hps_domain::ProbeResult>(legacy)
+            .unwrap()
+            .exit_ip
+            .is_none()
+    );
+    assert!(
+        !serde_json::to_string(&ProbeProfile::default())
+            .unwrap()
+            .contains("capture_exit_ip")
+    );
+}
+
+#[tokio::test]
 async fn real_three_protocols_probe_verified_target_tls_without_business_payload() {
     let cert = support::certificate();
     let target = support::origin(Some(&cert)).await;

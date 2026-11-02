@@ -298,6 +298,13 @@ async fn route_purpose_edns_isolation_bounds_and_domain_ambiguity() {
     let context = resolver.domain_context("203.0.113.9".parse().unwrap());
     assert!(context.ambiguous);
     assert_eq!(context.domains, vec!["one.example", "two.example"]);
+    assert!(!context.mappings.is_empty() && !context.mappings_truncated);
+    assert!(
+        context
+            .mappings
+            .iter()
+            .all(|m| m.source == "unexpired_local_dns_answers" && m.remaining_ttl <= 60)
+    );
     assert_eq!(resolver.cache(None, 50).unwrap().total, 3);
     assert!(
         resolver
@@ -306,6 +313,13 @@ async fn route_purpose_edns_isolation_bounds_and_domain_ambiguity() {
             .is_empty()
     );
     assert_eq!(resolver.clear(Some("two.example")).unwrap(), 1);
+    assert!(
+        resolver
+            .domain_context("203.0.113.9".parse().unwrap())
+            .mappings
+            .iter()
+            .all(|m| m.domain != "two.example")
+    );
     let page = resolver.cache(None, 1).unwrap();
     assert!(page.next_after.is_some());
     assert_eq!(

@@ -124,7 +124,7 @@ impl EventFilters {
         }
     }
 }
-fn request_id(value: &str) -> std::result::Result<String, String> {
+pub(super) fn request_id(value: &str) -> std::result::Result<String, String> {
     if value.is_empty()
         || value.len() > 64
         || !value
@@ -200,7 +200,12 @@ pub(super) async fn run_task(client: &HpsClient, command: &TaskCommand) -> Resul
         }
     }
 }
-async fn wait(client: &HpsClient, id: i64, epoch: Option<&str>, seconds: u64) -> Result<TaskInfo> {
+pub(super) async fn wait(
+    client: &HpsClient,
+    id: i64,
+    epoch: Option<&str>,
+    seconds: u64,
+) -> Result<TaskInfo> {
     tokio::time::timeout(Duration::from_secs(seconds),async {
         loop {let task=client.task(id,epoch).await.map_err(client_error)?;if task.terminal {return Ok(task);}tokio::time::sleep(Duration::from_millis(250)).await;}
     }).await.map_err(|_|(6,"task has not reached a terminal state before the wait deadline; inspect the same task ID before resubmitting".into()))?

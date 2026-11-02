@@ -50,7 +50,12 @@ hps health probe --node 'lease:12' --request-id inspect-12 --wait
 hps health probe --node static-a --node static-b --wait
 hps health task 42
 hps health save health-policy.toml --expected-revision 3
+hps health history --node static-a --limit 100
 ```
+
+`health.html` 和 `node-detail.html` 的历史面板读取持久 `health_runs`，可切换 5 分钟/1 小时/24 小时并分页；窗口基于目标服务时间，不依赖浏览器时钟。API `GET /api/v1/health/history` 支持 node/since_unix/before/limit，limit 最大 200、时间查询最多回看 30 天。已有存储最多保留 5000 个任务及约 100000 条历史运行，活跃任务保留；实际最早记录和探测预算在响应中显示，查询历史不发起探测或消费额外预算。曲线按节点/维度/策略分开，仅表示实际探测总耗时；不把跳过/不支持的零值画成低延迟。
+
+若需要实际出口画像，在一个已经明确配置的 TCP profile 上设置 `capture_exit_ip=true`，目标应返回纯 IPv4/IPv6 地址文本。默认 false，不新增第三方目标或定时探测；沿用本次探测的同一超时/预算，最多读取 128 字节。返回无效、过大或超时会报告 `exit_ip_response_*`，不记录响应原文，也不因此判死已经穿透成功的代理。出口 IP 标为配置目标的实际响应；未配置时 IP/地域明确未知，地域不从节点名或供应商地址推断。HTTP 目标缺少 TLS 身份保证，建议使用自行信任的 HTTPS 目标。
 
 未传 `--node` 时请求当前最多 1000 个节点；队列或预算不足则整个新请求拒绝，不悄悄截短成成功。控制台的批量按钮检测本页或所选节点，分页最多 200 个、默认 50 个。CLI 等待超时后，任务仍由 Daemon 执行，可按 ID 查询；CLI 请求前打印 request_id，受理响应丢失时应复用它。重复受理不新增探测预留，在途的同身份/策略工作也会合并。失败或中断任务的 CLI 退出码为 5，配置版本冲突为 7。
 

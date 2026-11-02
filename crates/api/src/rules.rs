@@ -3,6 +3,15 @@ use axum::extract::Query;
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/api/v1/rules", get(overview))
+        .route("/api/v1/rules/export", get(export))
+        .route(
+            "/api/v1/rules/import/preview",
+            post(import_preview).layer(axum::extract::DefaultBodyLimit::max(1024 * 1024)),
+        )
+        .route(
+            "/api/v1/rules/import/apply",
+            post(import).layer(axum::extract::DefaultBodyLimit::max(1024 * 1024)),
+        )
         .route("/api/v1/rules/save", post(save))
         .route("/api/v1/rules/upsert", post(upsert))
         .route("/api/v1/rules/delete", post(delete))
@@ -11,6 +20,36 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/api/v1/rules/apply", post(apply))
         .route("/api/v1/rules/simulate", post(simulate))
         .layer(axum::extract::DefaultBodyLimit::max(8 * 1024 * 1024))
+}
+async fn export(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<View>,
+) -> ApiResult<hps_config::RuleDocument> {
+    application(&state)?
+        .export_rules(query.revision)
+        .await
+        .map(Json)
+        .map_err(application_error)
+}
+async fn import_preview(
+    State(state): State<Arc<AppState>>,
+    Json(input): Json<hps_config::RuleImportInput>,
+) -> ApiResult<hps_domain::RuleImportPreview> {
+    application(&state)?
+        .preview_rule_import(input)
+        .await
+        .map(Json)
+        .map_err(application_error)
+}
+async fn import(
+    State(state): State<Arc<AppState>>,
+    Json(input): Json<hps_config::RuleImportInput>,
+) -> ApiResult<hps_domain::ConfigRevision> {
+    application(&state)?
+        .import_rules(input)
+        .await
+        .map(Json)
+        .map_err(application_error)
 }
 fn application(state: &AppState) -> Result<&Arc<Supervisor>, (StatusCode, Json<ApiError>)> {
     state
@@ -106,6 +145,109 @@ async fn simulate(
 
 #[cfg(test)]
 mod tests {
+    #[tokio::test]
+    async fn versioned_rule_import_requires_preview_checksum_and_never_activates_its_candidate() {
+        use super::*;
+        let mut config = DaemonConfig::default();
+        config.health.enabled = false;
+        let service = Supervisor::boot(
+            hps_storage::Store::open(None, config).unwrap(),
+            hps_application::StartupOverrides::default(),
+        )
+        .await
+        .unwrap();
+        service.confirm_startup().await.unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let state = Arc::new(AppState::with_application(service.clone()));
+        let server = tokio::spawn(async move {
+            axum::serve(listener, crate::router(state)).await.unwrap();
+        });
+        let client = hps_client::HpsClient::new(
+            &format!("http://{address}"),
+            std::time::Duration::from_secs(3),
+        )
+        .unwrap();
+        let mut document = client.export_rules(None).await.unwrap();
+        assert_eq!(document.format_version, 1);
+        document.configuration.rules = vec![hps_config::RuleConfig {
+            id: "imported".into(),
+            enabled: true,
+            conditions: Default::default(),
+            action: hps_domain::RouteAction::Reject,
+        }];
+        let mut input = hps_config::RuleImportInput {
+            document,
+            expected_revision: 1,
+            checksum: None,
+        };
+        let preview = client.preview_rule_import(&input).await.unwrap();
+        assert!(preview.validation.valid);
+        assert_eq!(preview.rule_count, 1);
+        assert!(matches!(
+            client.import_rules(&input).await,
+            Err(hps_client::ClientError::Api { status: 409, .. })
+        ));
+        input.checksum = Some(preview.checksum);
+        let candidate = client.import_rules(&input).await.unwrap();
+        assert_eq!(candidate.id, 2);
+        assert_eq!(client.rules(None).await.unwrap().running_revision, 1);
+        assert_eq!(client.config_workspace().await.unwrap().desired_revision, 1);
+        assert_eq!(
+            client
+                .export_rules(Some(2))
+                .await
+                .unwrap()
+                .configuration
+                .rules[0]
+                .id,
+            "imported"
+        );
+        client
+            .apply_rules(&hps_domain::ConfigActivate {
+                revision: 2,
+                expected_revision: 1,
+                defer_until_restart: false,
+            })
+            .await
+            .unwrap();
+        assert!(matches!(
+            client.import_rules(&input).await,
+            Err(hps_client::ClientError::Api { status: 409, .. })
+        ));
+        input.expected_revision = 2;
+        input.document.format_version = 99;
+        assert!(matches!(
+            client.preview_rule_import(&input).await,
+            Err(hps_client::ClientError::Api { status: 422, .. })
+        ));
+        input.document.format_version = 1;
+        input.document.configuration.rules[0].action = hps_domain::RouteAction::Node {
+            id: "missing".into(),
+        };
+        assert!(
+            !client
+                .preview_rule_import(&input)
+                .await
+                .unwrap()
+                .validation
+                .valid
+        );
+        assert!(matches!(
+            client.import_rules(&input).await,
+            Err(hps_client::ClientError::Api { status: 422, .. })
+        ));
+        let oversized = reqwest::Client::new()
+            .post(format!("http://{address}/api/v1/rules/import/preview"))
+            .header("content-type", "application/json")
+            .body(" ".repeat(1024 * 1024 + 1))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(oversized.status(), 413);
+        service.shutdown().await.unwrap();
+        server.abort();
+    }
     use super::*;
     use hps_config::{
         RoutingConfig, RuleConditions, RuleConfig, RuleDelete, RuleOrder, RuleToggle, RuleUpsert,

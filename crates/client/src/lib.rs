@@ -2,6 +2,7 @@ use hps_domain::{ApiError, Capabilities, ServiceStatus, VersionInfo};
 use reqwest::{Client, Url};
 use serde::de::DeserializeOwned;
 use std::time::Duration;
+mod diagnostics;
 mod events;
 pub use events::EventSubscription;
 
@@ -134,6 +135,55 @@ impl HpsClient {
         }
         self.get_json(&format!("api/v1/health?{}", query.finish()))
             .await
+    }
+    pub async fn health_history(
+        &self,
+        input: &hps_domain::HealthHistoryQuery,
+    ) -> Result<hps_domain::HealthHistory, ClientError> {
+        let mut query = url::form_urlencoded::Serializer::new(String::new());
+        if let Some(node) = &input.node {
+            query.append_pair("node", node);
+        }
+        if let Some(since) = input.since_unix {
+            query.append_pair("since_unix", &since.to_string());
+        }
+        if let Some(before) = input.before {
+            query.append_pair("before", &before.to_string());
+        }
+        query.append_pair("limit", &input.limit.unwrap_or(100).to_string());
+        self.get_json(&format!("api/v1/health/history?{}", query.finish()))
+            .await
+    }
+    pub async fn observations(
+        &self,
+        query: &hps_domain::ObservationQuery,
+    ) -> Result<hps_domain::ObservationOverview, ClientError> {
+        self.get_json(&format!(
+            "api/v1/observability?window_secs={}",
+            query.window_secs
+        ))
+        .await
+    }
+    pub async fn export_rules(
+        &self,
+        revision: Option<i64>,
+    ) -> Result<hps_config::RuleDocument, ClientError> {
+        self.get_json(&revision.map_or("api/v1/rules/export".into(), |r| {
+            format!("api/v1/rules/export?revision={r}")
+        }))
+        .await
+    }
+    pub async fn preview_rule_import(
+        &self,
+        input: &hps_config::RuleImportInput,
+    ) -> Result<hps_domain::RuleImportPreview, ClientError> {
+        self.post_body("api/v1/rules/import/preview", input).await
+    }
+    pub async fn import_rules(
+        &self,
+        input: &hps_config::RuleImportInput,
+    ) -> Result<hps_domain::ConfigRevision, ClientError> {
+        self.post_body("api/v1/rules/import/apply", input).await
     }
     pub async fn dns(
         &self,

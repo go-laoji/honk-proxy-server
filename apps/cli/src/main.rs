@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use hps_client::{ClientError, HpsClient};
 use hps_config::DaemonConfig;
 use std::{io::Write, path::PathBuf, process::ExitCode, time::Duration};
+mod diagnostics;
 mod local;
 mod tasks;
 
@@ -53,6 +54,10 @@ enum Command {
         #[command(subcommand)]
         command: tasks::TaskCommand,
     },
+    Diagnostic {
+        #[command(subcommand)]
+        command: diagnostics::DiagnosticCommand,
+    },
     Event {
         #[command(subcommand)]
         command: tasks::EventCommand,
@@ -60,6 +65,10 @@ enum Command {
     Status,
     Version,
     Capabilities,
+    Observe {
+        #[arg(long, default_value_t = 3600)]
+        window_secs: u32,
+    },
     Inbound {
         #[command(subcommand)]
         command: InboundCommand,
@@ -112,6 +121,16 @@ enum Command {
 
 #[derive(Subcommand)]
 enum HealthCommand {
+    History {
+        #[arg(long)]
+        node: Option<String>,
+        #[arg(long)]
+        since_unix: Option<i64>,
+        #[arg(long)]
+        before: Option<i64>,
+        #[arg(long, default_value_t = 100)]
+        limit: u32,
+    },
     Show {
         #[arg(long)]
         after: Option<String>,
@@ -379,6 +398,22 @@ enum GroupCommand {
 }
 #[derive(Subcommand)]
 enum RuleCommand {
+    Export {
+        #[arg(long)]
+        revision: Option<i64>,
+    },
+    ImportPreview {
+        path: PathBuf,
+        #[arg(long)]
+        expected_revision: i64,
+    },
+    ImportApply {
+        path: PathBuf,
+        #[arg(long)]
+        expected_revision: i64,
+        #[arg(long)]
+        checksum: String,
+    },
     Show {
         #[arg(long)]
         revision: Option<i64>,
@@ -811,11 +846,20 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
     )
     .map_err(client_error)?;
     let value = match &args.command {
+        Command::Diagnostic { command } => return diagnostics::run(&client, command).await,
         Command::Task { command } => return tasks::run_task(&client, command).await,
         Command::Event { command } => {
             return tasks::run_events(&client, command, args.output).await;
         }
         Command::Status => serde_json::to_value(client.status().await.map_err(client_error)?),
+        Command::Observe { window_secs } => serde_json::to_value(
+            client
+                .observations(&hps_domain::ObservationQuery {
+                    window_secs: *window_secs,
+                })
+                .await
+                .map_err(client_error)?,
+        ),
         Command::Version => serde_json::to_value(client.version().await.map_err(client_error)?),
         Command::Capabilities => {
             serde_json::to_value(client.capabilities().await.map_err(client_error)?)
@@ -988,6 +1032,36 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
             }
         },
         Command::Rule { command } => match command {
+            RuleCommand::Export { revision } => {
+                serde_json::to_value(client.export_rules(*revision).await.map_err(client_error)?)
+            }
+            RuleCommand::ImportPreview {
+                path,
+                expected_revision,
+            } => serde_json::to_value(
+                client
+                    .preview_rule_import(&hps_config::RuleImportInput {
+                        document: read_rule_document(path)?,
+                        expected_revision: *expected_revision,
+                        checksum: None,
+                    })
+                    .await
+                    .map_err(client_error)?,
+            ),
+            RuleCommand::ImportApply {
+                path,
+                expected_revision,
+                checksum,
+            } => serde_json::to_value(
+                client
+                    .import_rules(&hps_config::RuleImportInput {
+                        document: read_rule_document(path)?,
+                        expected_revision: *expected_revision,
+                        checksum: Some(checksum.clone()),
+                    })
+                    .await
+                    .map_err(client_error)?,
+            ),
             RuleCommand::Show { revision } => {
                 serde_json::to_value(client.rules(*revision).await.map_err(client_error)?)
             }
@@ -1276,6 +1350,22 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
             }
         },
         Command::Health { command } => match command {
+            HealthCommand::History {
+                node,
+                since_unix,
+                before,
+                limit,
+            } => serde_json::to_value(
+                client
+                    .health_history(&hps_domain::HealthHistoryQuery {
+                        node: node.clone(),
+                        since_unix: *since_unix,
+                        before: *before,
+                        limit: Some(*limit),
+                    })
+                    .await
+                    .map_err(client_error)?,
+            ),
             HealthCommand::Show { after, limit } => serde_json::to_value(
                 client
                     .health(after.as_deref(), *limit)
@@ -1620,6 +1710,30 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
     value.map_err(|e| (5, e.to_string()))
 }
 
+fn read_rule_document(path: &std::path::Path) -> Result<hps_config::RuleDocument, (u8, String)> {
+    use std::io::Read;
+    let file = std::fs::File::open(path).map_err(|_| (2, "cannot read rules JSON".into()))?;
+    if !file
+        .metadata()
+        .map_err(|_| (2, "cannot inspect rules JSON".into()))?
+        .is_file()
+    {
+        return Err((2, "rules JSON must be a regular file".into()));
+    }
+    let mut bytes = vec![];
+    file.take(1024 * 1024 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| (2, "cannot read rules JSON".into()))?;
+    if bytes.len() > 1024 * 1024 {
+        return Err((2, "rules JSON exceeds 1 MiB".into()));
+    }
+    serde_json::from_slice(&bytes).map_err(|_| {
+        (
+            2,
+            "invalid rules JSON; check its format version and fields".into(),
+        )
+    })
+}
 fn read_policy_file(path: &std::path::Path) -> Result<String, (u8, String)> {
     let metadata = std::fs::metadata(path).map_err(|e| (2, e.to_string()))?;
     if !metadata.is_file() || metadata.len() > 8 * 1024 * 1024 {

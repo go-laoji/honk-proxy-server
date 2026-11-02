@@ -173,6 +173,16 @@
       "issues": [
         21
       ]
+    },
+    {
+      "order": 18,
+      "branch": "feature/release-packaging",
+      "feature_head": "27b0060e86d5dd3b877751e526b4de7bf4cc4299",
+      "merge_commit": "82f6f5bf4649ba09ada4acb88f85c8f212430fea",
+      "tree_unchanged_from_feature": true,
+      "issues": [
+        22
+      ]
     }
   ],
   "issue_states": [
@@ -282,7 +292,7 @@
       "closed_at": "2026-11-02T06:22:07Z"
     }
   ],
-  "develop_head": "43363f7c2d87a9815b7b4c14b5712564b50ad53b",
+  "develop_head": "82f6f5bf4649ba09ada4acb88f85c8f212430fea",
   "active_sync_commit": "0fb0fcf65aa6e3c1606a31d358b16e05ea4af2dc",
   "active_source_tree_unchanged": true,
   "restored_work_files": 6,
@@ -319,5 +329,5 @@
   ],
   "retained": [],
   "second_batch_joint_acceptance_commit": "4680e2c1829278743ab06e31877ee37b9ff037bd",
-  "active_feature": "feature/release-packaging"
+  "active_feature": "feature/observability-history"
 }

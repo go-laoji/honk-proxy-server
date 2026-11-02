@@ -11,7 +11,7 @@
 | macOS aarch64 headless | 安装、CLI、代理、保留配置、损坏拒绝通过 | `target/validation/release-candidate/macos/` |
 | macOS aarch64 Desktop | release app 27.23 MiB；源码/Web/内嵌 hpsd 一致，ad-hoc 签名通过 strict 验证，离线元数据命令无窗口 | `target/validation/desktop-release/release/bundle/macos/honk-proxy-server.app` |
 | Linux aarch64 musl headless | ELF 无 PT_INTERP；Debian 无 Node/显示运行；Alpine BusyBox 安装通过；附 ABI4 对象与真实报告 | `target/validation/candidate-2b19675/linux-arm64/` |
-| Linux x86_64 musl headless | 仍在构建，未列为已通过发行目标；此前真实 x86 内核矩阵独立保留 | 不作为本轮通过依据 |
+| Linux x86_64 musl headless | 进入下一任务前停止初次构建，依赖缓存保留至最终源码冻结后重建；未列为已通过发行目标；此前真实 x86 内核矩阵独立保留 | 不作为本轮通过依据 |
 | Linux Desktop/deb、远端 GitHub Actions | 流水线已实现，尚未实际执行，不能冒称已通过 | 无已验收安装包 |
 
 Desktop 打包使用独立 target，未覆盖用户原始 bundle。实际窗口只读验收与服务生命周期见 T16；本项只执行新包的 `--build-info`，不启动或操作系统代理。

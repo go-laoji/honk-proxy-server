@@ -8,7 +8,7 @@ use hps_engine::{
     target::Target,
 };
 use http::{Request, header};
-use http_body_util::Empty;
+use http_body_util::{BodyExt, Empty};
 use hyper_util::rt::TokioIo;
 use sha2::{Digest, Sha256};
 use std::{
@@ -159,6 +159,7 @@ impl PreparedProfile {
             tunnel_established: false,
             http_status: None,
             target_ok: None,
+            exit_ip: None,
             latency_ms: 0,
             checked_at: unix_now(),
         };
@@ -397,11 +398,44 @@ impl PreparedProfile {
                 .into(),
             );
         }
+        if self.profile.capture_exit_ip && result.target_ok == Some(true) {
+            match exit_ip(response.into_body(), deadline).await {
+                Ok(ip) => result.exit_ip = Some(ip),
+                // Reaching the target is still proof of a working proxy. A bad
+                // portrait response must not globally invalidate that node.
+                Err(code) => result.error_code = Some(code.into()),
+            }
+        }
         result.verdict = HealthVerdict::Healthy;
         result.phase = ProbePhase::Complete;
         result.latency_ms = started.elapsed().as_millis().min(u64::MAX as u128) as u64;
         result
     }
+}
+async fn exit_ip(
+    mut body: hyper::body::Incoming,
+    deadline: tokio::time::Instant,
+) -> Result<IpAddr, &'static str> {
+    let mut bytes = Vec::new();
+    loop {
+        let frame = tokio::time::timeout_at(deadline, body.frame())
+            .await
+            .map_err(|_| "exit_ip_response_timeout")?;
+        let Some(frame) = frame else {
+            break;
+        };
+        let frame = frame.map_err(|_| "exit_ip_response_failed")?;
+        if let Some(data) = frame.data_ref() {
+            if bytes.len().saturating_add(data.len()) > 128 {
+                return Err("exit_ip_response_oversized");
+            }
+            bytes.extend_from_slice(data);
+        }
+    }
+    std::str::from_utf8(&bytes)
+        .ok()
+        .and_then(|s| s.trim().parse().ok())
+        .ok_or("exit_ip_response_invalid")
 }
 struct ConnectionGuard(tokio::task::JoinHandle<()>);
 impl Drop for ConnectionGuard {

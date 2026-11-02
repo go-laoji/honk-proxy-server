@@ -14,8 +14,8 @@ test("health MPA keeps probes across navigation, recovers lost acknowledgment an
   const waiting: ServerResponse[] = [];
   const origin = createServer((_req, res) => {
     if (released) {
-      res.writeHead(204);
-      res.end();
+      res.writeHead(200);
+      res.end("203.0.113.10\n");
     } else waiting.push(res);
   });
   const proxy = () =>
@@ -55,7 +55,7 @@ test("health MPA keeps probes across navigation, recovers lost acknowledgment an
       await request.get("/api/v1/config/workspace")
     ).json();
     const effective = await (await request.get("/api/v1/config")).json();
-    const body = `management_listen="${effective.management_listen}"\ninstance_name="health-console-test"\n[health]\nenabled=true\nmax_parallel=1\ntimeout_ms=10000\ninterval_secs=60\nmax_staleness_secs=180\ndaily_probe_budget=20\n[[health.profiles]]\ntransport="tcp"\nfamily="ipv4"\nurl="http://127.0.0.1:${port(origin)}/health"\n[[proxy.inbounds]]\nid="browser-http"\nprotocol="http"\nlisten="127.0.0.1:0"\nenabled=false\n${proxies.map((server, index) => `[[proxy.upstreams]]\nid="probe-node-${index + 1}"\nprotocol="http"\nhost="127.0.0.1"\nport=${port(server)}\n`).join("")}`;
+    const body = `management_listen="${effective.management_listen}"\ninstance_name="health-console-test"\n[health]\nenabled=true\nmax_parallel=1\ntimeout_ms=10000\ninterval_secs=60\nmax_staleness_secs=180\ndaily_probe_budget=20\n[[health.profiles]]\ntransport="tcp"\nfamily="ipv4"\nurl="http://127.0.0.1:${port(origin)}/health"\ncapture_exit_ip=true\n[[proxy.inbounds]]\nid="browser-http"\nprotocol="http"\nlisten="127.0.0.1:0"\nenabled=false\n${proxies.map((server, index) => `[[proxy.upstreams]]\nid="probe-node-${index + 1}"\nprotocol="http"\nhost="127.0.0.1"\nport=${port(server)}\n`).join("")}`;
     const revisionResponse = await request.post("/api/v1/config/revisions", {
       data: {
         toml: body,
@@ -91,8 +91,8 @@ test("health MPA keeps probes across navigation, recovers lost acknowledgment an
     await expect(page).toHaveURL(/health\.html$/);
     released = true;
     for (const response of waiting) {
-      response.writeHead(204);
-      response.end();
+      response.writeHead(200);
+      response.end("203.0.113.10\n");
     }
     await expect
       .poll(async () => {
@@ -167,6 +167,22 @@ test("health MPA keeps probes across navigation, recovers lost acknowledgment an
     await expect(page.getByRole("status")).toContainText("已受理");
     const after = await (await request.get("/api/v1/health")).json();
     expect(after.used_probes).toBe(before.used_probes);
+    const history = page.getByRole("region", { name: "健康历史与出口画像" });
+    await history.getByRole("button", { name: "刷新历史" }).click();
+    await expect(
+      history.getByRole("cell").filter({ hasText: "203.0.113.10" }).first(),
+    ).toBeVisible();
+    await expect(history).toContainText("探测预算");
+    await expect(history).not.toContainText("1970/");
+    await expect(history.getByRole("img").first()).toBeVisible();
+    await history
+      .getByRole("combobox", { name: "健康历史窗口" })
+      .selectOption("300");
+    await expect(page).toHaveURL(/history_window=300/);
+    await page.reload();
+    await expect(
+      history.getByRole("combobox", { name: "健康历史窗口" }),
+    ).toHaveValue("300");
     await page.setViewportSize({ width: 390, height: 844 });
     expect(
       await page.evaluate(

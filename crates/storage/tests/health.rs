@@ -23,9 +23,95 @@ fn result() -> ProbeResult {
         tunnel_established: true,
         http_status: Some(200),
         target_ok: Some(true),
+        exit_ip: None,
         latency_ms: 10,
         checked_at: hps_storage::unix_now(),
     }
+}
+#[tokio::test]
+async fn bounded_health_history_keeps_exact_node_portraits_and_budget_across_restart() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = Store::open(Some(directory.path()), DaemonConfig::default()).unwrap();
+    let reservations = (1..=3)
+        .map(|n| ProbeReservation {
+            node_id: format!("node-{n}"),
+            identity: format!("identity-{n}"),
+            profile_fingerprint: "profile".into(),
+        })
+        .collect();
+    let task = store
+        .begin_health_task("history".into(), "manual".into(), reservations, 16, 3)
+        .await
+        .unwrap();
+    for run in &task.runs {
+        assert!(store.claim_health_run(run.id).await.unwrap());
+        let mut value = result();
+        value.node_id = run.node_id.clone();
+        value.identity = run.identity.clone();
+        value.exit_ip = Some("203.0.113.8".parse().unwrap());
+        store
+            .finish_health_run(run.id, value, hps_storage::unix_now() + 60, 0)
+            .await
+            .unwrap();
+    }
+    let (first, next, _) = store
+        .health_history(hps_domain::HealthHistoryQuery {
+            limit: Some(2),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    assert_eq!(first.len(), 2);
+    let (last, none, _) = store
+        .health_history(hps_domain::HealthHistoryQuery {
+            before: next,
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    assert_eq!(last.len(), 1);
+    assert!(none.is_none());
+    assert!(last[0].id < first[1].id);
+    assert!(
+        store
+            .health_history(hps_domain::HealthHistoryQuery {
+                limit: Some(201),
+                ..Default::default()
+            })
+            .await
+            .is_err()
+    );
+    assert!(
+        store
+            .health_history(hps_domain::HealthHistoryQuery {
+                since_unix: Some(hps_storage::unix_now() + 60),
+                ..Default::default()
+            })
+            .await
+            .is_err()
+    );
+    store.close().await.unwrap();
+    let reopened = Store::open(Some(directory.path()), DaemonConfig::default()).unwrap();
+    let (records, _, _) = reopened
+        .health_history(hps_domain::HealthHistoryQuery {
+            node: Some("node-2".into()),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    assert_eq!(records.len(), 1);
+    assert_eq!(
+        records[0]
+            .result
+            .as_ref()
+            .unwrap()
+            .exit_ip
+            .unwrap()
+            .to_string(),
+        "203.0.113.8"
+    );
+    assert_eq!(reopened.health_usage().await.unwrap().used, 3);
+    reopened.close().await.unwrap();
 }
 #[tokio::test]
 async fn atomic_queue_budget_identity_coalescing_and_restart_recovery() {

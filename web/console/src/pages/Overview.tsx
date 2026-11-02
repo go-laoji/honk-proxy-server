@@ -11,6 +11,7 @@ import type { ServiceData } from "../use-service";
 import { Badge, Details, Stat } from "../components/ui";
 import NodeSummary from "../components/NodeSummary";
 import ConnectionSummary from "../components/ConnectionSummary";
+import ObservationPanel from "../components/ObservationPanel";
 
 export default function Overview({ data }: { data: ServiceData }) {
   const { status, capabilities } = data;
@@ -52,6 +53,9 @@ export default function Overview({ data }: { data: ServiceData }) {
       </div>
       <NodeSummary endpoint={data.endpoint} />
       <ConnectionSummary endpoint={data.endpoint} />
+      <div className="mt-6">
+        <ObservationPanel key={data.endpoint} />
+      </div>
       {!status.proxy_ready && (
         <div className="mt-6 flex items-start gap-3 rounded-xl border border-amber-200/70 bg-amber-50 px-5 py-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
           <CircleHelp className="mt-0.5 shrink-0" size={19} />

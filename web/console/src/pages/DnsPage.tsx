@@ -112,6 +112,14 @@ type Context = {
   domains: string[];
   source: string;
   ambiguous: boolean;
+  mappings?: {
+    domain: string;
+    upstream: string;
+    remaining_ttl: number;
+    observed_age_ms: number;
+    source: string;
+  }[];
+  mappings_truncated?: boolean;
 };
 const purposes: Record<Purpose, string> = {
   bootstrap: "节点引导",
@@ -619,6 +627,23 @@ export default function DnsPage({
                 {context.ambiguous && (
                   <p className="mt-2 text-amber-600">
                     此 IP 对应多个域名，无法据此确定当前连接的目标域名。
+                  </p>
+                )}
+                <ul className="mt-3 space-y-2 text-xs">
+                  {(context.mappings ?? []).map((mapping, index) => (
+                    <li
+                      key={index}
+                      className="break-all rounded-lg bg-slate-50 p-3 dark:bg-slate-900"
+                    >
+                      {mapping.domain} · 上游 {mapping.upstream} · 剩余 TTL{" "}
+                      {mapping.remaining_ttl}s · 观察年龄{" "}
+                      {mapping.observed_age_ms}ms · 来源：未过期的本地 DNS 应答
+                    </li>
+                  ))}
+                </ul>
+                {context.mappings_truncated && (
+                  <p className="muted mt-2 text-xs">
+                    映射已截断为 64 项，不能据此推断唯一域名。
                   </p>
                 )}
               </div>

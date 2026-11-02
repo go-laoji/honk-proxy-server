@@ -9,6 +9,8 @@ import {
   Waypoints,
 } from "lucide-react";
 import { Badge } from "../components/ui";
+import ObservationPanel from "../components/ObservationPanel";
+import RuleImportPanel from "../components/RuleImportPanel";
 import { getJson, postJson } from "../platform";
 import { candidateReasons, type SelectionDecision } from "../selection";
 
@@ -822,6 +824,22 @@ export default function RulesPage({
           </div>
         )}
       </section>
+      <ObservationPanel mode="rules" />
+      {data && (
+        <RuleImportPanel
+          key={data.running_revision}
+          revision={data.running_revision}
+          locked={busy}
+          viewed={data.viewed_revision}
+          onImport={(document, checksum) =>
+            candidate("api/v1/rules/import/apply", {
+              document,
+              checksum,
+              expected_revision: data.running_revision,
+            })
+          }
+        />
+      )}
     </div>
   );
 }

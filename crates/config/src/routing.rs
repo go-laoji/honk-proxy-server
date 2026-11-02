@@ -58,6 +58,22 @@ pub struct RulesSave {
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct RuleDocument {
+    pub format_version: u32,
+    #[serde(default)]
+    pub source_revision: Option<i64>,
+    pub configuration: RoutingConfig,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RuleImportInput {
+    pub document: RuleDocument,
+    pub expected_revision: i64,
+    #[serde(default)]
+    pub checksum: Option<String>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RuleUpsert {
     pub rule: RuleConfig,
     pub expected_revision: i64,

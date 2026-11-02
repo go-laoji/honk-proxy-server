@@ -109,7 +109,7 @@ impl Supervisor {
         }).await
     }
     /// Registration and shutdown use the same mutex boundary. Dropping the caller only drops its wait.
-    async fn spawn_tracked<T, F, Fut>(
+    pub(super) async fn spawn_tracked<T, F, Fut>(
         self: &Arc<Self>,
         work: F,
     ) -> Result<tokio::task::JoinHandle<T>, ApplicationError>

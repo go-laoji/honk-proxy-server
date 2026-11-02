@@ -12,6 +12,7 @@ import {
 import { ApiRequestError, getJson, postJson } from "../platform";
 import { Badge, Details } from "../components/ui";
 import { ConnectionStats } from "../components/ConnectionSummary";
+import ObservationPanel from "../components/ObservationPanel";
 import { candidateReasons, strategyLabels } from "../selection";
 import {
   connectionStates,
@@ -986,6 +987,7 @@ export default function ConnectionsPage() {
           </div>
         </div>
       )}
+      <ObservationPanel mode="connections" />
     </div>
   );
 }

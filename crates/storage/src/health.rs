@@ -102,6 +102,34 @@ fn task(c: &Connection, id: i64) -> Result<HealthTask, StorageError> {
     })
 }
 impl Store {
+    pub async fn health_history(
+        &self,
+        query: hps_domain::HealthHistoryQuery,
+    ) -> Result<(Vec<HealthRun>, Option<i64>, Option<i64>), StorageError> {
+        let now = unix_now();
+        let since = query.since_unix.unwrap_or(now.saturating_sub(3600));
+        if query
+            .node
+            .as_ref()
+            .is_some_and(|id| !hps_config::valid_node_id(id))
+            || query.before.is_some_and(|id| id <= 0)
+            || query.limit.is_some_and(|n| !(1..=200).contains(&n))
+            || since < now.saturating_sub(30 * 86400)
+            || since > now
+        {
+            return Err(StorageError::Invalid);
+        }
+        self.call(move |c| {
+            let oldest = c.query_row("SELECT min(created_at) FROM health_runs", [], |r| r.get(0))?;
+            let limit = query.limit.unwrap_or(100) as usize;
+            let mut records = c.prepare(&format!("SELECT {RUN_COLUMNS} FROM health_runs WHERE (?1 IS NULL OR node_id=?1) AND created_at>=?2 AND (?3 IS NULL OR id<?3) ORDER BY id DESC LIMIT ?4"))?
+                .query_map(params![query.node,since,query.before,(limit+1) as u32], run)?.collect::<Result<Vec<_>,_>>()?;
+            let more = records.len() > limit;
+            records.truncate(limit);
+            let next = more.then(|| records.last().unwrap().id);
+            Ok((records,next,oldest))
+        }).await
+    }
     pub async fn begin_health_task(
         &self,
         request_id: String,
