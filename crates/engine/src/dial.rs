@@ -867,33 +867,7 @@ impl Dialer {
             }
             ProxyProtocol::Socks5 => {
                 progress.stage(ProbePhase::Authentication);
-                let methods: &[u8] = if config.credentials.is_some() {
-                    &[5, 2, 0, 2]
-                } else {
-                    &[5, 1, 0]
-                };
-                io.write_all(methods).await?;
-                io.flush().await?;
-                let mut choice = [0; 2];
-                io.read_exact(&mut choice).await?;
-                if choice == [5, 2] {
-                    let c = config
-                        .credentials
-                        .as_ref()
-                        .ok_or(ProxyError::Authentication)?;
-                    let mut auth = vec![1, c.username.len() as u8];
-                    auth.extend(c.username.as_bytes());
-                    auth.push(c.password.len() as u8);
-                    auth.extend(c.password.as_bytes());
-                    io.write_all(&auth).await?;
-                    io.flush().await?;
-                    io.read_exact(&mut choice).await?;
-                    if choice != [1, 0] {
-                        return Err(ProxyError::Authentication);
-                    }
-                } else if choice != [5, 0] {
-                    return Err(ProxyError::Authentication);
-                }
+                crate::socks_client::authenticate(&mut io, config.credentials.as_ref()).await?;
                 progress.stage(ProbePhase::ProxyTunnel);
                 let mut request = vec![5, 1, 0];
                 request.extend(target.socks_bytes());

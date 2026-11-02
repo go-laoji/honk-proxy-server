@@ -11,9 +11,11 @@ pub mod routing;
 pub mod runtime;
 mod selection;
 mod socks;
+mod socks_client;
 pub mod target;
 pub mod tls;
 mod traffic;
+pub mod udp;
 
 pub use hps_net::{BoxIo, ProxyIo};
 

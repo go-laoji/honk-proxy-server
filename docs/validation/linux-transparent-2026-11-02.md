@@ -63,3 +63,11 @@ CIDR/UDP 端口旁路使用独占 mark 的精确 GOTO 规则与自有 NOP 恢复
 6 条真实 TCP 经过实际 Linux comm 进程规则、三个固定组，分别走 HTTP CONNECT、HTTPS 上游 CONNECT、SOCKS5 上游，再经上游引擎 Direct 到实际受控目标；TLS 上游正常校验证书。实际客户端 PID 与连接登记相符，原目标不变，规则代际 7，业务上行合计 102 B、下行 114 B；上游连接登记为 Explicit、无进程、Direct。测试地址通过 Rust route-netlink CREATE|EXCL 添加到自有隔离 netns，退出仅删除本次 ACK 所属地址；没有在后端调用 ip/iptables。测试也核对捕获 map 无错误及丢失进程计数。
 
 这一项的 `forwarding_verified=true` 仅表示已验收的本机 TCP 共享引擎路径。UDP 共享引擎、LAN、完整代际发布/回滚、Daemon 控制面和异常恢复尚未完成，因此 `full_transparent_datapath_ready=false`，T11/T13/T15 不关闭。第四批引擎回归最终统计 Linux 39 / macOS 38 通过，均无失败或忽略；第五批平台相关两端 Clippy 通过。
+
+## SOCKS5 UDP 传输基础（第六批）
+
+依据 [RFC 1928](https://www.rfc-editor.org/rfc/rfc1928.html) 增加独立 UDP ASSOCIATE 传输；TCP CONNECT 与 UDP ASSOCIATE 共享上游供应商协商/认证实现。控制 TCP 结束或异常后终止 association，发送/接收均同时观察控制连接；没有独立遗留监视任务。外部/NAT 端点未知时请求全零地址，接受合法 wildcard 回复并替换为实际 TCP 对端；域名 relay 通过 Bootstrap resolver 解析，当前要求 relay 与 TCP 对端同地址族。UDP descriptor connect 到协商出的 relay 地址和端口，内核丢弃其他来源。
+
+帧编解码支持 IPv4、IPv6、域名和空业务报文；非零 FRAG、非法地址/端口/保留位、异常长度拒绝。SOCKS 完整帧保守上限 65507 B，业务上限扣除真实地址头；接收缓冲为 65536 B，防止内核截断大报文后误认为有效短报文。调用方缓冲不足则消费并拒绝整个报文，既不返回部分业务内容，也不重放。失败认证、拒绝 UDP 命令和超时都不产生可用 association。
+
+Linux/macOS 真实本地 socket 测试覆盖双栈匿名/供应商认证、wildcard/domain relay、实际 UDP 目标收发、陌生 relay 来源丢弃、FRAG 消费拒绝后仍可收正常报文、尺寸边界、控制 TCP 关闭、超时与拒绝。完整 engine 回归 Linux 43 / macOS 42 通过，零失败/忽略，两端 Clippy 通过。本批仅为出站传输基础，尚未接入共享 UDP 规则/池/会话 owner；控制台 UDP 数据面能力仍保持不可用，不据此关闭 T15 或 T19。
