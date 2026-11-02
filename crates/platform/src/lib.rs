@@ -259,6 +259,8 @@ pub mod ebpf;
 #[cfg(target_os = "linux")]
 mod linux_objects;
 #[cfg(target_os = "linux")]
+mod rtnetlink;
+#[cfg(target_os = "linux")]
 pub mod transparent;
 #[cfg(not(target_os = "linux"))]
 pub mod ebpf {

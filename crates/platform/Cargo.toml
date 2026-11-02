@@ -16,6 +16,8 @@ hps-config.workspace = true
 hickory-proto = "0.26.3"
 
 [target.'cfg(target_os = "linux")'.dependencies]
+serde.workspace = true
+serde_json.workspace = true
 hps-config.workspace = true
 ipnet = "2.12.2"
 aya = "0.14"

@@ -30,3 +30,9 @@
 ## 待完成
 
 自有 Rust 策略路由、实际透明 TCP/UDP 交接及上游出口、可信进程规则、内核/用户态原子代际、LAN 范围、接口/路由变化、异常退出恢复、控制面与完整 x86_64/aarch64 矩阵尚未完成。T11/T13 的联合 Linux 门槛和 T15 Issue 保持开放，完整 datapath_ready 仍为 false。
+
+## 私有策略路由（第二批）
+
+Rust 直接通过 route-netlink 建立私有表 10530 的双栈 local route 与精确 fwmark rule（priority 31530、protocol 200），无需外部 ip 命令。每次交换有序列/内核发送者检查、3 秒期限和 4 MiB 响应上限。先检查外部表/规则/mark 冲突，再写入私有、限长、原子落盘的命名空间归属日志；CREATE|EXCL 成功收到 ACK 的对象才进入本次回滚集合。启动可从日志恢复前次遗留，退出仅清理精确归属对象。
+
+实际 7.0.14-linuxkit 与 QEMU 6.12.115-0-virt 均通过：保留外部 protocol 99 路由、保留同优先级外部规则、双栈创建、丢失用户态状态后的日志恢复、精确清理及日志归零。对应 `linux-transparent-routes-kernel7-2026-11-02.json` 和 `linux-transparent-routes-kernel612-2026-11-02.json`。Linux Clippy 与 macOS check/format/diff 检查通过。该测试没有 SIGKILL，也没有业务转发，`forwarding_verified=false`。后续完整 Daemon 异常恢复与真实 TCP/UDP 仍为独立验收门槛。

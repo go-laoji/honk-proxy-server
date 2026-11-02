@@ -1,5 +1,6 @@
 //! Owns only this daemon's cgroup/TCX links and maps. Listeners and policy routes
 //! must be ready before activate; object loading alone never means forwarding.
+mod routes;
 use aya::{
     Ebpf, EbpfLoader,
     maps::{Array, HashMap, LpmTrie, PerCpuArray, SockMap, lpm_trie::Key},
@@ -326,6 +327,7 @@ impl PreparedCapture {
                 policy,
                 ownership,
                 _cgroup: cgroup,
+                routes: None,
             })),
             specification: self.specification,
             fingerprint: self.fingerprint,
@@ -370,6 +372,7 @@ struct State {
     policy: CapturePolicy,
     ownership: File,
     _cgroup: Option<File>,
+    routes: Option<routes::OwnedRoutes>,
 }
 pub struct Capture {
     state: Mutex<Option<State>>,
@@ -378,6 +381,33 @@ pub struct Capture {
     attachments: Vec<Attachment>,
 }
 impl Capture {
+    pub fn prepare_routes(&self) -> Result<(), String> {
+        let mut guard = self.state.lock().unwrap();
+        let state = guard.as_mut().ok_or("transparent capture is shut down")?;
+        if let Some(routes) = &state.routes {
+            return if routes.present()? {
+                Ok(())
+            } else {
+                Err("owned capture routing objects are missing".into())
+            };
+        }
+        state.routes = Some(routes::OwnedRoutes::prepare(
+            &self.specification,
+            state.policy.netns_cookie,
+            &state.ownership,
+        )?);
+        Ok(())
+    }
+    pub fn routes_present(&self) -> Result<bool, String> {
+        let guard = self.state.lock().unwrap();
+        let Some(state) = guard.as_ref() else {
+            return Ok(false);
+        };
+        state
+            .routes
+            .as_ref()
+            .map_or(Ok(false), |routes| routes.present())
+    }
     /// Call only after route ownership, listeners and the revision's user-space
     /// snapshot are ready. Updates exactly one complete policy value.
     pub fn activate(&self, revision: i64, require_process: bool) -> Result<(), String> {
@@ -386,6 +416,13 @@ impl Capture {
         }
         let mut guard = self.state.lock().unwrap();
         let state = guard.as_mut().ok_or("transparent capture is shut down")?;
+        if !state
+            .routes
+            .as_ref()
+            .is_some_and(|routes| routes.present().unwrap_or(false))
+        {
+            return Err("capture routes are not ready".into());
+        }
         let mut next = state.policy;
         next.revision = revision as u64;
         next.flags = TP_ENABLED
@@ -540,8 +577,13 @@ impl Capture {
         .set(0, state.policy, 0)
         .map_err(|e| error("disable policy", e));
         drop(state.bpf);
+        let cleanup = state
+            .routes
+            .take()
+            .map(|mut routes| routes.cleanup())
+            .transpose();
         drop(state.ownership);
-        result
+        result.and(cleanup.map(|_| ()))
     }
 }
 impl Drop for Capture {

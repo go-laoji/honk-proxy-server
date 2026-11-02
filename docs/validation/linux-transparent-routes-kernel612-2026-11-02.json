@@ -1,0 +1,15 @@
+{
+  "exact_cleanup": true,
+  "foreign_route_preserved": true,
+  "foreign_rule_preserved": true,
+  "forwarding_verified": false,
+  "ipv4": true,
+  "ipv6": true,
+  "journal_recovered": true,
+  "kernel": "6.12.115-0-virt",
+  "mark": 1213202432,
+  "netns": 1,
+  "rule_priority": 31530,
+  "scope": "owned_policy_routing_only",
+  "table": 10530
+}
