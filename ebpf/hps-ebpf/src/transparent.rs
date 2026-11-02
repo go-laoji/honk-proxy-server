@@ -7,14 +7,14 @@ use aya_ebpf::{
         bpf_map_lookup_elem, bpf_setsockopt, bpf_sk_assign, bpf_sk_release, bpf_skc_lookup_tcp,
     },
     macros::{cgroup_sock, cgroup_sock_addr, classifier, map},
-    maps::{HashMap, LpmTrie, PerCpuArray, SockMap, lpm_trie::Key},
+    maps::{Array, HashMap, LpmTrie, PerCpuArray, SockMap, lpm_trie::Key},
     programs::{SockAddrContext, SockContext, TcContext},
 };
 use hps_ebpf_abi::{
     CapturePolicy, CaptureStats, CapturedFlow, FlowKey, SocketProcess, TP_ABI_VERSION, TP_ENABLED,
     TP_FLOW_CAPACITY, TP_GATEWAY, TP_IPV4, TP_IPV6, TP_LOCAL, TP_MAX_BYPASS, TP_MAX_INTERFACES,
     TP_PROCESS_VERIFIED, TP_REQUIRE_PROCESS, TP_SOCKET_COUNT, TP_SOCKET_TCP4, TP_SOCKET_TCP6,
-    TP_SOCKET_UDP4, TP_SOCKET_UDP6, TP_TCP, TP_UDP,
+    TP_SOCKET_UDP4, TP_SOCKET_UDP6, TP_SUSPENDED, TP_TCP, TP_UDP,
     packet::{self, PacketHeader, PacketRead},
 };
 
@@ -31,8 +31,9 @@ static HPS_TP_POLICY: HashMap<u32, CapturePolicy> = HashMap::with_max_entries(1,
 #[map]
 static HPS_TP_STATS: PerCpuArray<CaptureStats> = PerCpuArray::with_max_entries(3, 0);
 #[map]
-static HPS_TP_PROCESS: HashMap<u64, SocketProcess> =
-    HashMap::with_max_entries(TP_FLOW_CAPACITY, 1);
+static HPS_TP_ABI4: Array<u32> = Array::with_max_entries(1, 128); // BPF_F_RDONLY_PROG
+#[map]
+static HPS_TP_PROCESS: HashMap<u64, SocketProcess> = HashMap::with_max_entries(TP_FLOW_CAPACITY, 1);
 #[map]
 static HPS_TP_MODES: HashMap<u64, u32> = HashMap::with_max_entries(TP_FLOW_CAPACITY, 0);
 #[map]
@@ -53,6 +54,9 @@ static HPS_TP_SOCKETS: SockMap = SockMap::with_max_entries(TP_SOCKET_COUNT, 0);
 
 #[inline(always)]
 fn policy() -> Option<CapturePolicy> {
+    if HPS_TP_ABI4.get(0).copied() != Some(TP_ABI_VERSION) {
+        return None;
+    }
     let policy = *unsafe { HPS_TP_POLICY.get(&0) }?;
     if policy.abi_version != TP_ABI_VERSION
         || policy.flags & TP_ENABLED == 0
@@ -215,6 +219,11 @@ fn mark_socket(ctx: SockAddrContext, family: u32, sendmsg: bool) -> i32 {
     if mark != 0 && mark != policy.capture_mark {
         return 1;
     }
+    if !bypassed && policy.flags & TP_SUSPENDED != 0 {
+        stats.rejected_packets = stats.rejected_packets.wrapping_add(1);
+        stats.error_phase = 14;
+        return 0;
+    }
     let cookie = unsafe { bpf_get_socket_cookie(ctx.as_ptr()) };
     if cookie == 0 {
         stats.errors = stats.errors.wrapping_add(1);
@@ -363,8 +372,14 @@ pub fn hps_tp_egress(ctx: TcContext) -> i32 {
     let Ok(packet) = packet::parse(&Packet(&ctx)) else {
         return NEXT;
     };
-    if !enabled(&policy, packet.family, packet.protocol) {
+    if !enabled(&policy, packet.family, packet.protocol)
+        || bypass(packet.family, packet.destination)
+        || excluded_port(u32::from(packet.destination_port))
+    {
         return NEXT;
+    }
+    if policy.flags & TP_SUSPENDED != 0 {
+        return reject_egress(-1, 14);
     }
     let cookie = unsafe { bpf_get_socket_cookie(ctx.as_ptr()) };
     let Some(process) = unsafe { HPS_TP_PROCESS.get(&cookie) }.copied() else {
@@ -469,9 +484,13 @@ pub fn hps_tp_ingress(ctx: TcContext) -> i32 {
     }
     let key = key(&packet, &policy);
     let existing = unsafe { HPS_TP_FLOWS.get(&key) }.copied();
+    if policy.flags & TP_SUSPENDED != 0 {
+        stats.rejected_packets = stats.rejected_packets.wrapping_add(1);
+        stats.error_phase = 14;
+        return DROP;
+    }
     if existing.is_some_and(|flow| {
-        flow.origin != if local { TP_LOCAL } else { TP_GATEWAY }
-            || !matches_packet(&flow, &packet)
+        flow.origin != if local { TP_LOCAL } else { TP_GATEWAY } || !matches_packet(&flow, &packet)
     }) {
         stats.rejected_packets = stats.rejected_packets.wrapping_add(1);
         stats.error_phase = 13;
@@ -504,9 +523,9 @@ pub fn hps_tp_ingress(ctx: TcContext) -> i32 {
         };
         if let Err(error) = HPS_TP_FLOWS.insert(&key, &flow, 1) {
             // A concurrent first packet may have won the same key.
-            if !unsafe { HPS_TP_FLOWS.get(&key) }.is_some_and(|old| {
-                old.origin == flow.origin && matches_packet(old, &packet)
-            }) {
+            if !unsafe { HPS_TP_FLOWS.get(&key) }
+                .is_some_and(|old| old.origin == flow.origin && matches_packet(old, &packet))
+            {
                 stats.errors = stats.errors.wrapping_add(1);
                 stats.last_error = i64::from(error);
                 stats.error_phase = 6;

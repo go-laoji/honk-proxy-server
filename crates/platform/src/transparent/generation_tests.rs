@@ -156,6 +156,16 @@ fn flow_generation_child() {
                     0
                 );
             }
+            if phase == 1 && std::env::var("HPS_FLOW_SUSPEND").is_ok() {
+                assert_eq!(
+                    socket.send_to(&[phase], target).unwrap_err().kind(),
+                    std::io::ErrorKind::PermissionDenied
+                );
+                control.write_all(b"D").unwrap();
+                let mut ack = [0];
+                control.read_exact(&mut ack).unwrap();
+                assert_eq!(ack, [b'A']);
+            }
             socket.send_to(&[phase], target).unwrap();
             let mut bytes = [0; 4];
             let (n, source) = socket.recv_from(&mut bytes).unwrap();
@@ -251,6 +261,7 @@ async fn real_flow_identity_and_generation_retirement() {
         ])
         .env("HPS_FLOW_CGROUP", &group.0)
         .env("HPS_FLOW_CONTROL", &path)
+        .env("HPS_FLOW_SUSPEND", "1")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -288,6 +299,8 @@ async fn real_flow_identity_and_generation_retirement() {
                 0 => {
                     first = Some(metadata.flow);
                     capture.activate(8, true).unwrap();
+                    capture.suspend().unwrap();
+                    assert_eq!(capture.published_policy().unwrap(), Some((8, true)));
                 }
                 1 => {
                     let old = first.unwrap();
@@ -319,6 +332,16 @@ async fn real_flow_identity_and_generation_retirement() {
             )
             .unwrap();
             reply.send(&[phase]).await.unwrap();
+            if phase == 0 {
+                tokio::time::timeout(Duration::from_secs(3), control.read_exact(&mut bytes[..1]))
+                    .await
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(bytes[0], b'D');
+                capture.activate(8, true).unwrap();
+                assert_eq!(capture.published_policy().unwrap(), Some((8, false)));
+                control.write_all(b"A").await.unwrap();
+            }
             if phase == 2 {
                 tokio::time::timeout(Duration::from_secs(3), control.read_exact(&mut bytes[..1]))
                     .await
@@ -435,7 +458,7 @@ async fn real_flow_identity_and_generation_retirement() {
     }
     assert!(capture.flows().unwrap().is_empty());
     let stats = capture.stats().unwrap();
-    assert_eq!(stats.iter().map(|s| s.rejected_packets).sum::<u64>(), 3);
+    assert_eq!(stats.iter().map(|s| s.rejected_packets).sum::<u64>(), 5);
     assert_eq!(
         stats
             .iter()
@@ -449,6 +472,6 @@ async fn real_flow_identity_and_generation_retirement() {
     assert!(!capture.routes_present().unwrap());
     println!(
         "{}",
-        serde_json::json!({"scope":"kernel_flow_identity_only","kernel":std::fs::read_to_string("/proc/sys/kernel/osrelease").unwrap().trim(),"object_sha256":fingerprint,"abi_version":TP_ABI_VERSION,"ipv4":true,"ipv6":true,"verified_datagrams":73,"flow_capacity":64,"capacity_rejected_without_eviction":1,"caller_retry_after_exact_retirement":true,"old_revision":7,"new_revision":8,"exact_retirements":retired,"stale_retirement_preserved_new_flow":true,"conflicting_socket_cookies_rejected":2,"process_comm_latched_at_first_send":true,"full_transparent_datapath_ready":false})
+        serde_json::json!({"scope":"kernel_flow_identity_only","kernel":std::fs::read_to_string("/proc/sys/kernel/osrelease").unwrap().trim(),"object_sha256":fingerprint,"abi_version":TP_ABI_VERSION,"ipv4":true,"ipv6":true,"verified_datagrams":73,"suspended_sends_rejected":2,"suspend_cleared_on_activate":true,"flow_capacity":64,"capacity_rejected_without_eviction":1,"caller_retry_after_exact_retirement":true,"old_revision":7,"new_revision":8,"exact_retirements":retired,"stale_retirement_preserved_new_flow":true,"conflicting_socket_cookies_rejected":2,"process_comm_latched_at_first_send":true,"full_transparent_datapath_ready":false})
     );
 }

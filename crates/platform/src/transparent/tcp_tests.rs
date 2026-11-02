@@ -45,6 +45,24 @@ fn transparent_tcp_child() {
     let targets: Vec<SocketAddr> =
         serde_json::from_str(&std::env::var("HPS_TRANSPARENT_TCP_TARGETS").unwrap()).unwrap();
     assert_eq!(targets.len(), 6);
+    if let Ok(path) = std::env::var("HPS_TRANSPARENT_TCP_CONTROL") {
+        let mut control = std::os::unix::net::UnixStream::connect(path).unwrap();
+        control
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        for target in targets.iter().take(2) {
+            assert_eq!(
+                std::net::TcpStream::connect_timeout(target, Duration::from_secs(3))
+                    .unwrap_err()
+                    .kind(),
+                std::io::ErrorKind::PermissionDenied
+            );
+        }
+        control.write_all(b"D").unwrap();
+        let mut next = [0];
+        control.read_exact(&mut next).unwrap();
+        assert_eq!(next, [b'A']);
+    }
     for target in targets {
         let mut stream =
             std::net::TcpStream::connect_timeout(&target, Duration::from_secs(3)).unwrap();
@@ -226,10 +244,13 @@ async fn real_transparent_tcp_shared_engine() {
         }));
     }
     capture.activate(7, true).unwrap();
+    capture.suspend().unwrap();
+    let path = directory.path().join("control.sock");
+    let control = tokio::net::UnixListener::bind(&path).unwrap();
     let exe = std::env::current_exe().unwrap();
     let scope = group.0.clone();
     let targets = serde_json::to_string(&targets).unwrap();
-    let (pid, output) = tokio::task::spawn_blocking(move || {
+    let child = tokio::task::spawn_blocking(move || {
         let child = Command::new(exe)
             .args([
                 "--exact",
@@ -239,15 +260,27 @@ async fn real_transparent_tcp_shared_engine() {
             ])
             .env("HPS_TRANSPARENT_TCP_CGROUP", scope)
             .env("HPS_TRANSPARENT_TCP_TARGETS", targets)
+            .env("HPS_TRANSPARENT_TCP_CONTROL", path)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
             .unwrap();
         (child.id(), child.wait_with_output().unwrap())
-    })
-    .await
-    .unwrap();
+    });
+    let (mut control, _) = tokio::time::timeout(Duration::from_secs(5), control.accept())
+        .await
+        .unwrap()
+        .unwrap();
+    let mut signal = [0];
+    tokio::time::timeout(Duration::from_secs(5), control.read_exact(&mut signal))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(signal, [b'D']);
+    capture.activate(7, true).unwrap();
+    control.write_all(b"A").await.unwrap();
+    let (pid, output) = child.await.unwrap();
     assert!(
         output.status.success(),
         "{}\n{}",
@@ -310,11 +343,20 @@ async fn real_transparent_tcp_shared_engine() {
             .iter()
             .all(|s| s.errors == 0 && s.missing_process == 0)
     );
+    assert_eq!(
+        capture
+            .stats()
+            .unwrap()
+            .iter()
+            .map(|s| s.rejected_packets)
+            .sum::<u64>(),
+        2
+    );
     capture.shutdown().unwrap();
     engine.shutdown().await;
     upstream.shutdown().await;
     println!(
         "{}",
-        serde_json::json!({"scope":"local_tcp_shared_engine_only","kernel":std::fs::read_to_string("/proc/sys/kernel/osrelease").unwrap().trim(),"object_sha256":capture.fingerprint,"revision":7,"verified_flows":6,"client_pid":pid,"ipv4":true,"ipv6":true,"http_upstream":true,"https_upstream":true,"socks5_upstream":true,"process_rules_and_fixed_groups":true,"business_bytes_up":stats.bytes_up,"business_bytes_down":stats.bytes_down,"forwarding_verified":true,"full_transparent_datapath_ready":false})
+        serde_json::json!({"scope":"local_tcp_shared_engine_only","kernel":std::fs::read_to_string("/proc/sys/kernel/osrelease").unwrap().trim(),"object_sha256":capture.fingerprint,"revision":7,"verified_flows":6,"suspended_connects_rejected":2,"client_pid":pid,"ipv4":true,"ipv6":true,"http_upstream":true,"https_upstream":true,"socks5_upstream":true,"process_rules_and_fixed_groups":true,"business_bytes_up":stats.bytes_up,"business_bytes_down":stats.bytes_down,"forwarding_verified":true,"full_transparent_datapath_ready":false})
     );
 }

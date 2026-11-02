@@ -1,13 +1,15 @@
 //! Shared, fixed-width transparent capture boundary. Addresses are network-order
 //! words; ports are host-order. Neither kernel pointers nor payload bytes cross it.
-// v3 also requires insert-only, non-preallocated HASH process/flow identities.
-pub const TP_ABI_VERSION: u32 = 3;
+// v4 adds a frozen ABI marker and explicit suspended capture semantics.
+pub const TP_ABI_VERSION: u32 = 4;
+pub const TP_ABI_MAP: &str = "HPS_TP_ABI4";
 pub const TP_ENABLED: u32 = 1;
 pub const TP_TCP: u32 = 2;
 pub const TP_UDP: u32 = 4;
 pub const TP_IPV4: u32 = 8;
 pub const TP_IPV6: u32 = 16;
 pub const TP_REQUIRE_PROCESS: u32 = 32;
+pub const TP_SUSPENDED: u32 = 64;
 pub const TP_PROCESS_VERIFIED: u32 = 1;
 pub const TP_LOCAL: u32 = 1;
 pub const TP_GATEWAY: u32 = 2;

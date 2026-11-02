@@ -167,3 +167,13 @@ Linux config/application 普通回归 46 passed / 4 个特权入口 ignored（�
 保留 revision 2 待重启后，冻结业务策略 map，候选 revision 3 同时改为 Reject 并切换到会返回不同地址的 DNS upstream。业务发布失败回退后，原 4 条流继续工作；随后所有 DNS 查询仍到旧 resolver、返回旧地址，候选 upstream 的实际请求计数为零。查询名区分阶段、协议和地址族，不能由旧缓存遮蔽错误的 resolver 切换。desired/running、failed 记录、停止回收 16 个自有程序和持久重启均核对通过。
 
 证据为 `linux-transparent-dns-coexist-kernel{7,612}-2026-11-02.json`，相关 Linux Clippy、格式/diff 通过。本批补齐第十五批共享 DNS resolver 回退的真实联合证据。LAN、运行监视与恢复、控制台 API/CLI/MPA、异常退出和 x86_64 矩阵仍待完成，完整 ready 保持 false。
+
+## 故障暂停与对象 ABI 边界（第十七批）
+
+ABI v4 加入显式 suspended 策略：保留已配置范围与 bypass，对受选 TCP/UDP 新发送明确拒绝；TCX 对已选中的暂停流丢弃，恢复 activate 后清除暂停位。该故障状态与用户主动停止捕获区分，供运行监视使用。TC egress 在读取进程/流元数据前再次执行地址/端口 bypass，保持其他钩子改写目标后的旁路优先级。published_policy 从实际 map 查询并核对完整已发布快照，退休屏障也核对实际状态，不能仅使用缓存的 revision。
+
+对象包含 `HPS_TP_ABI4`：只允许程序读取，加载器初始化后使用 BPF_MAP_FREEZE 冻结。加载前严格核对该 marker 的类型、容量、flags；此前 ABI v3 即使其它 map 布局相同，也会在任何程序挂载前拒绝，避免旧程序把未知 ABI 当作禁用后直出。新对象 SHA256 `fa5449609f86a6b50300a83a6e10d2f2150aa42eaa6676c8e64dd1581bbd5286`。
+
+实际 aarch64 7.0.14 和 QEMU 6.12.115 均通过：双栈 TCP 各一次暂停 connect 返回 EPERM，恢复后六条 TCP 分别经过 HTTP/HTTPS/SOCKS5 出口；双栈 UDP 各一次暂停 send 返回 EPERM，恢复后由客户端重试，原流代际保持，73 条原身份/容量用例仍通过。ABI marker 的再次写入失败，保留的真实 ABI v3 对象在挂载前拒绝。cgroup 失联、跨 namespace 拒绝、元数据锁独立和 map 回收均重新通过。
+
+相同新对象的 Daemon 正常三代际，以及 DNS+业务发布失败回退两项也在两个内核复验通过。证据为 `linux-transparent-suspend-kernel{7,612}-2026-11-02.json`。相关 Linux/macOS Clippy、ABI 普通测试与格式/diff 通过。运行监视/自动恢复及其控制面、LAN、SIGKILL 和 x86_64 矩阵仍待完成，完整 ready 保持 false。

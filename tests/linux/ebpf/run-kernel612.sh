@@ -25,6 +25,9 @@ else
 fi
 strip "$rootfs/hps"
 cp "${HPS_EBPF_OBJECT:-/artifacts/hps-ebpf}" "$rootfs/hps-ebpf"
+if [ -n "${HPS_LEGACY_EBPF_OBJECT:-}" ]; then
+    cp "$HPS_LEGACY_EBPF_OBJECT" "$rootfs/hps-ebpf-legacy"
+fi
 cat > "$rootfs/init" <<'INIT'
 #!/bin/sh
 export PATH=/bin:/sbin
@@ -39,7 +42,7 @@ ip link set lo up
 uname -r
 if [ -f /test-filter ]; then
     hps_filter=$(cat /test-filter)
-    HPS_TEST_CGROUP_ROOT=/sys/fs/cgroup HPS_EBPF_OBJECT=/hps-ebpf /hps --exact "$hps_filter" --ignored --nocapture
+    HPS_TEST_CGROUP_ROOT=/sys/fs/cgroup HPS_EBPF_OBJECT=/hps-ebpf HPS_LEGACY_EBPF_OBJECT=/hps-ebpf-legacy /hps --exact "$hps_filter" --ignored --nocapture
 else
     /hps --output json linux self-test --object /hps-ebpf
 fi

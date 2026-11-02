@@ -14,7 +14,7 @@ mod test_support;
 mod udp_tests;
 use aya::{
     Ebpf, EbpfLoader,
-    maps::{HashMap, LpmTrie, MapData, PerCpuArray, SockMap, lpm_trie::Key},
+    maps::{Array, HashMap, LpmTrie, MapData, PerCpuArray, SockMap, lpm_trie::Key},
     programs::{
         CgroupAttachMode, CgroupSock, CgroupSockAddr, LinkOrder, SchedClassifier, TcAttachType,
         tc::TcAttachOptions,
@@ -28,7 +28,7 @@ use std::{
     fs::{File, OpenOptions},
     io::Read,
     os::{
-        fd::BorrowedFd,
+        fd::{AsFd, AsRawFd, BorrowedFd},
         unix::fs::{MetadataExt, OpenOptionsExt},
     },
     sync::Mutex,
@@ -112,6 +112,7 @@ impl PreparedCapture {
     }
     fn prepare_bpf(&self) -> Result<(Ebpf, CapturePolicy), String> {
         let mut bpf = EbpfLoader::new()
+            .map_max_entries(TP_ABI_MAP, 1)
             .map_max_entries("HPS_TP_POLICY", 1)
             .map_max_entries("HPS_TP_PROCESS", self.specification.max_flows)
             .map_max_entries("HPS_TP_MODES", self.specification.max_flows)
@@ -120,6 +121,25 @@ impl PreparedCapture {
             .map_max_entries("HPS_TP_SOCKETS", TP_SOCKET_COUNT)
             .load(&self.object)
             .map_err(|e| error("ELF/maps", e))?;
+        match bpf.map(TP_ABI_MAP) {
+            Some(aya::maps::Map::Array(map)) => {
+                let info = map.info().map_err(|e| error("ABI marker info", e))?;
+                if info.map_flags() != 128 || info.max_entries() != 1 {
+                    return Err("invalid transparent ABI marker map".into());
+                }
+            }
+            _ => return Err("transparent ABI v4 marker missing; rebuild the eBPF object".into()),
+        }
+        Array::<_, u32>::try_from(bpf.map_mut(TP_ABI_MAP).unwrap())
+            .map_err(|e| error("ABI marker type", e))?
+            .set(0, TP_ABI_VERSION, 0)
+            .map_err(|e| error("ABI marker initialize", e))?;
+        if let Some(aya::maps::Map::Array(map)) = bpf.map(TP_ABI_MAP) {
+            let fd = map.fd().as_fd().as_raw_fd() as u32;
+            if unsafe { libc::syscall(libc::SYS_bpf, 22, &fd, std::mem::size_of::<u32>()) } != 0 {
+                return Err(error("freeze ABI marker", std::io::Error::last_os_error()));
+            }
+        }
         match bpf.map("HPS_TP_POLICY") {
             Some(aya::maps::Map::HashMap(map)) => {
                 let info = map.info().map_err(|e| error("policy map info", e))?;
@@ -456,6 +476,37 @@ struct FlowMaps {
     netns_cookie: u64,
 }
 impl Capture {
+    pub fn published_policy(&self) -> Result<Option<(i64, bool)>, String> {
+        let guard = self.state.lock().unwrap();
+        let state = guard.as_ref().ok_or("transparent capture is shut down")?;
+        let policy = policy_snapshot(state)?;
+        Ok((policy.flags & TP_ENABLED != 0)
+            .then_some((policy.revision as i64, policy.flags & TP_SUSPENDED != 0)))
+    }
+    /// Retain the scope and bypass rules while refusing selected traffic. This
+    /// is a fault circuit, distinct from the user's request to stop capture.
+    pub fn suspend(&self) -> Result<(), String> {
+        let mut guard = self.state.lock().unwrap();
+        let state = guard.as_mut().ok_or("transparent capture is shut down")?;
+        if crate::linux_objects::netns_cookie().map_err(|e| error("current namespace", e))?
+            != state.policy.netns_cookie
+        {
+            return Err("capture policy namespace changed".into());
+        }
+        let mut next = policy_snapshot(state)?;
+        next.flags |= TP_SUSPENDED;
+        HashMap::<_, u32, CapturePolicy>::try_from(
+            state
+                .bpf
+                .map_mut("HPS_TP_POLICY")
+                .ok_or("capture policy missing")?,
+        )
+        .map_err(|e| error("policy ABI", e))?
+        .insert(0, next, 2)
+        .map_err(|e| error("suspend policy", e))?;
+        state.policy = next;
+        Ok(())
+    }
     pub fn prepare_routes(&self) -> Result<(), String> {
         let mut guard = self.state.lock().unwrap();
         let state = guard.as_mut().ok_or("transparent capture is shut down")?;
@@ -625,6 +676,7 @@ impl Capture {
     pub fn settled_revision(&self) -> Result<i64, String> {
         let guard = self.state.lock().unwrap();
         let state = guard.as_ref().ok_or("transparent capture is shut down")?;
+        policy_snapshot(state)?;
         if crate::linux_objects::netns_cookie().map_err(|e| error("current namespace", e))?
             != state.policy.netns_cookie
         {
@@ -714,6 +766,33 @@ impl Capture {
         drop(state.ownership);
         result.and(cleanup.map(|_| ()))
     }
+}
+fn policy_snapshot(state: &State) -> Result<CapturePolicy, String> {
+    let marker = Array::<_, u32>::try_from(
+        state
+            .bpf
+            .map(TP_ABI_MAP)
+            .ok_or("capture ABI marker missing")?,
+    )
+    .map_err(|e| error("ABI marker type", e))?
+    .get(&0, 0)
+    .map_err(|e| error("ABI marker read", e))?;
+    if marker != TP_ABI_VERSION {
+        return Err("capture ABI marker changed".into());
+    }
+    let value = HashMap::<_, u32, CapturePolicy>::try_from(
+        state
+            .bpf
+            .map("HPS_TP_POLICY")
+            .ok_or("capture policy missing")?,
+    )
+    .map_err(|e| error("policy ABI", e))?
+    .get(&0, 0)
+    .map_err(|e| error("policy read", e))?;
+    if value != state.policy {
+        return Err("capture kernel policy differs from the published snapshot".into());
+    }
+    Ok(value)
 }
 impl Drop for Capture {
     fn drop(&mut self) {

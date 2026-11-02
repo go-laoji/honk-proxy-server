@@ -138,6 +138,20 @@ mod tests {
             capture.activate(7, true).unwrap();
             assert_eq!(capture.settled_revision().unwrap(), 7);
             let maps = capture.map_ids().unwrap();
+            let marker = maps
+                .iter()
+                .copied()
+                .find(|id| {
+                    aya::maps::MapInfo::from_id(*id)
+                        .is_ok_and(|info| info.name() == hps_ebpf_abi::TP_ABI_MAP.as_bytes())
+                })
+                .unwrap();
+            let mut marker = aya::maps::Array::<_, u32>::try_from(aya::maps::Map::Array(
+                aya::maps::MapData::from_id(marker).unwrap(),
+            ))
+            .unwrap();
+            assert!(marker.set(0, 0, 0).is_err());
+            drop(marker);
             let cookie = capture.netns_cookie().unwrap();
             // A route query can hold state for seconds. Flow lookups and exact
             // retirement use a separate, short map mutex instead of that lock.
@@ -179,6 +193,7 @@ mod tests {
                 );
                 assert!(changed.activate(8, true).is_err());
                 assert!(changed.settled_revision().is_err());
+                assert!(changed.suspend().is_err());
             })
             .join()
             .unwrap();
@@ -230,4 +245,37 @@ mod tests {
             );
         }
     }
+}
+
+#[cfg(test)]
+#[test]
+#[ignore = "requires actual privileged Linux and a separately retained ABI v3 eBPF object"]
+fn real_legacy_capture_object_is_rejected_before_any_link() {
+    use super::{PreparedCapture, test_support::Group};
+    let root = std::env::var("HPS_TEST_CGROUP_ROOT").unwrap();
+    let group = Group(
+        std::path::Path::new(&root).join(format!("hps-transparent-legacy-{}", std::process::id())),
+    );
+    std::fs::create_dir(&group.0).unwrap();
+    let config = hps_config::LinuxCaptureConfig {
+        object: std::env::var("HPS_LEGACY_EBPF_OBJECT").unwrap().into(),
+        local_cgroup: Some(group.0.clone()),
+        ..Default::default()
+    };
+    let before = aya::programs::loaded_programs()
+        .filter_map(Result::ok)
+        .map(|p| p.id())
+        .collect::<std::collections::BTreeSet<_>>();
+    let prepared = PreparedCapture::read(&config).unwrap();
+    let error = prepared.verify().unwrap_err();
+    assert!(error.contains("ABI v4 marker missing"), "{error}");
+    let after = aya::programs::loaded_programs()
+        .filter_map(Result::ok)
+        .map(|p| p.id())
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(before, after);
+    println!(
+        "{}",
+        serde_json::json!({"scope":"legacy_transparent_abi_rejection_only","kernel":std::fs::read_to_string("/proc/sys/kernel/osrelease").unwrap().trim(),"legacy_object_sha256":prepared.fingerprint,"required_abi":hps_ebpf_abi::TP_ABI_VERSION,"rejected_before_attach":true,"full_transparent_datapath_ready":false})
+    );
 }
