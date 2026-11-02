@@ -1,0 +1,30 @@
+{
+  "source_revision": "862ddad624403e6f81bc994a7fe262ac04b7fb01",
+  "reason": "Local validation image tags were externally untagged/deleted before runner startup; no test case ran in the failed attempt",
+  "recovered_using": "unchanged Dockerfile.matrix and existing BuildKit cache",
+  "docker_context_changed": false,
+  "temporary_created_container_references": [
+    "hps-t20-kernel612-retain",
+    "hps-t20-kernel72-retain"
+  ],
+  "images": [
+    {
+      "actual_kernel": "6.12.115",
+      "image": "hps-ebpf-x86-kernel612:dev",
+      "image_id": "sha256:22ee1eef52b474ad25664bf02d39c722c84a54f6be796dfca571396bba3d7315",
+      "host_architecture": "arm64",
+      "guest_architecture": "x86_64",
+      "kernel_apk_sha256": "2c0146b71bb15b1dbfe3056d430ddcdb6f99ed937db51be0a2a7760db6a9b3fc",
+      "matches_prior_native_socket_case": true
+    },
+    {
+      "actual_kernel": "7.2.14",
+      "image": "hps-ebpf-x86-kernel72:dev",
+      "image_id": "sha256:d915ccb04e6659407fab87cd48620c78a7db262a72de548e5ea9650522aff81f",
+      "host_architecture": "arm64",
+      "guest_architecture": "x86_64",
+      "kernel_apk_sha256": "e8213dee682105c1507b4742f365bfc3c2ccd91cdba9aa3e036b73b13a1879ae",
+      "matches_prior_native_socket_case": true
+    }
+  ]
+}

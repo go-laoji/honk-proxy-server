@@ -1,0 +1,12 @@
+{
+  "scope": "real_linux_read_only_production_collector",
+  "kernel": "7.0.14-linuxkit",
+  "interfaces": 10,
+  "routes": 3,
+  "mounts": 1,
+  "stable_namespace": true,
+  "network_configuration_writes": false,
+  "new_bpf_loads": false,
+  "full_daemon_api_or_datapath_verified": false,
+  "container_scope": "new_owned_networkless_readonly_capabilityless_container_removed_after_run"
+}

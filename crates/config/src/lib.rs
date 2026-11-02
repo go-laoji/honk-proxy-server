@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, path::Path};
 
+mod subscription;
+pub use subscription::*;
 mod health;
 pub use health::*;
 mod dns;
@@ -24,8 +26,10 @@ pub struct DaemonConfig {
     pub log_filter: String,
     pub management_tls: Option<ServerTls>,
     pub retention: RetentionConfig,
+    pub alerts: hps_domain::AlertSettings,
     pub proxy: ProxyConfig,
     pub providers: Vec<ProviderConfig>,
+    pub subscriptions: Vec<SubscriptionConfig>,
     pub health: HealthConfig,
     pub dns: DnsConfig,
     pub linux_capture: Option<LinuxCaptureConfig>,
@@ -39,8 +43,10 @@ impl Default for DaemonConfig {
             log_filter: "info".into(),
             management_tls: None,
             retention: RetentionConfig::default(),
+            alerts: Default::default(),
             proxy: ProxyConfig::default(),
             providers: vec![],
+            subscriptions: vec![],
             health: HealthConfig::default(),
             dns: DnsConfig::default(),
             linux_capture: None,
@@ -134,6 +140,54 @@ impl DaemonConfig {
             provider
                 .restore_redacted(original.providers.iter().find(|old| old.id == provider.id))?;
         }
+        for subscription in &mut self.subscriptions {
+            if subscription.url == "[REDACTED]" {
+                subscription.url = original
+                    .subscriptions
+                    .iter()
+                    .find(|old| old.id == subscription.id)
+                    .ok_or_else(|| {
+                        ConfigError::Invalid("redacted subscription URL has no reference".into())
+                    })?
+                    .url
+                    .clone();
+            }
+            if let Some(snapshot) = &mut subscription.snapshot {
+                for node in &mut snapshot.nodes {
+                    if let Some(c) = &mut node.credentials {
+                        let old = original
+                            .subscriptions
+                            .iter()
+                            .find(|s| s.id == subscription.id)
+                            .and_then(|s| s.snapshot.as_ref())
+                            .and_then(|s| s.nodes.iter().find(|n| n.id == node.id))
+                            .and_then(|n| n.credentials.as_ref());
+                        if c.username == "[REDACTED]" {
+                            c.username = old
+                                .ok_or_else(|| {
+                                    ConfigError::Invalid(
+                                        "redacted subscription credentials have no reference"
+                                            .into(),
+                                    )
+                                })?
+                                .username
+                                .clone();
+                        }
+                        if c.password == "[REDACTED]" {
+                            c.password = old
+                                .ok_or_else(|| {
+                                    ConfigError::Invalid(
+                                        "redacted subscription credentials have no reference"
+                                            .into(),
+                                    )
+                                })?
+                                .password
+                                .clone();
+                        }
+                    }
+                }
+            }
+        }
         for upstream in &mut self.proxy.upstreams {
             if let Some(credentials) = &mut upstream.credentials {
                 let old = original
@@ -168,6 +222,14 @@ impl DaemonConfig {
     }
 
     pub fn validate(&self) -> Result<(), ConfigError> {
+        if !(5..=3600).contains(&self.alerts.cooldown_secs)
+            || !(1..=100000).contains(&self.alerts.failure_min_count)
+            || !(1..=100).contains(&self.alerts.failure_percent)
+        {
+            return Err(ConfigError::Invalid(
+                "alert thresholds are out of range".into(),
+            ));
+        }
         if let Some(capture) = &self.linux_capture {
             capture.validate()?;
         }
@@ -197,8 +259,30 @@ impl DaemonConfig {
                 return Err(ConfigError::Invalid("duplicate provider ID".into()));
             }
         }
+        if self.subscriptions.len() > 32
+            || self
+                .subscriptions
+                .iter()
+                .filter_map(|s| s.snapshot.as_ref())
+                .map(|s| s.nodes.len())
+                .sum::<usize>()
+                > 20000
+        {
+            return Err(ConfigError::Invalid(
+                "subscription resource budget exceeded".into(),
+            ));
+        }
+        let mut subscription_ids = std::collections::HashSet::new();
+        for subscription in &self.subscriptions {
+            subscription.validate()?;
+            if !subscription_ids.insert(&subscription.id) {
+                return Err(ConfigError::Invalid("duplicate subscription ID".into()));
+            }
+        }
         self.proxy.validate()?;
-        self.proxy.selection.validate_providers(&self.providers)?;
+        self.proxy
+            .selection
+            .validate_sources(&self.providers, &self.subscriptions)?;
         self.health.validate()?;
         self.dns.validate(&self.proxy)?;
         Ok(())
@@ -206,6 +290,11 @@ impl DaemonConfig {
 
     pub fn redacted(&self) -> Self {
         let mut config = self.clone();
+        config.subscriptions = self
+            .subscriptions
+            .iter()
+            .map(SubscriptionConfig::redacted)
+            .collect();
         config.providers = self
             .providers
             .iter()

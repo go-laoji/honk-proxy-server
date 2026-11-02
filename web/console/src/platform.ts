@@ -28,7 +28,11 @@ export async function native<T>(
       "api_get",
       "api_post",
       "save_config_export",
+      "save_database_backup",
+      "desktop_preferences_get",
+      "desktop_preferences_set",
       "save_rules_export",
+      "save_diagnostic_export",
       "set_endpoint",
       "profiles_change",
       "local_context",
@@ -166,6 +170,28 @@ export async function saveRules(revision: number): Promise<boolean> {
   const link = document.createElement("a");
   link.href = url;
   link.download = `hps-rules-r${revision}.json`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return true;
+}
+
+export async function saveDiagnostic(
+  id: number,
+  epoch: string,
+): Promise<boolean> {
+  if (isDesktop)
+    return native<boolean>("save_diagnostic_export", { id, epoch });
+  const exported = await getJson<unknown>(
+    `api/v1/diagnostics/${id}?expected_epoch=${encodeURIComponent(epoch)}`,
+  );
+  const url = URL.createObjectURL(
+    new Blob([JSON.stringify(exported, null, 2) + "\n"], {
+      type: "application/json;charset=utf-8",
+    }),
+  );
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `hps-diagnostic-${id}.json`;
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
   return true;

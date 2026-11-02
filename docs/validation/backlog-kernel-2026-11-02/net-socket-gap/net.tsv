@@ -1,0 +1,1 @@
+/target/x86_64/debug/deps/hps_net-1d9ed2bd7bf4d8e2	transparent::tests::udp_recovers_actual_dual_stack_addresses_and_ports_and_rejects_partial_payload

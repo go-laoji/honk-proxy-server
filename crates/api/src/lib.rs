@@ -16,6 +16,7 @@ use std::{
 };
 
 mod audit;
+mod backup;
 mod configuration;
 mod connections;
 mod diagnostics;
@@ -27,6 +28,7 @@ mod nodes;
 mod observability;
 mod providers;
 mod rules;
+mod subscriptions;
 mod tasks;
 #[cfg(feature = "web-ui")]
 mod web;
@@ -160,8 +162,10 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/v1/config", get(config));
     let router = router
         .merge(configuration::router())
+        .merge(backup::router())
         .merge(connections::router())
         .merge(providers::router())
+        .merge(subscriptions::router())
         .merge(health::router())
         .merge(dns::router())
         .merge(groups::router())

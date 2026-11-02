@@ -1,3 +1,7 @@
+mod topology;
+pub use topology::*;
+mod backup;
+pub use backup::*;
 use serde::{Deserialize, Serialize};
 mod selection;
 pub use selection::*;
@@ -13,6 +17,8 @@ mod tasks;
 pub use tasks::*;
 mod observability;
 pub use observability::*;
+mod alerts;
+pub use alerts::*;
 mod diagnostics;
 pub use diagnostics::*;
 
@@ -111,9 +117,17 @@ pub struct Capabilities {
     pub http_proxy: FeatureCapability,
     pub https_proxy: FeatureCapability,
     pub socks5_proxy: FeatureCapability,
+    #[serde(default = "unreported_udp")]
+    pub socks5_udp: FeatureCapability,
     pub linux_ebpf: EbpfCapability,
 }
 
+fn unreported_udp() -> FeatureCapability {
+    FeatureCapability {
+        available: false,
+        reason: Some("服务未报告 SOCKS5 UDP ASSOCIATE 能力".into()),
+    }
+}
 impl Capabilities {
     pub fn explicit_proxy() -> Self {
         let mut capabilities = Self::foundation();
@@ -123,7 +137,8 @@ impl Capabilities {
         };
         capabilities.http_proxy = available.clone();
         capabilities.https_proxy = available.clone();
-        capabilities.socks5_proxy = available;
+        capabilities.socks5_proxy = available.clone();
+        capabilities.socks5_udp = available;
         capabilities
     }
     pub fn foundation() -> Self {
@@ -136,7 +151,8 @@ impl Capabilities {
             requires_authentication: false,
             http_proxy: pending.clone(),
             https_proxy: pending.clone(),
-            socks5_proxy: pending,
+            socks5_proxy: pending.clone(),
+            socks5_udp: pending,
             linux_ebpf: EbpfCapability {
                 platform_supported: cfg!(target_os = "linux"),
                 compiled: false,

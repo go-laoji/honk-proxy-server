@@ -1,3 +1,4 @@
+mod alerts;
 mod connections;
 mod controller;
 mod diagnostics;
@@ -11,6 +12,7 @@ mod nodes;
 mod observability;
 mod providers;
 mod rules;
+mod subscriptions;
 mod tasks;
 mod transparent;
 use arc_swap::ArcSwap;
@@ -173,8 +175,27 @@ pub struct Supervisor {
     health: health::HealthRuntime,
     observability: observability::ObservationRuntime,
     diagnostics: diagnostics::Runtime,
+    alerts: alerts::Runtime,
 }
 impl Supervisor {
+    pub async fn linux_diagnostics(
+        &self,
+    ) -> Result<hps_domain::LinuxDiagnostics, ApplicationError> {
+        let topology = tokio::task::spawn_blocking(hps_platform::topology::topology)
+            .await
+            .map_err(|_| ApplicationError::Worker)?;
+        Ok(hps_domain::LinuxDiagnostics {
+            epoch: self.event_epoch().into(),
+            scope: "read_only_current_namespace_and_owned_capture".into(),
+            topology,
+            capture: self.linux_capture_status().await,
+        })
+    }
+    pub async fn database_backup(
+        &self,
+    ) -> Result<hps_storage::backup::Snapshot, hps_storage::backup::BackupError> {
+        self.store.backup().await
+    }
     pub async fn boot(
         store: Store,
         overrides: StartupOverrides,
@@ -237,6 +258,7 @@ impl Supervisor {
             health: Default::default(),
             observability: Default::default(),
             diagnostics: Default::default(),
+            alerts: Default::default(),
         });
         service.load_health().await?;
         service.refresh_pool().await?;
@@ -571,6 +593,10 @@ impl Supervisor {
                 .await?;
             return Err(error);
         }
+        let lease_sources_changed = serde_json::to_value(&current.base_config.providers)
+            .map_err(|_| ApplicationError::Invalid)?
+            != serde_json::to_value(&target.config.providers)
+                .map_err(|_| ApplicationError::Invalid)?;
         let mut restart_required = restart_fields(&current.base_config, &target.config);
         let mut config = target.config.clone();
         self.overrides.apply(&mut config);
@@ -650,6 +676,10 @@ impl Supervisor {
             && serde_json::to_value(&current.base_config.providers)
                 .map_err(|_| ApplicationError::Invalid)?
                 == serde_json::to_value(&target.config.providers)
+                    .map_err(|_| ApplicationError::Invalid)?
+            && serde_json::to_value(&current.base_config.subscriptions)
+                .map_err(|_| ApplicationError::Invalid)?
+                == serde_json::to_value(&target.config.subscriptions)
                     .map_err(|_| ApplicationError::Invalid)?
             && current
                 .health_profiles
@@ -874,7 +904,12 @@ impl Supervisor {
         {
             old.shutdown().await;
         }
-        self.refresh_pool().await?;
+        // Subscription snapshots are already prepared on the candidate engine.
+        // Unrelated lease reloads cannot turn a committed subscription update into
+        // a reported failure or delay its visibility.
+        if lease_sources_changed {
+            self.refresh_pool().await?;
+        }
         self.retired.lock().unwrap().push(current.engine.clone());
         *self.pending_restart.lock().unwrap() = None;
         self.store
@@ -1061,6 +1096,27 @@ fn prepare_proxy_engine(
     };
     #[cfg(not(target_os = "linux"))]
     let engine = Engine::with_previous(config.proxy.clone(), previous)?;
+    let nodes = config
+        .subscriptions
+        .iter()
+        .filter(|s| s.enabled)
+        .filter_map(|source| source.snapshot.as_ref().map(|snapshot| (source, snapshot)))
+        .flat_map(|(source, snapshot)| {
+            snapshot
+                .nodes
+                .iter()
+                .cloned()
+                .map(|upstream| hps_engine::pool::PoolNode {
+                    provider_id: source.source_id(),
+                    fingerprint: hps_provider::subscription::fingerprint(source),
+                    upstream,
+                    min_remaining_secs: 0,
+                })
+        })
+        .collect();
+    engine
+        .prepare_subscription_nodes(nodes)
+        .map_err(|_| ApplicationError::Invalid)?;
     Ok(engine)
 }
 fn prepare_engine(
@@ -1256,6 +1312,29 @@ fn prepare_network(
             .iter()
             .filter(|p| p.enabled)
             .map(|p| (p.id.clone(), hps_provider::fingerprint(p)))
+            .chain(
+                config
+                    .subscriptions
+                    .iter()
+                    .filter(|s| s.enabled)
+                    .map(|s| (s.source_id(), hps_provider::subscription::fingerprint(s))),
+            )
+            .collect(),
+    );
+    engine.set_provider_lifetimes(
+        config
+            .providers
+            .iter()
+            .map(|p| {
+                (
+                    p.id.clone(),
+                    if p.refill.enabled {
+                        p.min_remaining_secs.max(p.refill.retire_before_secs)
+                    } else {
+                        p.min_remaining_secs
+                    },
+                )
+            })
             .collect(),
     );
     engine.set_provider_source_protocols(

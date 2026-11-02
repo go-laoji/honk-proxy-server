@@ -1,0 +1,45 @@
+{
+  "target": "aarch64-unknown-linux-musl",
+  "source_revision": "862ddad624403e6f81bc994a7fe262ac04b7fb01",
+  "web_build_id": "7c94170ee16c7b9c2f8e0aa08c219e172c2a7b6bb4834c71b2cf96a2fb4316e1",
+  "binaries": {
+    "hps": {
+      "path": "/target/t17-static-arm64/aarch64-unknown-linux-musl/release/hps",
+      "sha256": "e756d88d43ae11dcefc3da0b23d41f22343a4ed09267fd93d3e6b0dbc10bbd7c",
+      "static_elf_no_pt_interp": true,
+      "metadata": {
+        "architecture": "aarch64",
+        "binary": "hps",
+        "format_version": 1,
+        "platform": "linux",
+        "source_dirty": false,
+        "source_revision": "862ddad624403e6f81bc994a7fe262ac04b7fb01",
+        "version": {
+          "api_version": "v1",
+          "service": "honk-proxy-server",
+          "version": "0.1.0",
+          "web_build_id": null
+        }
+      }
+    },
+    "hpsd": {
+      "path": "/target/t17-static-arm64/aarch64-unknown-linux-musl/release/hpsd",
+      "sha256": "d6d6d7bec8e0224cb6c8ab642a08cfaf2a05403acc808cf21936c63e0931f728",
+      "static_elf_no_pt_interp": true,
+      "metadata": {
+        "format_version": 1,
+        "binary": "hpsd",
+        "architecture": "aarch64",
+        "platform": "linux",
+        "source_revision": "862ddad624403e6f81bc994a7fe262ac04b7fb01",
+        "source_dirty": false,
+        "version": {
+          "service": "honk-proxy-server",
+          "version": "0.1.0",
+          "api_version": "v1",
+          "web_build_id": "7c94170ee16c7b9c2f8e0aa08c219e172c2a7b6bb4834c71b2cf96a2fb4316e1"
+        }
+      }
+    }
+  }
+}

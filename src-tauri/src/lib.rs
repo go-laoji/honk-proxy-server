@@ -2,6 +2,8 @@ use hps_client::HpsClient;
 use std::{sync::Mutex, time::Duration};
 use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
+mod backup;
+mod desktop;
 mod events;
 mod local;
 
@@ -135,13 +137,16 @@ fn supported_api(path: &str) -> bool {
             | "api/v1/capabilities"
             | "api/v1/config"
             | "api/v1/linux/preflight"
+            | "api/v1/linux/diagnostics"
             | "api/v1/linux/capture"
             | "api/v1/inbounds"
             | "api/v1/config/workspace"
             | "api/v1/config/export"
             | "api/v1/providers"
+            | "api/v1/subscriptions"
             | "api/v1/groups"
     ) || supported_health_get(path)
+        || supported_diagnostic_get(path)
         || supported_observability_get(path)
         || events::supported_get(path)
         || supported_connections_get(path)
@@ -151,7 +156,45 @@ fn supported_api(path: &str) -> bool {
         || supported_provider_get(path)
         || supported_epoch_detail(path, "api/v1/config/revisions/")
 }
+fn supported_diagnostic_get(path: &str) -> bool {
+    if supported_epoch_detail(path, "api/v1/diagnostics/") {
+        return true;
+    }
+    let (base, query) = path.split_once('?').map_or((path, ""), |(p, q)| (p, q));
+    let Some(id) = base
+        .strip_prefix("api/v1/tasks/")
+        .and_then(|p| p.strip_suffix("/controls"))
+    else {
+        return false;
+    };
+    supported_epoch_detail(
+        &format!(
+            "api/v1/tasks/{id}{}",
+            if query.is_empty() {
+                String::new()
+            } else {
+                format!("?{query}")
+            }
+        ),
+        "api/v1/tasks/",
+    )
+}
 fn supported_observability_get(path: &str) -> bool {
+    if path == "api/v1/observability/alerts" {
+        return true;
+    }
+    if let Some(query) = path.strip_prefix("api/v1/observability/alerts?") {
+        let mut keys = std::collections::HashSet::new();
+        return !query.is_empty()
+            && url::form_urlencoded::parse(query.as_bytes()).all(|(k, v)| {
+                keys.insert(k.to_string())
+                    && match k.as_ref() {
+                        "after" => v.parse::<u64>().is_ok(),
+                        "limit" => v.parse::<u32>().is_ok_and(|n| (1..=100).contains(&n)),
+                        _ => false,
+                    }
+            });
+    }
     if path == "api/v1/observability" {
         return true;
     }
@@ -217,7 +260,7 @@ fn supported_connections_get(path: &str) -> bool {
                         }
                         "inbound" => value == "@unknown" || valid_resource_id(&value),
                         "node" => value == "@direct" || hps_config::valid_node_id(&value),
-                        "provider" => value == "@static" || valid_resource_id(&value),
+                        "provider" => value == "@static" || hps_config::valid_source_id(&value),
                         "group" => value == "@none" || valid_resource_id(&value),
                         "rule" => value == "@default" || valid_resource_id(&value),
                         "protocol" => {
@@ -274,9 +317,8 @@ fn supported_nodes_get(path: &str) -> bool {
                         "id" => hps_config::valid_node_id(&value),
                         "search" => value.len() <= 256,
                         "provider" if value == "@static" => true,
-                        "provider" | "group" => {
-                            hps_config::valid_node_id(&value) && !value.contains(':')
-                        }
+                        "provider" => hps_config::valid_source_id(&value),
+                        "group" => hps_config::valid_node_id(&value) && !value.contains(':'),
                         "protocol" => ["http", "https", "socks5"].contains(&value.as_ref()),
                         "capability" => ["tcp", "udp", "ipv4", "ipv6"].contains(&value.as_ref()),
                         "state" => [
@@ -433,7 +475,9 @@ fn supported_action(path: &str) -> bool {
     }
     if matches!(
         path,
-        "api/v1/health/probe"
+        "api/v1/observability/alerts/save"
+            | "api/v1/diagnostics"
+            | "api/v1/health/probe"
             | "api/v1/linux/capture/control"
             | "api/v1/linux/capture/save"
             | "api/v1/tasks"
@@ -470,8 +514,13 @@ fn supported_action(path: &str) -> bool {
         return true;
     }
     let parts: Vec<_> = path.split('/').collect();
+    if matches!(parts.as_slice(),["api","v1","tasks",id,"cancel"|"retry"] if id.parse::<i64>().is_ok_and(|id| id > 0))
+    {
+        return true;
+    }
     if matches!(parts.as_slice(),["api","v1","providers",id,"controller","pause"|"resume"|"evaluate"] if valid_resource_id(id))
         || matches!(parts.as_slice(),["api","v1","providers",id,"save"|"delete"|"extract"] if valid_resource_id(id))
+        || matches!(parts.as_slice(),["api","v1","subscriptions",id,"save"|"delete"|"refresh"] if valid_resource_id(id))
         || matches!(parts.as_slice(),["api","v1","providers",id,"diagnose","quota"|"whitelist"] if valid_resource_id(id))
     {
         return true;
@@ -610,6 +659,58 @@ async fn save_rules_export(
 }
 
 #[tauri::command]
+async fn save_diagnostic_export(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Connection>,
+    subscriptions: tauri::State<'_, events::NativeEvents>,
+    window: tauri::WebviewWindow,
+    context: events::SubscriptionContext,
+    id: i64,
+    epoch: String,
+) -> Result<bool, String> {
+    let target = {
+        let target = state.0.lock().map_err(|_| "connection state unavailable")?;
+        subscriptions
+            .validate_context(window.label(), context)
+            .map_err(|e| e.message)?;
+        target.clone()
+    };
+    let exported = target
+        .client(Duration::from_secs(10))
+        .map_err(|e| e.to_string())?
+        .diagnostic(id, Some(&epoch))
+        .await
+        .map_err(|e| e.to_string())?;
+    subscriptions
+        .validate_context(window.label(), context)
+        .map_err(|e| e.message)?;
+    let document = serde_json::to_vec_pretty(&exported)
+        .map_err(|_| "diagnostic export serialization failed")?;
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .file()
+        .set_file_name(format!("hps-diagnostic-{id}.json"))
+        .add_filter("JSON", &["json"])
+        .save_file(move |path| {
+            let _ = sender.send(path);
+        });
+    let Some(path) = receiver.await.map_err(|_| "save dialog did not complete")? else {
+        return Ok(false);
+    };
+    subscriptions
+        .validate_context(window.label(), context)
+        .map_err(|e| e.message)?;
+    let path = path
+        .into_path()
+        .map_err(|_| "selected file path is unavailable")?;
+    tokio::task::spawn_blocking(move || std::fs::write(path, document))
+        .await
+        .map_err(|_| "file save could not finish")?
+        .map_err(|e| e.to_string())?;
+    Ok(true)
+}
+
+#[tauri::command]
 async fn api_get(
     state: tauri::State<'_, Connection>,
     subscriptions: tauri::State<'_, events::NativeEvents>,
@@ -645,6 +746,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             if hps_system::service::desktop_is_root() {
                 return Err("Desktop must run as an ordinary user; use the administrator CLI for system services".into());
@@ -664,6 +766,7 @@ pub fn run() {
             };
             app.manage(Connection(Mutex::new(target)));
             app.manage(events::NativeEvents::default());
+            desktop::setup(app)?;
             Ok(())
         })
         .on_page_load(|webview, payload| {
@@ -674,6 +777,10 @@ pub fn run() {
             }
         })
         .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested {api,..}=event
+                && let Some(state)=window.app_handle().try_state::<desktop::Desktop>()
+                && state.close_to_tray() {api.prevent_close();let _=window.hide();}
+
             if matches!(event, tauri::WindowEvent::Destroyed)
                 && let Some(state) = window.app_handle().try_state::<events::NativeEvents>()
             {
@@ -686,7 +793,11 @@ pub fn run() {
             api_get,
             api_post,
             save_config_export,
+            backup::save_database_backup,
+            desktop::desktop_preferences_get,
+            desktop::desktop_preferences_set,
             save_rules_export,
+            save_diagnostic_export,
             get_web_build_id,
             local::profiles_get,
             local::profiles_change,
@@ -734,7 +845,27 @@ mod tests {
         assert!(supported_action("api/v1/linux/capture/control"));
         assert!(supported_action("api/v1/linux/capture/save"));
         assert!(!supported_action("api/v1/linux/capture/unknown"));
+        assert!(supported_api(
+            "api/v1/diagnostics/2?expected_epoch=abcdef12-3456-7890-abcd-ef1234567890"
+        ));
+        assert!(supported_api("api/v1/tasks/2/controls"));
+        assert!(!supported_api("api/v1/tasks/2/controls?expected_epoch=bad"));
+        assert!(!supported_api(
+            "api/v1/diagnostics/2?expected_epoch=bad&url=http://external"
+        ));
+        assert!(supported_action("api/v1/diagnostics"));
+        assert!(supported_action("api/v1/tasks/2/cancel"));
+        assert!(supported_action("api/v1/tasks/2/retry"));
+        assert!(!supported_action("api/v1/tasks/0/retry"));
         assert!(supported_api("api/v1/status"));
+        assert!(supported_api(
+            "api/v1/observability/alerts?limit=100&after=42"
+        ));
+        assert!(!supported_api("api/v1/observability/alerts?limit=101"));
+        assert!(!supported_api(
+            "api/v1/observability/alerts?after=1&after=2"
+        ));
+        assert!(supported_action("api/v1/observability/alerts/save"));
         assert!(supported_api("api/v1/observability?window_secs=300"));
         assert!(!supported_api("api/v1/observability?window_secs=3601"));
         assert!(!supported_api(
@@ -771,6 +902,18 @@ mod tests {
         assert!(!supported_api("api/v1/rules?url=http://external"));
         assert!(supported_action("api/v1/rules/simulate"));
         assert!(supported_action("api/v1/rules/apply"));
+        assert!(supported_api("api/v1/subscriptions"));
+        assert!(supported_action("api/v1/subscriptions/fixture/save"));
+        assert!(supported_action("api/v1/subscriptions/fixture/refresh"));
+        assert!(supported_action("api/v1/subscriptions/fixture/delete"));
+        assert!(!supported_action("api/v1/subscriptions/fixture/unknown"));
+        assert!(!supported_action("api/v1/subscriptions/../refresh"));
+        assert!(supported_api(
+            "api/v1/nodes?provider=subscription%3Afixture&limit=50"
+        ));
+        assert!(supported_api(
+            "api/v1/nodes/sub:fixture:0123456789abcdef01234567"
+        ));
         assert!(supported_action("api/v1/groups/simulate"));
         assert!(supported_action("api/v1/groups/pin"));
         assert!(!supported_action("api/v1/groups/unknown"));

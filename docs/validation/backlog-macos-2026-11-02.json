@@ -1,0 +1,193 @@
+{
+  "date": "2026-11-02",
+  "source_revision": "862ddad624403e6f81bc994a7fe262ac04b7fb01",
+  "web_build_id": "7c94170ee16c7b9c2f8e0aa08c219e172c2a7b6bb4834c71b2cf96a2fb4316e1",
+  "shared_pages": 18,
+  "rust_tests": [
+    {
+      "kind": "workspace",
+      "passed": 227,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "kind": "native",
+      "passed": 11,
+      "failed": 0,
+      "ignored": 0
+    }
+  ],
+  "workspace_and_native_clippy": true,
+  "rust_fmt_typescript_prettier_build": true,
+  "browser_full_combination": {
+    "source_revision": "695e11689ef7132492629be0ddda4732c70a4e27",
+    "passed": 25,
+    "superseded_storage_integrity_fix_followed": true
+  },
+  "final_persistent_browser": {
+    "source_revision": "862ddad624403e6f81bc994a7fe262ac04b7fb01",
+    "passed": 3
+  },
+  "headless_package": {
+    "package": "target/validation/backlog-candidate/macos-862ddad/hps-headless-0.1.0-aarch64-apple-darwin.tar.gz",
+    "sha256": "573959469df074c9f11f650ce9ed61a8849a2878a44d01bebe29de6d25b7adb1",
+    "source_revision": "862ddad624403e6f81bc994a7fe262ac04b7fb01",
+    "packaging_revision": "862ddad624403e6f81bc994a7fe262ac04b7fb01",
+    "runtime_checked": true,
+    "web_build_id": "7c94170ee16c7b9c2f8e0aa08c219e172c2a7b6bb4834c71b2cf96a2fb4316e1"
+  },
+  "installed_checks": {
+    "fault-check": {
+      "passed": true,
+      "daemon_sha256": "6edcb1f19c7449714c7bd63ecab54bfc7c8e56468a4e1313a8c45716b730eccb",
+      "actual_admission_limit": 4,
+      "excess_connection_rejected": true,
+      "rejection_counter": 1,
+      "management_survives_proxy_overload": true,
+      "permits_released": true,
+      "occupied_management_port_refused": true,
+      "restart_after_startup_failure": true,
+      "host_network_configuration_written": false
+    },
+    "combined-backup-check": {
+      "source_revision": "862ddad624403e6f81bc994a7fe262ac04b7fb01",
+      "real_installed_cli_daemon": true,
+      "subscription_snapshot_survives_restore": true,
+      "node_id_stable": true,
+      "unknown_expiry_preserved": true,
+      "views_redact_source_and_credentials": true,
+      "alert_settings_survive_restore": true,
+      "diagnostic_task_result_survives_restore": true,
+      "runtime_epoch_changes": true,
+      "remote_subscription_url_fetched": false,
+      "host_network_configuration_written": false
+    },
+    "runtime-check": {
+      "scope": "owned_loopback_installed_runtime",
+      "daemon_sha256": "6edcb1f19c7449714c7bd63ecab54bfc7c8e56468a4e1313a8c45716b730eccb",
+      "previous_daemon_sha256": "6edcb1f19c7449714c7bd63ecab54bfc7c8e56468a4e1313a8c45716b730eccb",
+      "separate_previous_binary": false,
+      "host_network_configuration_written": false,
+      "upgrade_persisted_revision": 2,
+      "actual_html_pages": 18,
+      "installed_cli_without_credentials": true,
+      "duplicate_instance_rejected": true,
+      "bounded_load": {
+        "requests": 256,
+        "workers": 16,
+        "failures": 0,
+        "seconds": 0.4315,
+        "requests_per_second": 593.21,
+        "response_bytes": 3441920,
+        "latency_ms_p50": 26.47,
+        "latency_ms_p95": 30.51,
+        "environment": "local owned fixture, not public network capacity"
+      },
+      "active_connections_after_load": 0,
+      "newer_schema_refused": true,
+      "stopped_snapshot_binary_rollback": true,
+      "task_history_survives_upgrade_and_rollback": true,
+      "passed": true
+    },
+    "cross-version-runtime-check": {
+      "scope": "owned_loopback_installed_runtime",
+      "daemon_sha256": "6edcb1f19c7449714c7bd63ecab54bfc7c8e56468a4e1313a8c45716b730eccb",
+      "previous_daemon_sha256": "9e90c470b2412d16df14690fa0e293d702bec05475f85566d0828497309a78ae",
+      "separate_previous_binary": true,
+      "host_network_configuration_written": false,
+      "upgrade_persisted_revision": 2,
+      "actual_html_pages": 18,
+      "installed_cli_without_credentials": true,
+      "duplicate_instance_rejected": true,
+      "bounded_load": {
+        "requests": 256,
+        "workers": 16,
+        "failures": 0,
+        "seconds": 0.4077,
+        "requests_per_second": 627.97,
+        "response_bytes": 3441920,
+        "latency_ms_p50": 25.12,
+        "latency_ms_p95": 29.24,
+        "environment": "local owned fixture, not public network capacity"
+      },
+      "active_connections_after_load": 0,
+      "newer_schema_refused": true,
+      "stopped_snapshot_binary_rollback": true,
+      "task_history_survives_upgrade_and_rollback": true,
+      "passed": true
+    },
+    "install-check": {
+      "passed": true,
+      "target": "aarch64-apple-darwin",
+      "source_revision": "862ddad624403e6f81bc994a7fe262ac04b7fb01",
+      "web_build_id": "7c94170ee16c7b9c2f8e0aa08c219e172c2a7b6bb4834c71b2cf96a2fb4316e1",
+      "checksums_verified": true,
+      "config_preserved": true,
+      "corrupt_reinstall_preserves_both_binaries": true,
+      "display_required": false,
+      "node_required": false,
+      "host_network_configuration_written": false,
+      "installed_binary_sha256": {
+        "hps": "8aeed118a59d0461c0bd756cae4b91e7cf0991985b4bf8aec91645e185bf9c6c",
+        "hpsd": "6edcb1f19c7449714c7bd63ecab54bfc7c8e56468a4e1313a8c45716b730eccb"
+      }
+    },
+    "protocol-check": {
+      "status": "passed",
+      "checks": [
+        "independent CLI lists empty subscriptions",
+        "definition save uses persisted revision CAS",
+        "document import publishes namespaced nodes without fabricated expiry",
+        "URL and protocol credentials are redacted",
+        "stale refresh is rejected",
+        "UDP ASSOCIATE capability is reported separately",
+        "subscription deletion removes its active source"
+      ],
+      "host_network_changes": false
+    },
+    "backup-check": {
+      "scope": "real_cli_and_owned_disposable_daemon",
+      "download_digest_verified": true,
+      "running_restore_refused": true,
+      "offline_restore_and_original_preservation": true,
+      "bad_digest_refused": true,
+      "restart_successful": true,
+      "snapshot_bytes": 262144,
+      "network_configuration_writes": false,
+      "user_services_touched": false
+    }
+  },
+  "previous_daemon_metadata": {
+    "format_version": 1,
+    "binary": "hpsd",
+    "architecture": "aarch64",
+    "platform": "macos",
+    "source_revision": "2b196752e0f69c430c13285199a153a1b3d9855c",
+    "source_dirty": false,
+    "version": {
+      "service": "honk-proxy-server",
+      "version": "0.1.0",
+      "api_version": "v1",
+      "web_build_id": "6ddd3f17e72bf05dd6bdcc9e2bc5ab13c6002297860cbfd5df208b463b5eca95"
+    }
+  },
+  "desktop": {
+    "manifest": "target/validation/backlog-candidate/macos-desktop-862ddad/desktop-manifest.json",
+    "archive": "target/validation/backlog-candidate/macos-desktop-862ddad/hps-desktop-0.1.0-aarch64-apple-darwin.zip",
+    "sha256": "723fca2a24927e0247425e9157fca554e492c5f1f454301c18fda478f67d5818",
+    "size_bytes": 13382655,
+    "codesign_deep_strict_verified": true,
+    "zip_crc_verified": true,
+    "source_revision": "862ddad624403e6f81bc994a7fe262ac04b7fb01",
+    "bundled_daemon_sha256": "6edcb1f19c7449714c7bd63ecab54bfc7c8e56468a4e1313a8c45716b730eccb",
+    "gui_launched": false,
+    "original_bundle_overwritten": false,
+    "cloud_signed_or_notarized": false
+  },
+  "host_network_configuration_written": false,
+  "macos_persistent_proxy_write_verified": false,
+  "actual_os_notifications_or_login_autostart_verified": false,
+  "paid_supplier_calls": false,
+  "published": false,
+  "unconditional_all_platform_release_pass": false
+}

@@ -1,0 +1,20 @@
+HPS_GUEST_ARTIFACT=test-cases:eccda605e725bdb9b911e1b6107244e1113e36740ccfc5e309a8623faf287ba0
+HPS_GUEST_ARTIFACT=test-linux_capture-c438801a93bc7b2c:33800a55cfebef550dc851a19df627f3b91c0369ae41c3efbb509de8ce511060
+HPS_GUEST_ARTIFACT=hpsd:d6d6d7bec8e0224cb6c8ab642a08cfaf2a05403acc808cf21936c63e0931f728
+HPS_GUEST_ARTIFACT=hps-ebpf:fa5449609f86a6b50300a83a6e10d2f2150aa42eaa6676c8e64dd1581bbd5286
+HPS_GUEST_ARTIFACT=hps-ebpf-legacy:ae2c694f313abbc61c7c7a36dee119bb06dadaff3336d6ccf73ddac0a59143e3
+HPS_KERNEL_APK_SHA256=f21725368f0d34e519ce25d2534947eed6adabf91276ebfa8c96ecfb3f9ed36c
+HPS_GUEST_EPOCH=1793628394
+modprobe: module ipv6 not found in modules.dep
+7.2.14-0-stable
+HPS_CASE_START=real_hpsd_sigkill_recovery_preserves_foreign_rules
+
+running 1 test
+{"actual_process_killed":true,"epoch_changed":true,"foreign_priority_conflict_refused":true,"foreign_rule_preserved":true,"full_transparent_datapath_ready":false,"graceful_shutdown_owned_rules_removed":true,"kernel":"7.2.14-0-stable","object_sha256":"fa5449609f86a6b50300a83a6e10d2f2150aa42eaa6676c8e64dd1581bbd5286","old_programs_released":true,"owned_route_residue_detected":true,"persisted_revision_recovered":1,"readyz_requires_actual_capture_and_forwarding":true,"real_tcp_udp_before_and_after_restart":true,"scope":"standalone_hpsd_sigkill_recovery_only","signal":9}
+test real_hpsd_sigkill_recovery_preserves_foreign_rules ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 3.82s
+
+HPS_CASE_EXIT=real_hpsd_sigkill_recovery_preserves_foreign_rules:0
+HPS_SELF_TEST_EXIT=0
+[    5.194052] reboot: Power down

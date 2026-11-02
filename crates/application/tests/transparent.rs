@@ -12,7 +12,7 @@ use hps_application::{StartupOverrides, Supervisor};
 use hps_config::{DaemonConfig, LinuxCaptureConfig, ProcessCondition, RuleConditions, RuleConfig};
 use hps_domain::{ConfigActivate, ConfigInput, FlowOrigin, RouteAction};
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     io::{Read, Write},
     net::SocketAddr,
     path::Path,
@@ -218,6 +218,191 @@ async fn real_transparent_publication_failure_restores_deferred_head() {
 async fn real_transparent_dns_coexist_and_publication_rollback() {
     run_supervisor(true, true).await;
 }
+// Exact control-plane route/rule dumps, excluding only kernel cache age/expiry observations.
+type RoutingObject = (u16, Vec<u8>, BTreeMap<u16, Vec<u8>>);
+fn routing_objects() -> Vec<RoutingObject> {
+    let mut result = vec![];
+    for family in [libc::AF_INET, libc::AF_INET6] {
+        for (request, expected) in [
+            (libc::RTM_GETRULE, libc::RTM_NEWRULE),
+            (libc::RTM_GETROUTE, libc::RTM_NEWROUTE),
+        ] {
+            let mut payload = [0; 12];
+            payload[0] = family as u8;
+            for message in rtnetlink::exchange(
+                request,
+                (libc::NLM_F_REQUEST | libc::NLM_F_DUMP) as u16,
+                &payload,
+                true,
+            )
+            .unwrap()
+            {
+                if message.kind != expected {
+                    continue;
+                }
+                assert!(message.payload.len() >= 12);
+                let mut attrs = rtnetlink::attributes(&message.payload, 12).unwrap();
+                if expected == libc::RTM_NEWROUTE {
+                    attrs.remove(&12);
+                    attrs.remove(&23);
+                }
+                result.push((message.kind, message.payload[..12].to_vec(), attrs));
+            }
+        }
+    }
+    result.sort();
+    result
+}
+fn owned_stats(map_id: u32) -> [[u64; 8]; 3] {
+    use aya::maps::{Map, MapData, PerCpuArray};
+    let map = PerCpuArray::<_, hps_ebpf_abi::CaptureStats>::try_from(Map::PerCpuArray(
+        MapData::from_id(map_id).unwrap(),
+    ))
+    .unwrap();
+    let mut result = [[0u64; 8]; 3];
+    for (index, slot) in result.iter_mut().enumerate() {
+        for value in map.get(&(index as u32), 0).unwrap().iter() {
+            for (field, value) in [
+                value.observed_sockets,
+                value.marked_sockets,
+                value.captured_packets,
+                value.bypassed_packets,
+                value.rejected_packets,
+                value.unsupported_packets,
+                value.missing_process,
+                value.errors,
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                slot[field] = slot[field].saturating_add(value);
+            }
+        }
+    }
+    result
+}
+fn capture_controls(status: &hps_domain::LinuxCaptureStatus) -> serde_json::Value {
+    serde_json::json!({"ready":status.ready,"state":status.state,"suspended":status.suspended,"links":status.links_present,"routes":status.routes_present,"interfaces":status.interfaces_ready,"programs":status.program_ids,"maps":status.map_ids,"kernel_revision":status.kernel_revision,"userspace_revision":status.userspace_revision,"generations":status.generations,"retry_attempts":status.retry_attempts})
+}
+async fn assert_read_only_diagnostics(
+    service: &std::sync::Arc<Supervisor>,
+    boot_programs: &BTreeSet<u32>,
+) {
+    let before = service.linux_capture_status().await;
+    assert!(before.ready, "{before:?}");
+    assert_eq!(before.program_ids.len(), 8);
+    assert_eq!(before.hooks.len(), 3);
+    let programs = before.program_ids.iter().copied().collect::<BTreeSet<_>>();
+    assert!(programs.is_subset(boot_programs));
+    let kernel_maps = aya::programs::loaded_programs()
+        .filter_map(Result::ok)
+        .filter(|p| programs.contains(&p.id()))
+        .flat_map(|p| p.map_ids().unwrap().unwrap_or_default())
+        .collect::<BTreeSet<_>>();
+    assert!(!kernel_maps.is_empty());
+    assert_eq!(
+        kernel_maps,
+        before.map_ids.iter().copied().collect::<BTreeSet<_>>()
+    );
+    let stats = kernel_maps
+        .iter()
+        .copied()
+        .find(|id| aya::maps::MapInfo::from_id(*id).unwrap().name() == b"HPS_TP_STATS")
+        .unwrap();
+    let routes_before = routing_objects();
+    let workspace_before = serde_json::to_value(service.workspace().await.unwrap()).unwrap();
+    let rules_before = serde_json::to_value(&service.current().config.proxy.routing).unwrap();
+    let counters_before = owned_stats(stats);
+    let diagnostic = service.linux_diagnostics().await.unwrap();
+    let counters_after = owned_stats(stats);
+    assert_eq!(diagnostic.epoch, service.event_epoch());
+    assert_eq!(
+        diagnostic.scope,
+        "read_only_current_namespace_and_owned_capture"
+    );
+    assert!(
+        diagnostic.topology.supported
+            && diagnostic.topology.network_namespace.is_some()
+            && diagnostic.topology.cgroup_namespace.is_some()
+    );
+    assert!(
+        diagnostic
+            .topology
+            .interfaces
+            .iter()
+            .any(|interface| interface.name == "lo")
+    );
+    assert!(
+        diagnostic
+            .topology
+            .mounts
+            .iter()
+            .any(|mount| mount.filesystem == "cgroup2")
+    );
+    assert_eq!(
+        capture_controls(&diagnostic.capture),
+        capture_controls(&before)
+    );
+    assert_eq!(diagnostic.capture.flow_entries, 4);
+    assert_eq!(diagnostic.capture.active_owners, 4);
+    for (index, hook) in diagnostic.capture.hooks.iter().enumerate() {
+        assert_eq!(hook.hook, ["cgroup", "egress", "ingress"][index]);
+        let observed = [
+            hook.observed_sockets,
+            hook.marked_sockets,
+            hook.captured_packets,
+            hook.bypassed_packets,
+            hook.rejected_packets,
+            hook.unsupported_packets,
+            hook.missing_process,
+            hook.errors,
+        ];
+        for (field, count) in observed.into_iter().enumerate() {
+            assert!(
+                counters_before[index][field] <= count && count <= counters_after[index][field],
+                "{} field {field}: {} <= {count} <= {}",
+                hook.hook,
+                counters_before[index][field],
+                counters_after[index][field]
+            );
+        }
+    }
+    assert!(
+        diagnostic
+            .capture
+            .hooks
+            .iter()
+            .map(|hook| hook.captured_packets)
+            .sum::<u64>()
+            > 0
+    );
+    assert!(
+        diagnostic
+            .capture
+            .hooks
+            .iter()
+            .map(|hook| hook.marked_sockets)
+            .sum::<u64>()
+            > 0
+    );
+    assert_eq!(
+        routes_before,
+        routing_objects(),
+        "diagnostics changed kernel rules or routes"
+    );
+    assert_eq!(
+        workspace_before,
+        serde_json::to_value(service.workspace().await.unwrap()).unwrap()
+    );
+    assert_eq!(
+        rules_before,
+        serde_json::to_value(&service.current().config.proxy.routing).unwrap()
+    );
+    assert_eq!(
+        capture_controls(&before),
+        capture_controls(&service.linux_capture_status().await)
+    );
+}
 async fn run_supervisor(freeze: bool, dns: bool) {
     let root = std::env::var("HPS_TEST_CGROUP_ROOT").unwrap();
     let group =
@@ -361,6 +546,7 @@ async fn run_supervisor(freeze: bool, dns: bool) {
     );
     let boot_programs = ids().difference(&before).copied().collect::<BTreeSet<_>>();
     assert_eq!(boot_programs.len(), if dns { 16 } else { 8 });
+    assert_read_only_diagnostics(&service, &boot_programs).await;
     let expected_revision = if freeze {
         config.instance_name = "deferred-before-failure".into();
         let deferred = service.create_revision(input(&config, 1)).await.unwrap();
@@ -560,7 +746,7 @@ async fn run_supervisor(freeze: bool, dns: bool) {
     restarted.shutdown().await.unwrap();
     println!(
         "{}",
-        serde_json::json!({"scope":if dns{"daemon_dns_transparent_rollback"}else if freeze{"daemon_transparent_publication_failure"}else{"daemon_transparent_local_only"},"kernel":std::fs::read_to_string("/proc/sys/kernel/osrelease").unwrap().trim(),"client_pid":pid,"ipv4":true,"ipv6":true,"tcp":true,"udp":true,"actual_process_rule":true,"candidate_process_simulation_matches_actual_context":!freeze,"old_revision":1,"final_desired_revision":expected_revision,"old_connections_retained":4,"new_connections_rejected":if freeze{0}else{8},"business_bytes_up":if freeze{16}else{24},"business_bytes_down":if freeze{16}else{24},"dns_tcp_udp_queries":if dns{8}else{0},"dns_resolver_restored":dns,"owned_program_count":if dns{16}else{8},"policy_map_frozen":freeze,"deferred_desired_head_preserved":freeze,"failed_activation_recorded":freeze,"persistent_restart":true,"owned_programs_released":true,"full_transparent_datapath_ready":false})
+        serde_json::json!({"scope":if dns{"daemon_dns_transparent_rollback"}else if freeze{"daemon_transparent_publication_failure"}else{"daemon_transparent_local_only"},"kernel":std::fs::read_to_string("/proc/sys/kernel/osrelease").unwrap().trim(),"client_pid":pid,"ipv4":true,"ipv6":true,"tcp":true,"udp":true,"actual_process_rule":true,"candidate_process_simulation_matches_actual_context":!freeze,"old_revision":1,"final_desired_revision":expected_revision,"old_connections_retained":4,"new_connections_rejected":if freeze{0}else{8},"business_bytes_up":if freeze{16}else{24},"business_bytes_down":if freeze{16}else{24},"dns_tcp_udp_queries":if dns{8}else{0},"dns_resolver_restored":dns,"owned_program_count":if dns{16}else{8},"diagnostics_owned_ids_and_live_counters_verified":true,"diagnostics_kernel_rules_routes_and_control_unchanged":true,"policy_map_frozen":freeze,"deferred_desired_head_preserved":freeze,"failed_activation_recorded":freeze,"persistent_restart":true,"owned_programs_released":true,"full_transparent_datapath_ready":false})
     );
 }
 

@@ -14,6 +14,7 @@ pub mod runtime;
 mod selection;
 mod socks;
 mod socks_client;
+mod socks_udp;
 pub mod target;
 pub mod tls;
 mod traffic;

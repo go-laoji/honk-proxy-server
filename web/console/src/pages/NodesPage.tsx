@@ -542,7 +542,11 @@ export default function NodesPage() {
                     selected.provider_id ? (
                       <a
                         className="text-blue-600"
-                        href={`./provider-detail.html?id=${encodeURIComponent(selected.provider_id)}`}
+                        href={
+                          selected.kind === "subscription"
+                            ? "./providers.html"
+                            : `./provider-detail.html?id=${encodeURIComponent(selected.provider_id)}`
+                        }
                       >
                         {selected.provider_id}
                       </a>
@@ -563,7 +567,9 @@ export default function NodesPage() {
                   [
                     "有效期依据",
                     selected.expiry_basis ??
-                      "静态配置；未设置到期时间时不推断租约",
+                      (selected.kind === "subscription"
+                        ? "标准订阅未声明供应商有效期；快照接收时间不是到期依据"
+                        : "静态配置；未设置到期时间时不推断租约"),
                   ],
                   [
                     "上游凭据",
@@ -661,7 +667,9 @@ export default function NodesPage() {
               <p>
                 剩余：
                 {node.remaining_secs === null
-                  ? "未设到期"
+                  ? node.kind === "subscription"
+                    ? "供应商有效期未知"
+                    : "未设到期"
                   : `${node.remaining_secs} 秒`}
               </p>
               <p>

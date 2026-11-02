@@ -1,0 +1,16 @@
+{
+  "passed": true,
+  "target": "aarch64-unknown-linux-musl",
+  "source_revision": "862ddad624403e6f81bc994a7fe262ac04b7fb01",
+  "web_build_id": "7c94170ee16c7b9c2f8e0aa08c219e172c2a7b6bb4834c71b2cf96a2fb4316e1",
+  "checksums_verified": true,
+  "config_preserved": true,
+  "corrupt_reinstall_preserves_both_binaries": true,
+  "display_required": false,
+  "node_required": false,
+  "host_network_configuration_written": false,
+  "installed_binary_sha256": {
+    "hps": "e756d88d43ae11dcefc3da0b23d41f22343a4ed09267fd93d3e6b0dbc10bbd7c",
+    "hpsd": "d6d6d7bec8e0224cb6c8ab642a08cfaf2a05403acc808cf21936c63e0931f728"
+  }
+}

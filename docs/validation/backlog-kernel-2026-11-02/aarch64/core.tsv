@@ -1,0 +1,12 @@
+/target/aarch64/debug/deps/hps_platform-d5ef8c7d98e96bbd	transparent::tcp_tests::real_transparent_tcp_shared_engine
+/target/aarch64/debug/deps/hps_platform-d5ef8c7d98e96bbd	transparent::udp_tests::real_transparent_udp_shared_engine
+/target/aarch64/debug/deps/hps_platform-d5ef8c7d98e96bbd	transparent::generation_tests::real_flow_identity_and_generation_retirement
+/target/aarch64/debug/deps/hps_platform-d5ef8c7d98e96bbd	transparent::generation_tests::real_policy_publication_observes_only_complete_snapshots
+/target/aarch64/debug/deps/hps_platform-d5ef8c7d98e96bbd	transparent::inspection::real_legacy_capture_object_is_rejected_before_any_link
+/target/aarch64/debug/deps/hps_platform-d5ef8c7d98e96bbd	transparent::inspection::tests::real_scope_queries_detect_detached_hooks_and_keep_hot_metadata_independent
+/target/aarch64/debug/deps/transparent-bc819a41ebe951bd	real_transparent_supervisor
+/target/aarch64/debug/deps/transparent-bc819a41ebe951bd	real_transparent_publication_failure_restores_deferred_head
+/target/aarch64/debug/deps/transparent-bc819a41ebe951bd	real_transparent_dns_coexist_and_publication_rollback
+/target/aarch64/debug/deps/capture_monitor-dc2052eaf3fd75a9	real_capture_monitor_suspends_after_route_loss
+/target/aarch64/debug/deps/gateway-8a83655a36b76fcc	real_gateway_shared_engine
+/target/aarch64/debug/deps/linux_capture-c438801a93bc7b2c	real_hpsd_sigkill_recovery_preserves_foreign_rules
