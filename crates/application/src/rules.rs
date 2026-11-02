@@ -139,7 +139,13 @@ impl Supervisor {
                 .scope
                 .as_ref()
                 .is_some_and(|s| s.local_cgroup.is_some());
-        let udp = capture.ready && capture.scope.as_ref().is_some_and(|s| s.udp);
+        let udp = (capture.ready && capture.scope.as_ref().is_some_and(|s| s.udp))
+            || current
+                .engine
+                .status()
+                .inbounds
+                .iter()
+                .any(|i| i.protocol == "socks5" && i.running);
         Ok(RulesOverview {
             running_revision: current.revision,
             desired_revision: workspace.desired.revision.id,

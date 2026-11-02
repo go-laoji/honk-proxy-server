@@ -108,7 +108,13 @@ impl Supervisor {
             } else {
                 if input.lease_id.is_some()
                     || input.batch_id.is_some()
-                    || input.provider_id.is_some()
+                    || input.provider_id.as_ref().is_some_and(|id| {
+                        !input
+                            .id
+                            .strip_prefix("sub:")
+                            .and_then(|raw| raw.split_once(':'))
+                            .is_some_and(|(source, _)| *id == format!("subscription:{source}"))
+                    })
                 {
                     return Err(ApplicationError::Invalid);
                 }
@@ -118,6 +124,12 @@ impl Supervisor {
                     .upstreams
                     .iter()
                     .any(|n| n.id == input.id)
+                    && !current
+                        .config
+                        .subscriptions
+                        .iter()
+                        .filter_map(|s| s.snapshot.as_ref())
+                        .any(|s| s.nodes.iter().any(|n| n.id == input.id))
                 {
                     return Err(StorageError::NotFound.into());
                 }
@@ -158,7 +170,7 @@ fn validate_query(q: &NodeQuery) -> Result<(), ApplicationError> {
         || q.search.as_ref().is_some_and(|s| s.len() > 256)
         || q.provider
             .as_ref()
-            .is_some_and(|s| s != "@static" && !valid_id(s))
+            .is_some_and(|s| s != "@static" && !hps_config::valid_source_id(s))
         || q.group.as_ref().is_some_and(|s| !valid_id(s))
         || q.protocol
             .as_ref()
@@ -221,6 +233,14 @@ fn inventory(
         .upstreams
         .iter()
         .map(|n| (n, None))
+        .chain(
+            current
+                .config
+                .subscriptions
+                .iter()
+                .filter_map(|s| s.snapshot.as_ref())
+                .flat_map(|s| s.nodes.iter().map(|n| (n, None))),
+        )
         .chain(leases.iter().map(|l| (&l.upstream, Some(l))))
         .collect::<Vec<_>>();
     let mut summary = NodeSummary::default();
@@ -291,7 +311,9 @@ fn inventory(
                 }
             })
             || q.group.is_some()
-                && !requested_group.is_some_and(|g| group_matches(g, up, lease, &node.tags))
+                && !requested_group.is_some_and(|g| {
+                    group_matches(&current.config.proxy.selection, g, up, lease, &node.tags, 0)
+                })
             || q.protocol.as_ref().is_some_and(|p| *p != node.protocol)
             || q.capability.as_ref().is_some_and(|c| match c.as_str() {
                 "udp" => !node.udp_supported,
@@ -343,7 +365,9 @@ fn inventory(
                 .selection
                 .groups
                 .iter()
-                .filter(|g| group_matches(g, up, lease, &node.tags))
+                .filter(|g| {
+                    group_matches(&current.config.proxy.selection, g, up, lease, &node.tags, 0)
+                })
                 .map(|g| g.id.clone())
                 .collect();
             node
@@ -359,6 +383,7 @@ fn inventory(
             .providers
             .iter()
             .map(|p| p.id.clone())
+            .chain(current.config.subscriptions.iter().map(|s| s.source_id()))
             .collect(),
         groups: current
             .config
@@ -386,6 +411,11 @@ fn make_view(
 ) -> NodeView {
     let registry = current.engine.node_registry();
     let operation = registry.control(&up.id);
+    let subscription = up
+        .id
+        .strip_prefix("sub:")
+        .and_then(|raw| raw.split_once(':'))
+        .and_then(|(id, _)| current.config.subscriptions.iter().find(|s| s.id == id));
     let source = lease.and_then(|l| {
         current
             .config
@@ -417,6 +447,8 @@ fn make_view(
             "source_changed"
         }
         Some(_) => "active",
+        None if subscription.is_some_and(|s| !s.enabled) => "source_disabled",
+        None if subscription.is_some() => "subscription_snapshot",
         None => "static",
     }
     .to_owned();
@@ -427,7 +459,7 @@ fn make_view(
     if let Some(reason) = operation.state.blocking_reason() {
         reasons.push(reason.into());
     }
-    if !["active", "static"].contains(&lease_state.as_str()) {
+    if !["active", "static", "subscription_snapshot"].contains(&lease_state.as_str()) {
         reasons.push(lease_state.clone());
     }
     let minimum = current
@@ -494,22 +526,30 @@ fn make_view(
         .get(&up.id)
         .cloned()
         .unwrap_or_default();
-    if let Some(extra) = lease.and_then(|l| {
-        current
-            .config
-            .proxy
-            .selection
-            .provider_tags
-            .get(&l.provider_id)
-    }) {
+    let source_id = lease
+        .map(|l| l.provider_id.clone())
+        .or_else(|| subscription.map(|s| s.source_id()));
+    if let Some(extra) = source_id
+        .as_ref()
+        .and_then(|id| current.config.proxy.selection.provider_tags.get(id))
+    {
         tags.extend(extra.iter().cloned());
     }
     tags.sort();
     tags.dedup();
     NodeView {
         id: up.id.clone(),
-        kind: if lease.is_some() { "lease" } else { "static" }.into(),
-        provider_id: lease.map(|l| l.provider_id.clone()),
+        kind: if lease.is_some() {
+            "lease"
+        } else if subscription.is_some() {
+            "subscription"
+        } else {
+            "static"
+        }
+        .into(),
+        provider_id: lease
+            .map(|l| l.provider_id.clone())
+            .or_else(|| subscription.map(|s| s.source_id())),
         lease_id: lease.map(|l| l.id),
         batch_id: lease.map(|l| l.batch_id),
         protocol: format!("{:?}", up.protocol).to_lowercase(),
@@ -517,7 +557,9 @@ fn make_view(
         port: up.port,
         configuration_enabled: up.enabled,
         has_credentials: lease.map_or(up.credentials.is_some(), |l| l.has_credentials),
-        received_at: lease.map(|l| l.received_at),
+        received_at: lease
+            .map(|l| l.received_at)
+            .or_else(|| subscription.and_then(|s| s.snapshot.as_ref().map(|s| s.fetched_at_unix))),
         expires_at_unix: up.expires_at_unix,
         remaining_secs: remaining,
         expiry_basis: lease.map(|l| l.expiry_basis.clone()),
@@ -528,7 +570,7 @@ fn make_view(
         eligible: reasons.is_empty(),
         admission_reasons: reasons,
         tcp_supported: true,
-        udp_supported: false,
+        udp_supported: up.protocol == hps_config::ProxyProtocol::Socks5,
         health_state,
         health_results,
         groups: vec![],
@@ -537,14 +579,29 @@ fn make_view(
     }
 }
 fn group_matches(
+    selection: &hps_config::SelectionConfig,
     g: &GroupConfig,
     up: &UpstreamConfig,
     lease: Option<&NodeInventoryLease>,
     tags: &[String],
+    depth: usize,
 ) -> bool {
-    (g.include_all
-        || g.members.contains(&up.id)
-        || lease.is_some_and(|l| g.providers.contains(&l.provider_id)))
+    depth < 8
+        && (g.include_all
+            || g.members.contains(&up.id)
+            || g.groups
+                .iter()
+                .filter_map(|id| selection.groups.iter().find(|child| child.id == *id))
+                .any(|child| group_matches(selection, child, up, lease, tags, depth + 1))
+            || lease.is_some_and(|l| g.providers.contains(&l.provider_id))
+            || up
+                .id
+                .strip_prefix("sub:")
+                .and_then(|s| s.split_once(':'))
+                .is_some_and(|(id, _)| g.providers.contains(&format!("subscription:{id}"))))
+        && g.pinned_node
+            .as_ref()
+            .is_none_or(|pin| pin == &up.id || g.fallback_nodes.contains(&up.id))
         && g.tags.iter().all(|t| tags.contains(t))
         && (g.protocols.is_empty() || g.protocols.contains(&up.protocol))
 }
@@ -557,7 +614,9 @@ fn state_matches(state: &str, n: &NodeView) -> bool {
         "disabled" => !n.configuration_enabled || n.operation.state == NodeOperationState::Disabled,
         "draining" => n.operation.state == NodeOperationState::Draining,
         "deleted" => n.operation.state == NodeOperationState::Deleted,
-        "retired" => !["active", "static"].contains(&n.lease_state.as_str()),
+        "retired" => {
+            !["active", "static", "subscription_snapshot"].contains(&n.lease_state.as_str())
+        }
         s => n.health_state == s,
     }
 }

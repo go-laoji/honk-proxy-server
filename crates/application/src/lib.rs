@@ -11,6 +11,7 @@ mod nodes;
 mod observability;
 mod providers;
 mod rules;
+mod subscriptions;
 mod tasks;
 mod transparent;
 use arc_swap::ArcSwap;
@@ -651,6 +652,10 @@ impl Supervisor {
                 .map_err(|_| ApplicationError::Invalid)?
                 == serde_json::to_value(&target.config.providers)
                     .map_err(|_| ApplicationError::Invalid)?
+            && serde_json::to_value(&current.base_config.subscriptions)
+                .map_err(|_| ApplicationError::Invalid)?
+                == serde_json::to_value(&target.config.subscriptions)
+                    .map_err(|_| ApplicationError::Invalid)?
             && current
                 .health_profiles
                 .iter()
@@ -1256,6 +1261,13 @@ fn prepare_network(
             .iter()
             .filter(|p| p.enabled)
             .map(|p| (p.id.clone(), hps_provider::fingerprint(p)))
+            .chain(
+                config
+                    .subscriptions
+                    .iter()
+                    .filter(|s| s.enabled)
+                    .map(|s| (s.source_id(), hps_provider::subscription::fingerprint(s))),
+            )
             .collect(),
     );
     engine.set_provider_source_protocols(
