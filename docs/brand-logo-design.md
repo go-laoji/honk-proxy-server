@@ -3,7 +3,7 @@
 - 关联任务：[#28](https://github.com/go-laoji/honk-proxy-server/issues/28)
 - 分支：`feature/brand-logo-review`，使用 `git flow feature start brand-logo-review develop` 从 `develop` 创建。
 - 独立 worktree：`/private/tmp/hps-brand-logo-review-20261102`。
-- 状态：蓝色 Logo 概念图已完成；用户否定并行任务的青绿色方向，已同步改为冷蓝主题并补充[第二版组合预览](brand-visual-direction-v2.md)。Logo 本身仍等待用户确认后才能替换产品资源。
+- 状态：用户于 2026-11-03 明确确认蓝色 Logo，并接受第二版组合预览的 LIGHT 配色；已授权生成全套图标与产品接入。配色任务已收到以[第二版组合预览](brand-visual-direction-v2.md)为基准调整实际页面的要求。
 
 ## 第一版预览
 
@@ -27,9 +27,16 @@
 
 1. [x] 检查实际 worktree、分支基点及原始未跟踪文件，创建 Issue 和功能分支。
 2. [x] 使用内置 imagegen 生成概念评审图，检查文字、图形一致性与深浅色用途，新增保存到本设计目录。
-3. [ ] 提交提案材料并等待用户明确确认；此阶段不修改 `web/console`、`src-tauri` 或现有 Desktop bundle。
+3. [x] 提交提案材料并获得用户明确确认；确认前未修改产品图标。
 4. [ ] 用户确认后，制作确定性的 SVG 母版与单色托盘版本，统一下列产品入口。
 5. [ ] 验证所有页面、前端构建资源及 Tauri 图标打包，再将真实结果回复 Issue 并关闭。
+
+## 确认后的实施切片
+
+1. 建立可重复导出的 SVG 母版及生成脚本，制作透明标志、深色/单色标志、应用图标与全套 Web/Tauri PNG/ICO/ICNS/托盘资源，检查大图与小尺寸后独立提交。
+2. 接入共享导航、18 页 favicon 与 Tauri 托盘，保持无账号产品和系统网络保护边界，完成前端类型、格式及品牌资源检查后独立提交。
+3. 只读核对并行任务的最终配色提交，通过明确提交同步组合效果；验证独立构建目录的 Web 与 macOS Tauri app，检查包内图标、资源哈希和真实页面，不覆盖已安装应用或原始 target。
+4. 记录当前平台验证结果与产物位置，回复并关闭 #28。保持功能分支，不主动 push/finish；跨平台图标已生成不等于跨平台原生安装包已验收。
 
 ## 确认后的替换范围
 
