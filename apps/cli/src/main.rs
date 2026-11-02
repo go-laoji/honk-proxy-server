@@ -34,6 +34,8 @@ enum Output {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Print this CLI build metadata without connecting to a daemon.
+    BuildInfo,
     /// Explicitly manage an OS service on this computer; never sent to a remote daemon.
     Service {
         #[arg(long, required = true)]
@@ -696,6 +698,11 @@ fn client_error(error: ClientError) -> (u8, String) {
 
 async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
     // Local configuration commands do not require a reachable daemon.
+    if matches!(args.command, Command::BuildInfo) {
+        return Ok(
+            serde_json::json!({"format_version":1,"binary":"hps","architecture":std::env::consts::ARCH,"platform":std::env::consts::OS,"version":{"service":"honk-proxy-server","version":env!("CARGO_PKG_VERSION"),"api_version":hps_domain::API_VERSION,"web_build_id":null}}),
+        );
+    }
     match &args.command {
         Command::Profile { command } => return local::profiles(command),
         Command::Service { id, command, .. } => {
@@ -1596,6 +1603,7 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
             Ok(serde_json::json!({"url": url.as_str()}))
         }
         Command::Init { .. }
+        | Command::BuildInfo
         | Command::Profile { .. }
         | Command::Service { .. }
         | Command::Linux {
