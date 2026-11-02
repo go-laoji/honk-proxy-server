@@ -112,14 +112,14 @@ impl Supervisor {
         query: ObservationQuery,
     ) -> Result<ObservationOverview, ApplicationError> {
         if !(60..=3600).contains(&query.window_secs) {
-            return Err(ApplicationError::TaskInput);
+            return Err(ApplicationError::ObservationInput);
         }
         let permit = self
             .observability
             .slots
             .clone()
             .try_acquire_owned()
-            .map_err(|_| ApplicationError::TaskCapacity)?;
+            .map_err(|_| ApplicationError::ObservationCapacity)?;
         let service = self.clone();
         tokio::task::spawn_blocking(move || {
             let _permit = permit;

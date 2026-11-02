@@ -29,6 +29,10 @@ pub use tasks::{RequestContext, current_request_id, with_request_context};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ApplicationError {
+    #[error("invalid observation window; choose 60 to 3600 seconds")]
+    ObservationInput,
+    #[error("too many concurrent observation snapshots")]
+    ObservationCapacity,
     #[error("invalid background task or event query")]
     TaskInput,
     #[error("background task observation instance changed; request a new snapshot")]

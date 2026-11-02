@@ -9,6 +9,7 @@ import {
   Waypoints,
 } from "lucide-react";
 import { Badge } from "../components/ui";
+import ObservationPanel from "../components/ObservationPanel";
 import { getJson, postJson } from "../platform";
 import { candidateReasons, type SelectionDecision } from "../selection";
 
@@ -822,6 +823,7 @@ export default function RulesPage({
           </div>
         )}
       </section>
+      <ObservationPanel mode="rules" />
     </div>
   );
 }

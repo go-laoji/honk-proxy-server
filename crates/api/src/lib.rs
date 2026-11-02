@@ -312,6 +312,13 @@ async fn config(State(state): State<Arc<AppState>>) -> Json<DaemonConfig> {
 
 fn application_error(error: ApplicationError) -> (StatusCode, Json<ApiError>) {
     let (status, code) = match &error {
+        ApplicationError::ObservationInput => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "observation_window_invalid",
+        ),
+        ApplicationError::ObservationCapacity => {
+            (StatusCode::TOO_MANY_REQUESTS, "observation_capacity")
+        }
         ApplicationError::TaskInput => (StatusCode::UNPROCESSABLE_ENTITY, "task_event_input"),
         ApplicationError::TaskEpoch => (StatusCode::CONFLICT, "task_instance_changed"),
         ApplicationError::TaskUnavailable => (StatusCode::NOT_FOUND, "task_not_retained"),
