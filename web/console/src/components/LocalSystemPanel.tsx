@@ -22,7 +22,11 @@ export default function LocalSystemPanel({
   const [socks, setSocks] = useState("");
   const refresh = useCallback(async () => {
     try {
-      setContext(await native<LocalContext>("local_context"));
+      const current = await native<LocalContext>("local_context");
+      setContext(current);
+      setBinary((value) => value || current.bundled_daemon || "");
+      if (current.endpoint === "http://127.0.0.1:17900/")
+        setConfig((value) => value || current.bundled_config || "");
       setLoadError("");
     } catch (e) {
       setLoadError(String(e));

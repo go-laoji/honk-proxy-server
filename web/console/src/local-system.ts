@@ -13,6 +13,8 @@ export interface Profiles {
 }
 export interface LocalContext {
   network_changes_disabled: boolean;
+  bundled_daemon: string | null;
+  bundled_config: string | null;
   endpoint: string;
   profile_id: string | null;
   local: boolean;

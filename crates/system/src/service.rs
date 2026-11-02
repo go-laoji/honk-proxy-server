@@ -196,6 +196,28 @@ fn check_scope(scope: Scope) -> Result<()> {
     Ok(())
 }
 
+fn endpoint_matches(config: &hps_config::DaemonConfig, endpoint: &url::Url) -> bool {
+    let listen = config.management_listen;
+    let host_matches = match endpoint.host() {
+        Some(url::Host::Ipv4(ip)) => {
+            ip.is_loopback()
+                && listen.is_ipv4()
+                && (listen.ip().is_unspecified() || listen.ip() == std::net::IpAddr::V4(ip))
+        }
+        Some(url::Host::Ipv6(ip)) => {
+            ip.is_loopback()
+                && listen.is_ipv6()
+                && (listen.ip().is_unspecified() || listen.ip() == std::net::IpAddr::V6(ip))
+        }
+        Some(url::Host::Domain("localhost")) => {
+            listen.ip().is_loopback() || listen.ip().is_unspecified()
+        }
+        _ => false,
+    };
+    host_matches
+        && endpoint.port_or_known_default() == Some(listen.port())
+        && config.management_tls.is_some() == (endpoint.scheme() == "https")
+}
 pub struct Manager {
     root: PathBuf,
 }
@@ -256,10 +278,7 @@ impl Manager {
             return Err("local daemon requires a root endpoint".into());
         }
         let config = hps_config::DaemonConfig::load(&input.config).map_err(|e| e.to_string())?;
-        if !config.management_listen.ip().is_loopback()
-            || endpoint.port_or_known_default() != Some(config.management_listen.port())
-            || (config.management_tls.is_some() != (endpoint.scheme() == "https"))
-        {
+        if !endpoint_matches(&config, &endpoint) {
             return Err("service endpoint does not match loopback management configuration".into());
         }
         if input.scope == Scope::User
@@ -530,6 +549,31 @@ impl Manager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn installation_allows_public_bind_with_local_control_but_not_a_different_local_address() {
+        let mut config = hps_config::DaemonConfig::default();
+        let local = url::Url::parse("http://127.0.0.1:17900/").unwrap();
+        assert!(endpoint_matches(&config, &local));
+        assert!(!endpoint_matches(
+            &config,
+            &url::Url::parse("http://127.0.0.2:17900/").unwrap()
+        ));
+        config.management_listen = "0.0.0.0:17900".parse().unwrap();
+        assert!(endpoint_matches(&config, &local));
+        assert!(!endpoint_matches(
+            &config,
+            &url::Url::parse("http://[::1]:17900/").unwrap()
+        ));
+        config.management_listen = "[::]:17900".parse().unwrap();
+        assert!(endpoint_matches(
+            &config,
+            &url::Url::parse("http://[::1]:17900/").unwrap()
+        ));
+        assert!(!endpoint_matches(
+            &config,
+            &url::Url::parse("http://192.0.2.1:17900/").unwrap()
+        ));
+    }
     #[test]
     fn systemd_arguments_do_not_expand_paths_into_directives_or_variables() {
         assert_eq!(
