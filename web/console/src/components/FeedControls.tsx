@@ -29,7 +29,15 @@ export default function FeedControls({
             {automatic ? "暂停实时订阅" : "恢复实时订阅"}
           </button>
           <button className="btn" onClick={reconnect}>
-            <RefreshCw size={15} />
+            <span
+              className="action-icon inline-flex"
+              data-spinning={
+                state.state === "connecting" || state.state === "reconnecting"
+              }
+              aria-hidden="true"
+            >
+              <RefreshCw size={15} />
+            </span>
             补取 / 重新连接
           </button>
         </div>

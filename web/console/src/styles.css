@@ -268,3 +268,52 @@
     color: var(--color-amber-300);
   }
 }
+
+/* Motion belongs to icon wrappers; service state stays in text and badges. */
+.nav-icon,
+.stat-icon,
+.brand-mark,
+.theme-icon,
+.action-icon {
+  transition: transform 180ms ease-out;
+}
+.action-icon[data-spinning="true"] {
+  animation: icon-spin 900ms linear infinite;
+}
+@keyframes icon-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (hover: hover) {
+  .nav-link:hover .nav-icon,
+  .nav-link:focus-visible .nav-icon {
+    transform: translateY(-1px) rotate(-7deg);
+  }
+  .stat-card:hover .stat-icon,
+  .brand-link:hover .brand-mark {
+    transform: translateY(-2px) rotate(-5deg);
+  }
+  .icon-button:hover .theme-icon {
+    transform: rotate(14deg);
+  }
+  .btn:hover .action-icon[data-spinning="false"] {
+    transform: rotate(-20deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+  .nav-icon,
+  .stat-icon,
+  .brand-mark,
+  .theme-icon,
+  .action-icon {
+    transform: none !important;
+  }
+}

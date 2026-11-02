@@ -445,7 +445,13 @@ export default function TasksPage() {
       )}
       {loading && feed.state.state !== "error" && (
         <p className="muted flex items-center gap-2 text-sm">
-          <RefreshCw size={14} className="animate-spin" />
+          <span
+            className="action-icon inline-flex"
+            data-spinning="true"
+            aria-hidden="true"
+          >
+            <RefreshCw size={14} />
+          </span>
           正在读取任务…
         </p>
       )}
