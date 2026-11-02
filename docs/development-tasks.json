@@ -49,7 +49,7 @@
       "acceptance": "真实Linux上的自有eBPF程序挂载、map交互与清理证据；预检不等于接管；透明TCP/UDP出口由T04/T15联合验收。非Linux如实报告；无honk依赖、对象或fork。",
       "issue": 8,
       "url": "https://github.com/go-laoji/honk-proxy-server/issues/8",
-      "status": "in_progress"
+      "status": "completed"
     },
     {
       "id": "T04",

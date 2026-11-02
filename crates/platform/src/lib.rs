@@ -1,5 +1,5 @@
-//! Read-only observations for our own TC/cgroup prototype. They never prove
-//! that a program can pass the verifier, attach, intercept or forward traffic.
+//! Read-only prerequisites plus a separately invoked, owned Linux eBPF lifecycle.
+//! Prerequisite observations never prove verifier, attach or forwarding success.
 use hps_domain::{CheckStatus, EnvironmentCheck, LinuxPreflight};
 use std::io::{self, Read};
 
@@ -22,6 +22,7 @@ pub fn preflight() -> LinuxPreflight {
         collect(&System)
     } else {
         LinuxPreflight {
+            loader_compiled: false,
             platform: std::env::consts::OS.into(),
             kernel_release: None,
             checks: vec![check(
@@ -186,6 +187,7 @@ fn collect(source: &impl Source) -> LinuxPreflight {
         "只读预检未加载/附加 eBPF，未验证原始目标、hook 冲突或代理出口",
     ));
     LinuxPreflight {
+        loader_compiled: cfg!(target_os = "linux"),
         platform: "linux".into(),
         kernel_release: release,
         checks,
@@ -247,5 +249,38 @@ mod tests {
         let result = collect(&Fixture(HashMap::new()));
         assert!(result.checks.iter().all(|c| c.status != CheckStatus::Pass));
         assert!(!result.datapath_ready);
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub mod ebpf;
+#[cfg(not(target_os = "linux"))]
+pub mod ebpf {
+    use std::{net::SocketAddr, path::Path};
+    pub fn self_test(
+        _: &Path,
+        _: &Path,
+        _: &Path,
+    ) -> Result<hps_domain::LinuxEbpfSelfTest, String> {
+        Err("eBPF self-test requires Linux; no hooks were loaded".into())
+    }
+    pub fn self_test_child(_: &Path, _: SocketAddr, _: bool) -> Result<(), String> {
+        Err("eBPF test helper requires Linux".into())
+    }
+}
+
+#[cfg(all(test, not(target_os = "linux")))]
+mod unsupported_ebpf_tests {
+    #[test]
+    fn local_self_test_never_claims_success_on_other_platforms() {
+        assert!(
+            super::ebpf::self_test(
+                std::path::Path::new("absent"),
+                std::path::Path::new("absent"),
+                std::path::Path::new("absent")
+            )
+            .unwrap_err()
+            .contains("requires Linux")
+        );
     }
 }

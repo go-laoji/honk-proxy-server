@@ -342,3 +342,16 @@ export interface HealthOverview {
   budget: number;
   tasks: HealthTask[];
 }
+
+export interface LinuxPreflight {
+  loader_compiled: boolean;
+  platform: string;
+  kernel_release: string | null;
+  checks: {
+    id: string;
+    status: "pass" | "fail" | "unknown" | "unsupported";
+    detail: string;
+  }[];
+  datapath_ready: boolean;
+  scope: string;
+}

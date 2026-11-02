@@ -115,6 +115,8 @@ pub struct EnvironmentCheck {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LinuxPreflight {
+    #[serde(default)]
+    pub loader_compiled: bool,
     pub platform: String,
     pub kernel_release: Option<String>,
     pub checks: Vec<EnvironmentCheck>,
@@ -506,4 +508,42 @@ pub struct TrafficFeedback {
     pub error_code: String,
     pub invalidated: bool,
     pub observed_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EbpfHookStats {
+    pub family: String,
+    pub connects: u64,
+    pub allowed: u64,
+    pub denied: u64,
+    pub errors: u64,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EbpfFlowObservation {
+    pub socket_cookie: u64,
+    pub process_id: u32,
+    pub thread_id: u32,
+    pub cgroup_id: u64,
+    pub family: String,
+    pub destination: String,
+    pub port: u16,
+    pub protocol: u32,
+    pub command: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LinuxEbpfSelfTest {
+    pub scope: String,
+    pub kernel_release: String,
+    pub abi_version: u32,
+    pub object_sha256: String,
+    pub programs: Vec<u32>,
+    pub maps: Vec<u32>,
+    pub stats: Vec<EbpfHookStats>,
+    pub observations: Vec<EbpfFlowObservation>,
+    pub map_update_enforced: bool,
+    pub connectivity_restored_after_detach: bool,
+    pub programs_removed: bool,
+    pub maps_removed: bool,
+    pub cgroup_removed: bool,
+    pub datapath_ready: bool,
 }

@@ -212,6 +212,8 @@
 
 对应 `linux.html`，API 域为 capabilities/linux/status。CLI 对应 linux。
 
+T03 的自研 hook/ABI/loader 已在两个实际内核完成隔离验证，见 [eBPF 验收](validation/linux-ebpf-core-2026-11-01.md)。生产透明接管与持久恢复由 T15 接续。
+
 | 编号 | 优先级 | 功能 | 验收要点 |
 | --- | --- | --- | --- |
 | LINUX-01 | P0 | 环境预检 | 内核、操作系统权限、BTF、bpffs、cgroup、hooks、接口与冲突逐项报告 |

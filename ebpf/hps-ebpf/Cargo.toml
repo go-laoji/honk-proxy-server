@@ -1,0 +1,8 @@
+[package]
+name = "hps-ebpf"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+aya-ebpf = "0.3"
+hps-ebpf-abi = {path = "../../crates/ebpf-abi"}

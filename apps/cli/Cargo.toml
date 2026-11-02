@@ -10,6 +10,7 @@ path = "src/main.rs"
 
 [dependencies]
 hps-client.workspace = true
+hps-platform.workspace = true
 hps-config.workspace = true
 hps-domain.workspace = true
 clap.workspace = true

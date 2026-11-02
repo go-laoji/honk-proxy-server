@@ -154,6 +154,24 @@ enum ConfigCommand {
 #[derive(Subcommand)]
 enum LinuxCommand {
     Preflight,
+    #[command(
+        about = "Run a local Linux eBPF self-test in a new cgroup; does not use --endpoint or enable proxy capture"
+    )]
+    SelfTest {
+        #[arg(long)]
+        object: PathBuf,
+        #[arg(long, default_value = "/sys/fs/cgroup")]
+        cgroup_root: PathBuf,
+    },
+    #[command(hide = true)]
+    SelfTestChild {
+        #[arg(long)]
+        cgroup: PathBuf,
+        #[arg(long)]
+        target: std::net::SocketAddr,
+        #[arg(long)]
+        expect_denied: bool,
+    },
 }
 #[derive(Subcommand)]
 enum InboundCommand {
@@ -280,6 +298,32 @@ fn client_error(error: ClientError) -> (u8, String) {
 async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
     // Local configuration commands do not require a reachable daemon.
     match &args.command {
+        Command::Linux {
+            command:
+                LinuxCommand::SelfTest {
+                    object,
+                    cgroup_root,
+                },
+        } => {
+            let executable = std::env::current_exe().map_err(|e| (2, e.to_string()))?;
+            return serde_json::to_value(
+                hps_platform::ebpf::self_test(object, cgroup_root, &executable)
+                    .map_err(|e| (5, e))?,
+            )
+            .map_err(|e| (5, e.to_string()));
+        }
+        Command::Linux {
+            command:
+                LinuxCommand::SelfTestChild {
+                    cgroup,
+                    target,
+                    expect_denied,
+                },
+        } => {
+            hps_platform::ebpf::self_test_child(cgroup, *target, *expect_denied)
+                .map_err(|e| (5, e))?;
+            return Ok(serde_json::json!({"test_helper":true,"expected_denied":expect_denied}));
+        }
         Command::Init { config } => {
             let body =
                 toml::to_string_pretty(&DaemonConfig::default()).map_err(|e| (2, e.to_string()))?;
@@ -626,7 +670,10 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
             }
             Ok(serde_json::json!({"url": url.as_str()}))
         }
-        Command::Init { .. } => unreachable!(),
+        Command::Init { .. }
+        | Command::Linux {
+            command: LinuxCommand::SelfTest { .. } | LinuxCommand::SelfTestChild { .. },
+        } => unreachable!(),
     };
     value.map_err(|e| (5, e.to_string()))
 }

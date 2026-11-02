@@ -1,0 +1,12 @@
+[package]
+name = "hps-ebpf-abi"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[features]
+default = []
+userspace = ["dep:aya"]
+
+[dependencies]
+aya = { version = "0.14", optional = true }
