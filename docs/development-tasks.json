@@ -424,9 +424,9 @@
       "acceptance": "备份不直接复制写库；桌面自启和Daemon开机启动分离；高级数据面变更单独验收。",
       "issue": 25,
       "url": "https://github.com/go-laoji/honk-proxy-server/issues/25",
-      "status": "in_progress",
+      "status": "completed",
       "implementation_plan": "docs/backup-desktop-diagnostics-plan.md",
-      "implementation_notes": "SQLite Backup API / 离线维护锁恢复、Desktop 托盘通知自启、只读 Linux topology 已交付候选；Mac 锁屏未做原生 UI/OS通知和登录自启，统一集成验收待根代理完成。"
+      "implementation_notes": "SQLite Backup API/封存输入/严格schema/离线锁恢复、Desktop托盘通知登录自启适配及Linux只读诊断实现完成；最终Mac227/Native11、ARM234、x86用户态233及同ELF双内核补验、标准52真实内核用例通过。Mac原生窗口/OS通知/登录项未实测。按用户最新授权先合并，x86静态release额外发行验收仍在进行，不作为已通过结论。"
     },
     {
       "id": "T21",
