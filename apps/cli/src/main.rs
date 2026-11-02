@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use hps_client::{ClientError, HpsClient};
 use hps_config::DaemonConfig;
 use std::{io::Write, path::PathBuf, process::ExitCode, time::Duration};
+mod local;
 mod tasks;
 
 #[derive(Parser)]
@@ -11,13 +12,10 @@ mod tasks;
     about = "Manage a local or remote honk proxy daemon without a desktop"
 )]
 struct Args {
-    #[arg(
-        long,
-        global = true,
-        default_value = "http://127.0.0.1:17900",
-        env = "HPS_ENDPOINT"
-    )]
-    endpoint: String,
+    #[arg(long, global = true, env = "HPS_ENDPOINT")]
+    endpoint: Option<String>,
+    #[arg(long, global = true, conflicts_with = "endpoint")]
+    profile: Option<String>,
     #[arg(long = "ca-cert", global = true, env = "HPS_CA_CERT")]
     ca_certificate: Option<PathBuf>,
     #[arg(long, global = true, default_value_t = 10, value_parser = clap::value_parser!(u64).range(1..=300))]
@@ -36,6 +34,19 @@ enum Output {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Explicitly manage an OS service on this computer; never sent to a remote daemon.
+    Service {
+        #[arg(long, required = true)]
+        local: bool,
+        #[arg(long, default_value = "local")]
+        id: String,
+        #[command(subcommand)]
+        command: local::ServiceCommand,
+    },
+    Profile {
+        #[command(subcommand)]
+        command: local::ProfileCommand,
+    },
     Task {
         #[command(subcommand)]
         command: tasks::TaskCommand,
@@ -686,6 +697,13 @@ fn client_error(error: ClientError) -> (u8, String) {
 async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
     // Local configuration commands do not require a reachable daemon.
     match &args.command {
+        Command::Profile { command } => return local::profiles(command),
+        Command::Service { id, command, .. } => {
+            if args.endpoint.is_some() || args.profile.is_some() {
+                return Err((2,"service commands act on this computer; omit --endpoint and --profile, pass --local explicitly".into()));
+            }
+            return local::service(id, command);
+        }
         Command::Linux {
             command:
                 LinuxCommand::SelfTest {
@@ -732,7 +750,35 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
         }
         _ => {}
     }
-    let certificate = if let Some(path) = &args.ca_certificate {
+    let selected = if args.endpoint.is_none() {
+        let profiles =
+            hps_system::profiles::Store::new(&hps_system::state_dir().map_err(|e| (2, e))?)
+                .load()
+                .map_err(|e| (2, e))?;
+        if let Some(id) = &args.profile {
+            Some(
+                profiles
+                    .profiles
+                    .into_iter()
+                    .find(|p| &p.id == id)
+                    .ok_or((2, "profile not found".into()))?,
+            )
+        } else {
+            profiles.active().cloned()
+        }
+    } else {
+        None
+    };
+    let address = args
+        .endpoint
+        .as_deref()
+        .or_else(|| selected.as_ref().map(|p| p.endpoint.as_str()))
+        .unwrap_or("http://127.0.0.1:17900");
+    let ca_path = args
+        .ca_certificate
+        .as_ref()
+        .or_else(|| selected.as_ref().and_then(|p| p.ca_certificate.as_ref()));
+    let certificate = if let Some(path) = ca_path {
         let metadata = std::fs::metadata(path).map_err(|error| (2, error.to_string()))?;
         if !metadata.is_file() || metadata.len() > 1024 * 1024 {
             return Err((
@@ -745,7 +791,7 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
         None
     };
     let client = HpsClient::with_ca(
-        &args.endpoint,
+        address,
         Duration::from_secs(args.timeout),
         certificate.as_deref(),
     )
@@ -1550,6 +1596,8 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
             Ok(serde_json::json!({"url": url.as_str()}))
         }
         Command::Init { .. }
+        | Command::Profile { .. }
+        | Command::Service { .. }
         | Command::Linux {
             command: LinuxCommand::SelfTest { .. } | LinuxCommand::SelfTestChild { .. },
         } => unreachable!(),

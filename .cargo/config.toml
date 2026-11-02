@@ -1,0 +1,4 @@
+# Development and test processes must not change this Mac's active network.
+# Installed applications do not inherit Cargo's process environment.
+[env]
+HPS_FORBID_HOST_NETWORK_CHANGES = { value = "1", force = true }

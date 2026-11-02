@@ -114,6 +114,19 @@ fn current(
         })
 }
 impl NativeEvents {
+    pub(super) fn validate_context(
+        &self,
+        label: &str,
+        context: SubscriptionContext,
+    ) -> Result<(), NativeApiError> {
+        if self.context(label)? != context {
+            return Err(error(
+                "native_target_changed",
+                "target or document changed; reload before making this request",
+            ));
+        }
+        Ok(())
+    }
     fn context(&self, label: &str) -> Result<SubscriptionContext, NativeApiError> {
         let mut inner = self
             .inner
@@ -400,8 +413,9 @@ pub(super) async fn events_subscribe(
         .lock()
         .map_err(|_| error("native_event_state", "connection state unavailable"))?
         .clone();
-    let client =
-        HpsClient::new(&endpoint, Duration::from_secs(10)).map_err(NativeApiError::from)?;
+    let client = endpoint
+        .client(Duration::from_secs(10))
+        .map_err(NativeApiError::from)?;
     state.start(window.label().into(), request, channel, client)
 }
 #[tauri::command]

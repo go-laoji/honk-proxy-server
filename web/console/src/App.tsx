@@ -237,7 +237,7 @@ export default function App() {
             </div>
           )}
           {current.id === "index" ? (
-            <ConnectPage data={service.data} />
+            <ConnectPage data={service.data} refreshService={service.refresh} />
           ) : service.loading && !service.data ? (
             <div className="panel flex items-center justify-center gap-3 p-16 text-sm text-slate-500">
               <RefreshCw size={18} className="animate-spin" />
@@ -303,7 +303,10 @@ export default function App() {
                 <EventsPage key={service.data.endpoint} />
               </Suspense>
             ) : current.id === "settings" ? (
-              <SettingsPage data={service.data} />
+              <SettingsPage
+                data={service.data}
+                refreshService={service.refresh}
+              />
             ) : current.id === "linux" ? (
               <LinuxPage data={service.data} refreshService={service.refresh} />
             ) : current.id === "inbounds" ? (

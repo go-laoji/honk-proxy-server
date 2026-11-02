@@ -9,6 +9,7 @@ name = "hps"
 path = "src/main.rs"
 
 [dependencies]
+hps-system.workspace = true
 hps-dns.workspace = true
 hps-net.workspace = true
 hps-client.workspace = true

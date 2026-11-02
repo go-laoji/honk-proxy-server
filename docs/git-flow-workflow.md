@@ -42,3 +42,17 @@
 已回到 `feature/linux-transparent`，通过 `8464c56` 同步 develop。同步前后该活动分支的已提交源码内容树完全一致；6 个 Linux UDP 验收工作文件已精确恢复，21 个用户原始未跟踪文件逐个校验未变。`main` 未改动，没有 push、远端删除或手动批量删分支。标准 finish 只删除了各次已合并的本地 feature 引用，每个原 tip 仍作为对应 merge 的第二父节点保留。
 
 完整 SHA、实时 Issue 状态和校验摘要见 [收尾记录](validation/git-flow-finishes-2026-11-02.json)。后续完成 Linux 联合门槛后，继续按 routing-rules → node-management → connection-observation → tasks-events → linux-transparent 的顺序检查和收尾。
+
+## 联合验收完成后的第二批
+
+#16/#18/#20 在 52 项实际内核案例及 CLI/MPA 联合验收后已回复并关闭。随后按上述顺序逐个执行 `git flow feature finish`：
+
+| 顺序 | Feature | 原 tip | develop 合并提交 |
+| --- | --- | --- | --- |
+| 12 | routing-rules | 4c4216f | 7f749d5 |
+| 13 | node-management | acec18a | 4b01cee |
+| 14 | connection-observation | 26d5916 | d2add0d |
+| 15 | tasks-events | 1b6540b | 67fa524 |
+| 16 | linux-transparent | 4680e2c | a197cbe |
+
+每个合并均有两个父提交，内容树等于相应原 feature tip，原 tip 作为第二父提交保留。`main` 仍为 `18d5899`，没有 push 或远端删除，原始未跟踪文件未变。当前从 develop 开启 `feature/desktop-service` 推进 #21；上述第一批 retained 列表作为历史快照保留在 JSON 的 `retained_at_first_batch`，当前待 finish 列表为空。

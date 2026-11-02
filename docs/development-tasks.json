@@ -336,7 +336,7 @@
       "acceptance": "打包后导航/原生transport/目标切换；窗口关闭代理仍由系统服务运行；不以root运行WebView；远端操作不误改本机代理。",
       "issue": 21,
       "url": "https://github.com/go-laoji/honk-proxy-server/issues/21",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "T17",

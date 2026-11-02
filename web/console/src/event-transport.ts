@@ -1,4 +1,4 @@
-import { endpoint, isDesktop, native } from "./platform";
+import { endpoint, isDesktop, native, nativeRequestContext } from "./platform";
 import {
   cursorParts,
   queryString,
@@ -95,7 +95,7 @@ export function watchEvents(input: EventQuery, handlers: Handlers): () => void {
         const subscriptionSerial = ++serial;
         const id = crypto.randomUUID();
         const identity: Identity = {
-          context: await native<NativeContext>("events_context"),
+          context: await nativeRequestContext(),
           serial: subscriptionSerial,
           id,
         };

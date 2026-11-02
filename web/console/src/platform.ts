@@ -1,4 +1,12 @@
 export const isDesktop = "__TAURI_INTERNALS__" in window;
+export type NativeRequestContext = {
+  target_generation: number;
+  document_generation: number;
+};
+let documentContext: Promise<NativeRequestContext> | undefined;
+export function nativeRequestContext(): Promise<NativeRequestContext> {
+  return (documentContext ??= native<NativeRequestContext>("events_context"));
+}
 export class ApiRequestError extends Error {
   constructor(
     message: string,
@@ -16,7 +24,22 @@ export async function native<T>(
 ): Promise<T> {
   const { invoke } = await import("@tauri-apps/api/core");
   try {
-    return await invoke<T>(command, args);
+    const guarded = [
+      "api_get",
+      "api_post",
+      "save_config_export",
+      "set_endpoint",
+      "profiles_change",
+      "local_context",
+      "local_service_install",
+      "local_service_control",
+      "local_proxy_apply",
+      "local_proxy_restore",
+    ].includes(command);
+    return await invoke<T>(
+      command,
+      guarded ? { ...args, context: await nativeRequestContext() } : args,
+    );
   } catch (cause) {
     if (cause && typeof cause === "object" && "message" in cause) {
       throw new ApiRequestError(

@@ -4,8 +4,15 @@ import { isDesktop } from "../platform";
 import { getJson } from "../platform";
 import { useEffect, useState } from "react";
 import type { ConfigWorkspace } from "../types";
+import LocalSystemPanel from "../components/LocalSystemPanel";
 
-export default function SettingsPage({ data }: { data: ServiceData }) {
+export default function SettingsPage({
+  data,
+  refreshService,
+}: {
+  data: ServiceData;
+  refreshService: () => Promise<void>;
+}) {
   const [workspace, setWorkspace] = useState<ConfigWorkspace | null>(null);
   useEffect(() => {
     const controller = new AbortController();
@@ -16,6 +23,11 @@ export default function SettingsPage({ data }: { data: ServiceData }) {
   }, []);
   return (
     <div className="grid gap-6 lg:grid-cols-2">
+      {isDesktop && (
+        <div className="lg:col-span-2">
+          <LocalSystemPanel data={data} refreshService={refreshService} />
+        </div>
+      )}
       <section className="panel">
         <h2 className="border-b border-slate-100 p-5 font-semibold dark:border-slate-800">
           当前运行配置

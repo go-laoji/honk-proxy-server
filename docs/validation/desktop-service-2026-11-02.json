@@ -1,0 +1,70 @@
+{
+  "date": "2026-11-02",
+  "issue": 21,
+  "state": "completed_with_explicit_os_write_validation_boundary",
+  "implementation_commit": "5a73458",
+  "macos_network_guard_commits": [
+    "6e4515f",
+    "7bb51cb",
+    "d8371f3"
+  ],
+  "macos_system_tests": 9,
+  "native_bridge_tests": 9,
+  "linux_system_tests": 5,
+  "browser_e2e": 18,
+  "macos_and_linux_clippy_passed": true,
+  "actual_service_managers": [
+    {
+      "platform": "Darwin",
+      "scope": "user",
+      "actual_proxy_payload": true,
+      "wrong_target_and_foreign_unit_preserved": true,
+      "sigkill_os_restart": true,
+      "uninstall_and_reinstall_preserve_data": true,
+      "manager": "launchd",
+      "passed": true
+    },
+    {
+      "platform": "Linux",
+      "scope": "system",
+      "actual_proxy_payload": true,
+      "wrong_target_and_foreign_unit_preserved": true,
+      "sigkill_os_restart": true,
+      "uninstall_and_reinstall_preserve_data": true,
+      "manager": "systemd",
+      "passed": true
+    }
+  ],
+  "previous_native_checks": {
+    "source": "prior session tool observations at fae75e9",
+    "mpa_navigation": true,
+    "json_get_post": true,
+    "native_sse_live": true,
+    "local_start_stop": true,
+    "forwarded_remote_cannot_modify_local_os": true,
+    "window_exit_service_survives": true
+  },
+  "current_safe_bundle_window": "actual settings/navigation/JSON read verified; development network-change guard visible and both write buttons disabled",
+  "host_network_changes_disabled": true,
+  "macos_actual_persistent_proxy_change_verified": false,
+  "invalidated_evidence": [
+    "real_systemconfiguration_private_preferences_commit_and_restore"
+  ],
+  "safe_proxy_evidence": [
+    "transaction restore, partial failure and external ownership conflict",
+    "actual read-only OS preferences",
+    "SDK private-session staging: disk bytes, other service, DNS and IPv4 preserved",
+    "test builds and development processes reject persistent writes"
+  ],
+  "no_project_authentication": true,
+  "current_safe_bundle_web_build_id": "dce029a9c028c30145f3d8938c6982c8a646bb60b820dffc75cf9c1929496b77",
+  "safe_application_exit": {
+    "owned_application_exit_signal": "SIGTERM",
+    "service_pid_unchanged": true,
+    "management_ready": true,
+    "proxy_ready": true,
+    "actual_proxy_payload_after_application_exit": true,
+    "host_network_changes_disabled": true
+  },
+  "local_visual_evidence": "target/validation/t16-proof/safe-settings.png"
+}

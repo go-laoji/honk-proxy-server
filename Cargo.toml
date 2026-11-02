@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
-members = ["apps/cli", "apps/daemon", "crates/domain", "crates/config", "crates/client", "crates/api", "crates/web-assets", "crates/platform", "crates/engine", "crates/storage", "crates/application", "crates/provider", "crates/health", "crates/ebpf-abi", "crates/net", "crates/dns"]
-default-members = ["apps/cli", "apps/daemon"]
+members = ["crates/system", "apps/cli", "apps/daemon", "crates/domain", "crates/config", "crates/client", "crates/api", "crates/web-assets", "crates/platform", "crates/engine", "crates/storage", "crates/application", "crates/provider", "crates/health", "crates/ebpf-abi", "crates/net", "crates/dns"]
+default-members = ["crates/system", "apps/cli", "apps/daemon"]
 exclude = ["src-tauri", "ebpf"]
 
 [workspace.package]
@@ -10,6 +10,7 @@ edition = "2024"
 rust-version = "1.98"
 
 [workspace.dependencies]
+hps-system = { path = "crates/system" }
 hps-domain = { path = "crates/domain" }
 hps-config = { path = "crates/config" }
 hps-client = { path = "crates/client" }
