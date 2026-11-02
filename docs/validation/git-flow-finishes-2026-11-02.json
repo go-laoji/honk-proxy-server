@@ -203,6 +203,16 @@
       "issues": [
         24
       ]
+    },
+    {
+      "order": 21,
+      "branch": "feature/backup-desktop-diagnostics",
+      "feature_head": "fedc475adf1a62bab41c88502d2a6ae96a03341f",
+      "merge_commit": "92e95a63a941aa4e52141ec9423f4929196ef68e",
+      "tree_unchanged_from_feature": true,
+      "issues": [
+        25
+      ]
     }
   ],
   "issue_states": [
@@ -312,7 +322,7 @@
       "closed_at": "2026-11-02T06:22:07Z"
     }
   ],
-  "develop_head": "d3123be909189d11807a0fecd2ebd72ff9eac12e",
+  "develop_head": "92e95a63a941aa4e52141ec9423f4929196ef68e",
   "active_sync_commit": "0fb0fcf65aa6e3c1606a31d358b16e05ea4af2dc",
   "active_source_tree_unchanged": true,
   "restored_work_files": 6,
@@ -349,16 +359,11 @@
   ],
   "retained": [
     {
-      "branch": "feature/backup-desktop-diagnostics",
-      "issue": 25,
-      "reason": "parallel implementation; FIFO acceptance and finish pending"
-    },
-    {
       "branch": "feature/future-platform-contracts",
       "issue": 26,
       "reason": "parallel implementation; FIFO acceptance and finish pending"
     }
   ],
   "second_batch_joint_acceptance_commit": "4680e2c1829278743ab06e31877ee37b9ff037bd",
-  "active_feature": "feature/backup-desktop-diagnostics"
+  "active_feature": "feature/future-platform-contracts"
 }

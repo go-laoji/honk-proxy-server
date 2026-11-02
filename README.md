@@ -108,3 +108,5 @@ Linux 数据面需要在实际内核环境验证本项目自研 eBPF 程序及�
 [标准订阅与 SOCKS5 UDP](docs/protocol-subscriptions-usage.md) 支持 HTTP/HTTPS/SOCKS5 URI、base64 和明确的 Clash 子集，订阅快照按配置代际独立准备，失败保留旧来源，真实有效期未知则保持未知；与短效 API 的租约/预算/补池分开。UDP association 随 TCP 控制连接结束，按来源、目标、规则、健康与容量限制准入。
 
 [SQLite 备份、Desktop 与 Linux 诊断](docs/backup-desktop-diagnostics-usage.md) 提供一致在线备份、严格校验与离线持锁恢复；Desktop 托盘、通知和登录自启选项独立于 Daemon 服务。Linux 只读拓扑与实例已有内核对象/计数共用 API、CLI 和页面，实际验收与平台限制见对应记录。
+
+后续平台与多实例的储备范围见 [产品与兼容契约](docs/future-platform-contracts.md)。这些前置定义不表示未来运行能力已经启用；当前实现与平台验收边界以 [任务清单](docs/development-task-checklist.md) 和对应验收报告为准。

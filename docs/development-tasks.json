@@ -445,7 +445,9 @@
       "acceptance": "不作为首版隐含范围；先明确产品语义、平台方案、真实供应商口径和兼容性后再拆实施Issue。",
       "issue": 26,
       "url": "https://github.com/go-laoji/honk-proxy-server/issues/26",
-      "status": "in_progress"
+      "status": "completed",
+      "implementation_plan": "docs/future-platform-contracts-plan.md",
+      "implementation_notes": "已完成FUT-01至FUT-04产品语义、平台方案、供应商真实口径及兼容性契约，不把多实例控制器、Mac/Windows透明、成本账单或FakeIP当作已实现功能。四文档与跨分支审查完成，官方资料/相对链接/格式已复核。"
     }
   ]
 }
