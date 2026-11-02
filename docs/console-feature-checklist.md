@@ -212,7 +212,7 @@
 
 对应 `linux.html`，API 域为 capabilities/linux/status。CLI 对应 linux。
 
-T03 的自研 hook/ABI/loader 已在两个实际内核完成隔离验证，见 [eBPF 验收](validation/linux-ebpf-core-2026-11-01.md)。生产透明接管与持久恢复由 T15 接续。
+T03 的自研 hook/ABI/loader 已完成隔离验证；T15 的本机/LAN、双栈 TCP/UDP、DNS 共存、进程与原子代际、启停/有限恢复及独立 Daemon 崩溃恢复已完成双架构/双内核实际矩阵。见 [透明接管使用说明](linux-transparent-usage.md) 与 [T15 证据](validation/linux-transparent-2026-11-02.md)。
 
 | 编号 | 优先级 | 功能 | 验收要点 |
 | --- | --- | --- | --- |

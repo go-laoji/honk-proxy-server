@@ -1,6 +1,6 @@
 # honk-proxy-server
 
-自主实现的 Rust 代理池服务，提供独立 CLI、无桌面 Daemon 和共享 React/Tailwind 多页面控制台。当前已交付 HTTP/CONNECT、HTTPS 代理与 SOCKS5 TCP、配置版本、短效供应商提取、批次租约、预算补池、健康、DNS、分组和显式规则路由；自研 eBPF DNS hook 已在实际 6.12 LTS 与 7.0 内核验证，Linux 完整透明转发及本机进程选路仍在开发。
+自主实现的 Rust 代理池服务，提供独立 CLI、无桌面 Daemon 和共享 React/Tailwind 多页面控制台。当前已交付 HTTP/CONNECT、HTTPS 代理与 SOCKS5 TCP、配置版本、短效供应商提取、批次租约、预算补池、健康、DNS、分组、规则、连接和任务。Linux 自研 eBPF 支持明确本机/LAN 范围的双栈 TCP/UDP、可信本机进程、原子代际及故障恢复，已在 aarch64/x86_64 的 6.12.115 LTS 与 7.2.14 完成实际矩阵。Desktop 系统服务和正式分包发行继续按后续 Issue 交付。
 
 honk 仅作为能力参考；项目不集成其 crate、二进制或 fork。
 
@@ -55,13 +55,15 @@ Daemon 默认把配置保存在 `.hps/hps.sqlite3`，可通过 `--data-dir` 指�
 
 [自动补池](docs/replenishment-usage.md) 默认停用，启用后支持按需或显式持续维护、退休预测、水位和统一 UTC 每日预算；手动提取也占预算。不确定结果暂停，确认恢复保留预算与冷却。通用 API 必须按供应商文档配置数量参数，面板区分已健康准入与待检测库存。
 
-[健康检测](docs/health-usage.md) 默认启用，按 TCP/UDP、IPv4/IPv6 分开记录端点、认证和目标穿透证据；统一控制新选点、寿命与预算。支持单个/批量后台任务、真实流量分层反馈、CLI/API 与共用控制台。UDP 当前如实报告不支持，重启后重新取得成功证据。
+[健康检测](docs/health-usage.md) 默认启用，按 TCP/UDP、IPv4/IPv6 分开记录端点、认证和目标穿透证据；统一控制新选点、寿命与预算。支持单个/批量后台任务、真实流量分层反馈、CLI/API 与共用控制台。当前主动 UDP 探测如实报告不支持；这与实际透明 UDP Direct/SOCKS5 数据面分别记录，不能虚构健康证据，重启后重新取得成功证据。
 
-[DNS](docs/dns-usage.md) 支持 System/UDP/TCP/DoT/DoH、按用途和域名选路、正负 TTL 缓存、诊断及清理。System 不虚构 TTL；可选静态代理承载 TCP DNS。Linux 自有八个 eBPF hook 已实际验证双栈 TCP/UDP DNS 捕获、对端地址恢复和服务生命周期；默认不开启监听或捕获，完整透明转发仍由 T15 交付。
+[DNS](docs/dns-usage.md) 支持 System/UDP/TCP/DoT/DoH、按用途和域名选路、正负 TTL 缓存、诊断及清理。System 不虚构 TTL；可选静态代理承载 TCP DNS。Linux 自有八个 eBPF hook 已实际验证双栈 TCP/UDP DNS 捕获、对端地址恢复及与业务透明捕获共存；默认不开启监听或捕获。
 
 [节点分组](docs/groups-usage.md) 支持成员/来源/标签过滤、固定与显式回退、健康延迟优选、轮询和加权轮询，三个代理入口共用同一选择器。会话固定受健康和剩余寿命约束；CLI 与共享 MPA 可以管理、预览候选并解释排除原因，模拟不产生网络和补池副作用。
 
-[规则路由](docs/routing-rules-usage.md) 支持首条命中的域名/CIDR/端口/传输/入口/来源组合，执行节点、组、明确直连或拒绝。共享规则页与 CLI 将候选保存和显式激活分开，提供排序、引用校验和无网络副作用的模拟。Linux 进程来源及内核原子版本继续与完整透明数据面联合验收，当前不伪报可用。
+[规则路由](docs/routing-rules-usage.md) 支持首条命中的域名/CIDR/端口/传输/入口/来源组合，执行节点、组、明确直连或拒绝。共享规则页与 CLI 将候选保存和显式激活分开，提供排序、引用校验和无网络副作用的模拟。Linux 本机进程只取自可信内核元数据，实际规则能力和内核代际随捕获状态报告；显式及网关客户端进程保持未知。
+
+[Linux 透明接管](docs/linux-transparent-usage.md) 默认关闭，配置明确 cgroup/LAN 网卡，提供实际接口、link、路由、代际、资源及计数。故障先暂停、最多三次原位修复；独立 hpsd 的 SIGKILL 残留回收、外部冲突拒绝和持久重启均已实际验证。API、CLI 和共用 Linux MPA 使用同一 owner，范围变化走候选审阅/激活并明确等待重启；停止透明流保持显式入口。
 
 [节点管理](docs/node-management-usage.md) 统一查询静态配置与供应商租约，提供有界导入预览、软删除恢复、排空、来源水位，以及健康/寿命/人工限制分离；CLI 与共享节点 MPA 操作同一事实源，已有业务连接自然排空。
 
