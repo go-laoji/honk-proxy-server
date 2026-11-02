@@ -1,6 +1,6 @@
 # honk-proxy-server
 
-自主实现的 Rust 代理池服务，提供独立 CLI、无桌面 Daemon 和共享 React/Tailwind 多页面控制台。当前已开始工程基础开发，**尚未提供可用的代理数据面**。
+自主实现的 Rust 代理池服务，提供独立 CLI、无桌面 Daemon 和共享 React/Tailwind 多页面控制台。当前已交付 HTTP/CONNECT、HTTPS 代理与 SOCKS5 TCP 核心及入口管理；短效供应商自动提取、分组路由和真实 Linux eBPF 仍在开发。
 
 honk 仅作为能力参考；项目不集成其 crate、二进制或 fork。
 
@@ -29,13 +29,27 @@ cargo build --locked -p hps-cli -p hps-daemon --no-default-features
 ./target/debug/hps capabilities
 ./target/debug/hps config show
 ./target/debug/hps linux preflight
+./target/debug/hps inbound list
 ```
 
 默认管理地址为 `127.0.0.1:17900`，通过 `hpsd --listen` 或 TOML 调整；CLI 使用 `--endpoint` 或 `HPS_ENDPOINT` 选择目标。`hps --version` 查看本地 CLI 版本，`hps version` 查询目标服务版本。`hps ui` 仅输出控制台 URL，只有显式 `--open` 才打开浏览器。
 
+## 使用显式代理
+
+参考 [代理配置示例](configs/hps.proxy.example.toml)，填写实际供应商节点并启用。示例中的上游默认禁用，无合格上游时拒绝转发，不隐式直连。
+
+```sh
+./target/debug/hpsd --config configs/hps.proxy.example.toml
+./target/debug/hps inbound stop browser-http
+./target/debug/hps inbound start browser-http
+curl --proxy http://127.0.0.1:17901 https://example.com/
+```
+
+上游支持 HTTP/HTTPS/SOCKS5 与供应商凭据，按启用和剩余有效期准入；上游 TLS 默认验证，不提供跳过验证选项。入口启停、证书有效期、有效资源限制与接入示例可在 CLI/API/共享控制台查看。配置调整需重启，运行启停不写回文件；详见 [接入及运行语义](docs/explicit-proxy-usage.md)。
+
 ## 共享 Web 与 Desktop
 
-前端在 `web/console`，包含 18 个实际 HTML 入口。原始未使用的演示素材未纳入版本管理。默认入口、运行概览、启动设置与 eBPF 状态读取真实 Daemon API；尚未实现的业务模块明确显示不可用，不使用演示节点填充。
+前端在 `web/console`，包含 18 个实际 HTML 入口。原始未使用的演示素材未纳入版本管理。连接、运行概览、代理入口、启动设置与 eBPF 状态读取真实 Daemon API；尚未实现的业务模块明确显示不可用，不使用演示节点填充。
 
 ```sh
 pnpm install --frozen-lockfile
@@ -52,7 +66,7 @@ Vite 生成文件哈希与 `web_build_id`，Daemon 与 Tauri 读取同一份 `di
 
 桌面复用现有 `src-tauri`，以独立 Cargo manifest/锁文件隔离图形依赖。完整安装、托盘、系统代理与持久服务管理由后续 T16 交付。
 
-`/healthz` 报告进程存活，`/readyz` 报告代理是否可接入；未初始化代理引擎时返回 503，`status.proxy_ready` 为 false。eBPF 的 compiled/configured/attached/ready 分开报告，未集成时不会显示已经接管。
+`/healthz` 报告进程存活；`/readyz` 为 200 代表存在运行入口与可准入的配置上游，HTTPS 入口证书还须在有效期内。这不代表健康探测已通过。未配置、全部停止、节点到期或正在关闭时返回 503。eBPF 的 compiled/configured/attached/ready 分开报告，显式代理运行不代表已经接管 Linux 流量。
 
 `hps linux preflight` 读取目标 Daemon 的默认路径环境信息，经 `/api/v1/linux/preflight` 返回内核、BTF、cgroup2、bpffs、进程能力和可读内核选项。非 Linux 如实返回 unsupported；命令不挂载文件系统、不加载 BPF、不更改网络，也不把环境信息当作透明代理就绪证明。
 

@@ -50,6 +50,17 @@ pub struct Capabilities {
 }
 
 impl Capabilities {
+    pub fn explicit_proxy() -> Self {
+        let mut capabilities = Self::foundation();
+        let available = FeatureCapability {
+            available: true,
+            reason: None,
+        };
+        capabilities.http_proxy = available.clone();
+        capabilities.https_proxy = available.clone();
+        capabilities.socks5_proxy = available;
+        capabilities
+    }
     pub fn foundation() -> Self {
         let pending = FeatureCapability {
             available: false,
@@ -109,4 +120,67 @@ pub struct LinuxPreflight {
     pub checks: Vec<EnvironmentCheck>,
     pub datapath_ready: bool,
     pub scope: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct ResourceLimits {
+    pub max_connections: usize,
+    pub bytes_per_second: u64,
+    pub buffer_bytes: usize,
+    pub handshake_timeout_ms: u64,
+    pub connect_timeout_ms: u64,
+    pub idle_timeout_ms: u64,
+    pub max_header_bytes: usize,
+    pub min_remaining_lifetime_secs: u64,
+}
+impl Default for ResourceLimits {
+    fn default() -> Self {
+        Self {
+            max_connections: 1024,
+            bytes_per_second: 0,
+            buffer_bytes: 16 * 1024,
+            handshake_timeout_ms: 10_000,
+            connect_timeout_ms: 10_000,
+            idle_timeout_ms: 60_000,
+            max_header_bytes: 32 * 1024,
+            min_remaining_lifetime_secs: 30,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CertificateStatus {
+    pub not_before_unix: i64,
+    pub not_after_unix: i64,
+    pub valid_now: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InboundStatus {
+    pub id: String,
+    pub protocol: String,
+    pub configured_listen: String,
+    pub configured_enabled: bool,
+    pub listen: Option<String>,
+    pub running: bool,
+    pub active_connections: usize,
+    pub max_connections: usize,
+    pub bytes_per_second: u64,
+    pub accepted_connections: u64,
+    pub rejected_global_limit: u64,
+    pub rejected_inbound_limit: u64,
+    pub failed_connections: u64,
+    pub idle_timeouts: u64,
+    pub certificate: Option<CertificateStatus>,
+    pub last_error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProxyStatus {
+    pub inbounds: Vec<InboundStatus>,
+    pub active_connections: usize,
+    pub eligible_upstreams: usize,
+    pub limits: ResourceLimits,
+    pub shutting_down: bool,
 }

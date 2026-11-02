@@ -11,6 +11,7 @@ path = "src/main.rs"
 [dependencies]
 hps-api.workspace = true
 hps-config.workspace = true
+hps-engine.workspace = true
 axum.workspace = true
 clap.workspace = true
 tokio.workspace = true

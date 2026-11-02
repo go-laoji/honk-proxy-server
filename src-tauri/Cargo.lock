@@ -1489,6 +1489,7 @@ dependencies = [
 name = "hps-config"
 version = "0.1.0"
 dependencies = [
+ "hps-domain",
  "serde",
  "thiserror 2.0.21",
  "toml 0.9.12+spec-1.1.0",

@@ -43,7 +43,33 @@ fn supported_api(path: &str) -> bool {
             | "api/v1/capabilities"
             | "api/v1/config"
             | "api/v1/linux/preflight"
+            | "api/v1/inbounds"
     )
+}
+
+fn supported_action(path: &str) -> bool {
+    let parts: Vec<_> = path.split('/').collect();
+    matches!(parts.as_slice(),["api","v1","inbounds",id,"start"|"stop"] if !id.is_empty() && id.len()<=64 && id.bytes().all(|c|c.is_ascii_alphanumeric() || c==b'_' || c==b'-'))
+}
+
+#[tauri::command]
+async fn api_post(
+    state: tauri::State<'_, Connection>,
+    path: String,
+) -> Result<serde_json::Value, String> {
+    if !supported_action(&path) {
+        return Err("unsupported API operation".into());
+    }
+    let endpoint = state
+        .0
+        .lock()
+        .map_err(|_| "connection state unavailable")?
+        .clone();
+    HpsClient::new(&endpoint, Duration::from_secs(10))
+        .map_err(|e| e.to_string())?
+        .post_json(&path)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -92,6 +118,7 @@ pub fn run() {
             get_endpoint,
             set_endpoint,
             api_get,
+            api_post,
             get_web_build_id
         ])
         .run(tauri::generate_context!())
@@ -106,5 +133,9 @@ mod tests {
         assert!(supported_api("api/v1/status"));
         assert!(!supported_api("https://example.com/api/v1/status"));
         assert!(!supported_api("api/v1/../../private"));
+        assert!(supported_action("api/v1/inbounds/browser-http/start"));
+        assert!(supported_action("api/v1/inbounds/browser-http/stop"));
+        assert!(!supported_action("api/v1/inbounds/../start"));
+        assert!(!supported_action("api/v1/inbounds/browser/start?other=1"));
     }
 }

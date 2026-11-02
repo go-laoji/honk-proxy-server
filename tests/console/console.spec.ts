@@ -103,3 +103,43 @@ test("mobile navigation, theme persistence and no-account settings work", async 
   await expect(page.locator("html")).toHaveClass("dark");
   expect((await page.context().cookies()).length).toBe(0);
 });
+
+test("inbound controls use the real daemon and persist across document navigation", async ({
+  page,
+  request,
+}) => {
+  await page.goto("/console/inbounds.html");
+  const entry = page.getByRole("region", { name: "入口 browser-http" });
+  await expect(entry.getByText("已停止", { exact: true })).toBeVisible();
+  await page
+    .getByRole("button", { name: "启动 browser-http", exact: true })
+    .click();
+  await expect(entry.getByText("监听中", { exact: true })).toBeVisible();
+  const running = await (await request.get("/api/v1/inbounds")).json();
+  expect(running.inbounds[0].running).toBe(true);
+  expect(running.inbounds[0].listen).toMatch(/^127\.0\.0\.1:[1-9]\d*$/);
+  expect(running.inbounds[0].configured_enabled).toBe(false);
+  await page.reload();
+  await expect(entry.getByText("监听中", { exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await expect(
+    page.getByRole("heading", { name: "浏览器与系统接入" }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "停止 browser-http", exact: true })
+    .click();
+  await expect(entry.getByText("已停止", { exact: true })).toBeVisible();
+  const stopped = await (await request.get("/api/v1/inbounds")).json();
+  expect(stopped.inbounds[0].running).toBe(false);
+  expect(stopped.active_connections).toBe(0);
+  expect((await page.context().cookies()).length).toBe(0);
+  await page.screenshot({
+    path: "/tmp/hps-inbounds-console.png",
+    fullPage: true,
+  });
+});

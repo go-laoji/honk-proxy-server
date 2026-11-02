@@ -1,0 +1,9 @@
+[[proxy.inbounds]]
+id = "browser-http"
+protocol = "http"
+listen = "127.0.0.1:0"
+enabled = false
+
+[proxy.limits]
+max_connections = 8
+bytes_per_second = 65536

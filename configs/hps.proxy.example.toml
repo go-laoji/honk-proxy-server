@@ -1,0 +1,54 @@
+instance_name = "honk-proxy-server"
+management_listen = "127.0.0.1:17900"
+log_filter = "info"
+
+[proxy.limits]
+max_connections = 1024
+bytes_per_second = 0 # 0 means unlimited; counts business bytes in both directions.
+buffer_bytes = 16384
+max_header_bytes = 32768
+handshake_timeout_ms = 10000
+connect_timeout_ms = 10000
+idle_timeout_ms = 60000
+min_remaining_lifetime_secs = 30
+
+[[proxy.inbounds]]
+id = "browser-http"
+protocol = "http"
+listen = "127.0.0.1:17901"
+enabled = true
+max_connections = 256
+bytes_per_second = 0
+
+[[proxy.inbounds]]
+id = "browser-socks"
+protocol = "socks5"
+listen = "127.0.0.1:17903"
+enabled = true
+max_connections = 256
+bytes_per_second = 0
+
+# Replace with a real supplier endpoint and enable it. Disabled by default so
+# copying this example does not claim there is a working proxy available.
+[[proxy.upstreams]]
+id = "supplier-bootstrap"
+protocol = "http" # http, https or socks5
+host = "127.0.0.1"
+port = 18080
+enabled = false
+# expires_at_unix = 1793520000 # Actual supplier expiry; omitted means static.
+# ca_certificate = "certs/supplier-ca.pem" # Optional additional CA, HTTPS only.
+# tls_server_name = "proxy.supplier.example" # HTTPS certificate name.
+# [proxy.upstreams.credentials]
+# username = "replace-with-supplier-username"
+# password = "replace-with-supplier-password"
+
+# HTTPS ingress requires a certificate whose SAN matches the client-facing name.
+# Relative TLS paths are resolved against this TOML file's directory.
+# [[proxy.inbounds]]
+# id = "browser-https"
+# protocol = "https"
+# listen = "127.0.0.1:17902"
+# [proxy.inbounds.tls]
+# certificate = "certs/proxy-chain.pem"
+# private_key = "certs/proxy-key.pem"

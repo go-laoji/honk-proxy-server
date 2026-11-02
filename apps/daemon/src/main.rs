@@ -34,13 +34,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
     let listener = tokio::net::TcpListener::bind(config.management_listen).await?;
     let address = listener.local_addr()?;
-    tracing::info!(%address, "management API listening; proxy runtime is not initialized");
-    axum::serve(
+    let proxy = config.proxy.clone();
+    let engine =
+        tokio::task::spawn_blocking(move || hps_engine::runtime::Engine::new(proxy)).await??;
+    engine.start_enabled().await?;
+    tracing::info!(%address,proxy_ready=engine.ready(),"management API listening; explicit proxy runtime initialized");
+    let stopping = engine.clone();
+    let result = axum::serve(
         listener,
-        hps_api::router(Arc::new(hps_api::AppState::new(config))),
+        hps_api::router(Arc::new(hps_api::AppState::with_engine(
+            config,
+            engine.clone(),
+        ))),
     )
-    .with_graceful_shutdown(shutdown())
-    .await?;
+    .with_graceful_shutdown(async move {
+        shutdown().await;
+        stopping.shutdown().await;
+    })
+    .await;
+    engine.shutdown().await;
+    result?;
     Ok(())
 }
 
