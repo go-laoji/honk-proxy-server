@@ -51,6 +51,7 @@ fn supported_api(path: &str) -> bool {
             | "api/v1/config/workspace"
             | "api/v1/config/export"
             | "api/v1/providers"
+            | "api/v1/groups"
     ) || supported_health_get(path)
         || supported_dns_get(path)
         || supported_provider_get(path)
@@ -160,6 +161,11 @@ fn supported_action(path: &str) -> bool {
     if matches!(
         path,
         "api/v1/health/probe"
+            | "api/v1/groups/simulate"
+            | "api/v1/groups/save"
+            | "api/v1/groups/upsert"
+            | "api/v1/groups/delete"
+            | "api/v1/groups/pin"
             | "api/v1/dns/resolve"
             | "api/v1/dns/cache/clear"
             | "api/v1/dns/save"
@@ -304,6 +310,10 @@ mod tests {
     #[test]
     fn transport_accepts_implemented_api_only() {
         assert!(supported_api("api/v1/status"));
+        assert!(supported_api("api/v1/groups"));
+        assert!(supported_action("api/v1/groups/simulate"));
+        assert!(supported_action("api/v1/groups/pin"));
+        assert!(!supported_action("api/v1/groups/unknown"));
         assert!(supported_api("api/v1/health?after=lease%3A12&limit=50"));
         assert!(supported_api("api/v1/health/tasks/12"));
         assert!(supported_action("api/v1/health/probe"));

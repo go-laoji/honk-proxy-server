@@ -7,7 +7,11 @@ pub(crate) async fn serve(mut io: BoxIo, session: Session) -> Result<(), ProxyEr
         Ok(result) => result?,
         Err(_) => return Err(ProxyError::Timeout),
     };
-    let upstream = match session.dialer.connect(&target, false).await {
+    let upstream = match session
+        .dialer
+        .connect_context(&target, false, &session.selection_context)
+        .await
+    {
         Ok(connected) => connected,
         Err(error) => {
             reply(

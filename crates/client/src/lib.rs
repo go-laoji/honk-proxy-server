@@ -125,6 +125,41 @@ impl HpsClient {
         self.get_json(&format!("api/v1/dns?{}", query.finish()))
             .await
     }
+    pub async fn groups(
+        &self,
+    ) -> Result<hps_domain::GroupsOverview<hps_config::SelectionConfig>, ClientError> {
+        self.get_json("api/v1/groups").await
+    }
+    pub async fn simulate_group(
+        &self,
+        input: &hps_domain::SelectionQuery,
+    ) -> Result<hps_domain::SelectionDecision, ClientError> {
+        self.post_body("api/v1/groups/simulate", input).await
+    }
+    pub async fn save_groups(
+        &self,
+        input: &hps_config::SelectionSave,
+    ) -> Result<hps_domain::ConfigActivationResult, ClientError> {
+        self.post_body("api/v1/groups/save", input).await
+    }
+    pub async fn upsert_group(
+        &self,
+        input: &hps_config::GroupUpsert,
+    ) -> Result<hps_domain::ConfigActivationResult, ClientError> {
+        self.post_body("api/v1/groups/upsert", input).await
+    }
+    pub async fn delete_group(
+        &self,
+        input: &hps_config::GroupDelete,
+    ) -> Result<hps_domain::ConfigActivationResult, ClientError> {
+        self.post_body("api/v1/groups/delete", input).await
+    }
+    pub async fn pin_group(
+        &self,
+        input: &hps_config::GroupPin,
+    ) -> Result<hps_domain::ConfigActivationResult, ClientError> {
+        self.post_body("api/v1/groups/pin", input).await
+    }
     pub async fn resolve_dns(
         &self,
         input: &hps_dns::LookupInput,

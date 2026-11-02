@@ -17,6 +17,7 @@ pub struct ProxyConfig {
     pub inbounds: Vec<InboundConfig>,
     pub upstreams: Vec<UpstreamConfig>,
     pub limits: ResourceLimits,
+    pub selection: crate::SelectionConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -151,6 +152,7 @@ impl ProxyConfig {
         {
             return Err(invalid("proxy resource limits are out of range"));
         }
+        self.selection.validate(self)?;
         Ok(())
     }
 }

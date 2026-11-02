@@ -115,6 +115,23 @@ impl HealthRegistry {
                         .is_some_and(|r| r.verdict == HealthVerdict::Healthy)
             })
     }
+    pub fn latency(
+        &self,
+        identity: &str,
+        policy: &HealthPolicy,
+        family: Option<IpFamily>,
+    ) -> Option<u64> {
+        policy
+            .profiles
+            .iter()
+            .filter(|(_, transport, f)| {
+                *transport == HealthTransport::Tcp && family.is_none_or(|family| family == *f)
+            })
+            .filter_map(|(fp, _, _)| self.latest(identity, fp, policy.max_staleness_secs))
+            .filter(|r| r.verdict == HealthVerdict::Healthy)
+            .map(|r| r.latency_ms)
+            .min()
+    }
     pub fn traffic(
         &self,
         node_id: &str,
@@ -203,6 +220,11 @@ mod tests {
         assert!(!registry.usable("a", &policy, None));
         registry.publish(result("a", "p4", IpFamily::Ipv4), 60);
         assert!(registry.usable("a", &policy, Some(IpFamily::Ipv4)));
+        assert_eq!(
+            registry.latency("a", &policy, Some(IpFamily::Ipv4)),
+            Some(0)
+        );
+        assert_eq!(registry.latency("a", &policy, Some(IpFamily::Ipv6)), None);
         assert!(!registry.usable("b", &policy, None));
         assert!(!registry.usable("a", &policy, Some(IpFamily::Ipv6)));
         let changed = HealthPolicy {
@@ -236,6 +258,7 @@ mod tests {
         stale.checked_at -= 61;
         registry.publish(stale, 60);
         assert!(!registry.usable("a", &policy, None));
+        assert_eq!(registry.latency("a", &policy, None), None);
         let mut future = result("a", "p4", IpFamily::Ipv4);
         future.checked_at += 100;
         registry.publish(future, 60);

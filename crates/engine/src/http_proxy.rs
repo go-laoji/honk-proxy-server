@@ -66,7 +66,11 @@ async fn handle(mut request: Request<Incoming>, session: Session) -> Response<Bo
             Ok(target) => target,
             Err(_) => return error(StatusCode::BAD_REQUEST, "CONNECT requires host:port\n"),
         };
-        let connected = match session.dialer.connect(&target, false).await {
+        let connected = match session
+            .dialer
+            .connect_context(&target, false, &session.selection_context)
+            .await
+        {
             Ok(connected) => connected,
             Err(e) => {
                 session.failed();
@@ -134,7 +138,11 @@ async fn handle(mut request: Request<Incoming>, session: Session) -> Response<Bo
         Ok(target) => target,
         Err(_) => return error(StatusCode::BAD_REQUEST, "Invalid destination\n"),
     };
-    let connected = match session.dialer.connect(&target, true).await {
+    let connected = match session
+        .dialer
+        .connect_context(&target, true, &session.selection_context)
+        .await
+    {
         Ok(connected) => connected,
         Err(e) => {
             session.failed();

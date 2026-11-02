@@ -9,6 +9,8 @@ mod provider;
 pub use provider::*;
 mod proxy;
 pub use proxy::*;
+mod selection;
+pub use selection::*;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -182,6 +184,7 @@ impl DaemonConfig {
             }
         }
         self.proxy.validate()?;
+        self.proxy.selection.validate_providers(&self.providers)?;
         self.health.validate()?;
         self.dns.validate(&self.proxy)?;
         Ok(())

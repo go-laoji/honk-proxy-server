@@ -2,6 +2,7 @@ mod controller;
 mod dns;
 mod dns_capture;
 pub use dns::DnsOverview;
+mod groups;
 mod health;
 mod providers;
 use arc_swap::ArcSwap;
@@ -20,6 +21,8 @@ use std::{
 
 #[derive(Debug, thiserror::Error)]
 pub enum ApplicationError {
+    #[error("group not found")]
+    GroupUnavailable,
     #[error(transparent)]
     Storage(#[from] StorageError),
     #[error(transparent)]

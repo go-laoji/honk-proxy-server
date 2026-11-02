@@ -31,8 +31,8 @@ T05 配置基础后推进 T06/T07 短效 API 与补池。T08–T14 逐步闭合�
 | T06 | P0 | [#11](https://github.com/go-laoji/honk-proxy-server/issues/11) 短效提取 API、批次租约与安全重试 | T05 | 已完成契约、租约和三端验收 |
 | T07 | P0 | [#12](https://github.com/go-laoji/honk-proxy-server/issues/12) 到期预测、水位与预算驱动补池 | T06 | 已完成预算、补池与运行验收 |
 | T08 | P0 | [#13](https://github.com/go-laoji/honk-proxy-server/issues/13) 统一健康检测与真实流量反馈 | T04, T06 | 已完成 |
-| T09 | P0 | [#14](https://github.com/go-laoji/honk-proxy-server/issues/14) DNS 上游、路由、缓存与诊断 | T03, T05, T04 | 开发中 |
-| T10 | P0 | [#15](https://github.com/go-laoji/honk-proxy-server/issues/15) 节点分组、选点、固定与租约准入 | T04, T06, T08 | 待开发 |
+| T09 | P0 | [#14](https://github.com/go-laoji/honk-proxy-server/issues/14) DNS 上游、路由、缓存与诊断 | T03, T05, T04 | 实现与内核验收完成，窗口待验收 |
+| T10 | P0 | [#15](https://github.com/go-laoji/honk-proxy-server/issues/15) 节点分组、选点、固定与租约准入 | T04, T06, T08 | 实现与自动化验收完成，窗口待验收 |
 | T11 | P0 | [#16](https://github.com/go-laoji/honk-proxy-server/issues/16) 规则 CRUD、模拟与一致性发布 | T05, T09, T10 | 待开发 |
 | T12 | P0 | [#17](https://github.com/go-laoji/honk-proxy-server/issues/17) 节点管理与来源详情控制台闭环 | T02, T06, T08, T10 | 待开发 |
 | T13 | P0 | [#18](https://github.com/go-laoji/honk-proxy-server/issues/18) 活跃连接、流量统计与路由解释 | T04, T10, T11 | 待开发 |
@@ -223,3 +223,6 @@ T02 随后接管现有模板：共享页面清单、Tailwind 布局与 API trans
 - 2026-11-01：T08 统一健康、分维度实际探测、真实反馈、持久任务/预算、补池待检预留和 CLI/共享 MPA/Desktop 完成。macOS/Linux 各 82 项 Rust 测试、完整 10 项浏览器 E2E、实际 Desktop 探测/策略保存与 CLI 幂等/冲突验证通过；见 [健康验收](validation/health-2026-11-01.md)。T03 继续交付真实 eBPF，再推进依赖它的 T09 DNS。
 
 - 2026-11-01：T03 自研 Rust eBPF hook/ABI/loader 完成。实际 aarch64 Linux 7.0.14 与 QEMU 启动的 6.12.115 LTS 均验证 IPv4/IPv6 连接、map 策略拒绝、卸载后恢复及程序/map/cgroup 回收；见 [真实内核验收](validation/linux-ebpf-core-2026-11-01.md)。透明转发继续由 T15 交付，继续 T09 DNS。
+
+- 2026-11-02：T09 完成共享 DNS、TTL/负缓存、UDP/TCP/DoT/DoH、静态代理出口与实际双内核 DNS 捕获/代际/回收；见 [DNS 验收](validation/dns-2026-11-02.md)。独立桌面包已构建，CUA 仍报告锁屏，窗口验收待补，Issue 保持 open。
+- 2026-11-02：T10 完成统一分组选点、严格固定/回退、会话限制及 CLI/API/共享 MPA；macOS 109、Linux 108 项测试与 clippy、13 项浏览器回归及独立桌面构建通过，见 [分组验收](validation/groups-2026-11-02.md)。窗口待解锁时继续推进 T11，不将挂起的窗口验收当成已完成。
