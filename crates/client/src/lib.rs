@@ -2,12 +2,15 @@ use hps_domain::{ApiError, Capabilities, ServiceStatus, VersionInfo};
 use reqwest::{Client, Url};
 use serde::de::DeserializeOwned;
 use std::time::Duration;
+mod backup;
 mod diagnostics;
 mod events;
 pub use events::EventSubscription;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ClientError {
+    #[error("invalid or oversized database backup response")]
+    BackupProtocol,
     #[error("invalid background task ID or epoch")]
     InvalidTaskId,
     #[error("invalid event cursor")]

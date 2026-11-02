@@ -1,4 +1,5 @@
 //! Bounded asynchronous facade over one SQLite owner thread.
+pub mod backup;
 pub mod controller;
 pub mod health;
 pub mod nodes;
@@ -97,6 +98,7 @@ pub struct Store {
     tx: mpsc::Sender<Message>,
     pub database_path: Option<PathBuf>,
     pub epoch: String,
+    backup_slots: std::sync::Arc<tokio::sync::Semaphore>,
 }
 
 pub fn unix_now() -> i64 {
@@ -196,6 +198,7 @@ impl Store {
             tx,
             database_path,
             epoch,
+            backup_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(1)),
         })
     }
     async fn call<T: Send + 'static>(
@@ -398,7 +401,7 @@ fn migrate(connection: &mut Connection, bootstrap: &str, epoch: &str) -> Result<
         [],
         |row| row.get(0),
     )?;
-    if version > 8 {
+    if version > backup::SCHEMA_VERSION {
         return Err(StorageError::SchemaTooNew);
     }
     let transaction =

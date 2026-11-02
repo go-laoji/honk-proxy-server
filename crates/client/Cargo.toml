@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+sha2 = "0.10"
 hps-dns.workspace = true
 hps-domain.workspace = true
 hps-config.workspace = true

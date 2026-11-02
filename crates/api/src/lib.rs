@@ -16,6 +16,7 @@ use std::{
 };
 
 mod audit;
+mod backup;
 mod configuration;
 mod connections;
 mod diagnostics;
@@ -160,6 +161,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/v1/config", get(config));
     let router = router
         .merge(configuration::router())
+        .merge(backup::router())
         .merge(connections::router())
         .merge(providers::router())
         .merge(health::router())

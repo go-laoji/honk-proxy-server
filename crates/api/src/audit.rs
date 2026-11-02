@@ -11,6 +11,7 @@ fn operation(route: &str) -> Option<(&'static str, &'static str)> {
     Some(match route {
         "/api/v1/inbounds/{id}/start" => ("inbound_start", "inbound"),
         "/api/v1/inbounds/{id}/stop" => ("inbound_stop", "inbound"),
+        "/api/v1/config/backup" => ("database_backup", "configuration"),
         "/api/v1/config/validate" => ("configuration_validate", "configuration"),
         "/api/v1/config/draft" => ("configuration_draft", "configuration"),
         "/api/v1/config/revisions" => ("configuration_prepare", "configuration"),
