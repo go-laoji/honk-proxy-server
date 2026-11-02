@@ -117,6 +117,7 @@ export interface InboundStatus {
   protocol: "http" | "https" | "socks5";
   configured_listen: string;
   configured_enabled: boolean;
+  runtime_override?: boolean | null;
   listen: string | null;
   running: boolean;
   active_connections: number;

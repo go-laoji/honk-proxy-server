@@ -45,6 +45,10 @@ fn error(status: StatusCode, message: &'static str) -> Response<Body> {
 }
 fn gateway(error_kind: ProxyError) -> Response<Body> {
     match error_kind {
+        ProxyError::Rejected => error(
+            StatusCode::FORBIDDEN,
+            "Connection rejected by routing policy\n",
+        ),
         ProxyError::NoUpstream => error(
             StatusCode::SERVICE_UNAVAILABLE,
             "No eligible upstream; direct fallback is disabled\n",

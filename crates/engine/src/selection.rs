@@ -35,6 +35,42 @@ pub(crate) struct Selector {
     state: Mutex<State>,
 }
 impl Selector {
+    pub fn allows_refill(
+        &self,
+        query: &SelectionQuery,
+        provider: &str,
+        protocol: Option<hps_config::ProxyProtocol>,
+    ) -> bool {
+        if query.node.is_some() || self.state.lock().unwrap().retired {
+            return false;
+        }
+        let group = query
+            .group
+            .as_ref()
+            .or_else(|| {
+                query
+                    .inbound
+                    .as_ref()
+                    .and_then(|i| self.config.inbound_groups.get(i))
+            })
+            .or(self.config.default_group.as_ref());
+        let Some(id) = group else {
+            return true;
+        };
+        let Some(group) = self.config.groups.iter().find(|g| &g.id == id) else {
+            return false;
+        };
+        group.pinned_node.is_none()
+            && (group.include_all || group.providers.iter().any(|id| id == provider))
+            && (group.protocols.is_empty()
+                || protocol.is_some_and(|p| group.protocols.contains(&p)))
+            && group.tags.iter().all(|tag| {
+                self.config
+                    .provider_tags
+                    .get(provider)
+                    .is_some_and(|tags| tags.contains(tag))
+            })
+    }
     pub fn new(config: SelectionConfig) -> Self {
         Self {
             config,
@@ -56,18 +92,28 @@ impl Selector {
         commit: bool,
     ) -> (SelectionDecision, Option<Arc<Upstream>>) {
         let id = query
-            .group
-            .as_ref()
-            .or_else(|| {
+            .node
+            .is_none()
+            .then(|| {
                 query
-                    .inbound
+                    .group
                     .as_ref()
-                    .and_then(|i| self.config.inbound_groups.get(i))
+                    .or_else(|| {
+                        query
+                            .inbound
+                            .as_ref()
+                            .and_then(|i| self.config.inbound_groups.get(i))
+                    })
+                    .or(self.config.default_group.as_ref())
             })
-            .or(self.config.default_group.as_ref());
+            .flatten();
         let group = id.and_then(|id| self.config.groups.iter().find(|g| &g.id == id));
         let unknown = id.is_some() && group.is_none();
-        let strategy = group.map_or(GroupStrategy::RoundRobin, |g| g.strategy);
+        let strategy = if query.node.is_some() {
+            GroupStrategy::Fixed
+        } else {
+            group.map_or(GroupStrategy::RoundRobin, |g| g.strategy)
+        };
         let members = group
             .map(|g| g.members.iter().map(String::as_str).collect::<HashSet<_>>())
             .unwrap_or_default();
@@ -97,6 +143,9 @@ impl Selector {
             tags.sort();
             tags.dedup();
             let mut reasons = choice.reasons.clone();
+            if query.node.as_ref().is_some_and(|id| id != &up.config.id) {
+                reasons.push("different_explicit_node".into());
+            }
             if unknown {
                 reasons.push("unknown_group".into());
             }
@@ -141,6 +190,21 @@ impl Selector {
             });
         }
         // Missing leased members remain visible after retirement/removal.
+        if let Some(node) = &query.node
+            && !rows.iter().any(|r| &r.node_id == node)
+        {
+            rows.push(GroupCandidate {
+                node_id: node.clone(),
+                provider_id: None,
+                protocol: "unknown".into(),
+                tags: vec![],
+                eligible: false,
+                reasons: vec!["missing_or_retired".into()],
+                remaining_secs: None,
+                latency_ms: None,
+                weight: 1,
+            });
+        }
         if let Some(group) = group {
             let mut present = rows
                 .iter()
@@ -265,10 +329,18 @@ impl Selector {
         }
         .to_owned();
         if commit && let Some(index) = selected {
-            if !session_reused && pinned.is_none() {
+            if !session_reused
+                && pinned.is_none()
+                && matches!(
+                    strategy,
+                    GroupStrategy::RoundRobin | GroupStrategy::Weighted
+                )
+            {
                 *state.cursors.entry(scope.clone()).or_default() = cursor.wrapping_add(1);
             }
-            state.last.insert(scope, rows[index].node_id.clone());
+            if query.node.is_none() {
+                state.last.insert(scope, rows[index].node_id.clone());
+            }
             if let (Some(key), Some(session)) =
                 (key.as_ref(), group.and_then(|g| g.session.as_ref()))
                 && !session_reused
@@ -417,6 +489,11 @@ mod tests {
         let mut g = group(GroupStrategy::Fixed);
         g.pinned_node = Some("a".into());
         let s = selector(g.clone());
+        assert!(!s.allows_refill(
+            &SelectionQuery::default(),
+            "source",
+            Some(ProxyProtocol::Http)
+        ));
         let mut nodes = choices();
         nodes[0].reasons.push("disabled".into());
         assert!(

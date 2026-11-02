@@ -27,6 +27,14 @@ impl Supervisor {
     ) -> Result<SelectionDecision, ApplicationError> {
         let current = self.current();
         if query
+            .node
+            .as_ref()
+            .is_some_and(|s| !hps_config::valid_node_id(s))
+            || (query.node.is_some() && query.group.is_some())
+        {
+            return Err(ApplicationError::Invalid);
+        }
+        if query
             .group
             .as_ref()
             .is_some_and(|s| s.is_empty() || s.len() > 64)

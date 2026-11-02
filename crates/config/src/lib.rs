@@ -11,6 +11,8 @@ mod proxy;
 pub use proxy::*;
 mod selection;
 pub use selection::*;
+mod routing;
+pub use routing::*;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]

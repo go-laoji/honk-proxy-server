@@ -37,6 +37,7 @@ const ProvidersPage = lazy(() => import("./pages/ProvidersPage"));
 const HealthPage = lazy(() => import("./pages/HealthPage"));
 const DnsPage = lazy(() => import("./pages/DnsPage"));
 const GroupsPage = lazy(() => import("./pages/GroupsPage"));
+const RulesPage = lazy(() => import("./pages/RulesPage"));
 const ConfigPage = lazy(() => import("./pages/ConfigPage"));
 
 const icons: Record<
@@ -267,6 +268,13 @@ export default function App() {
             ) : current.id === "groups" ? (
               <Suspense fallback={<p className="muted">正在读取分组…</p>}>
                 <GroupsPage
+                  key={service.data.endpoint}
+                  refreshService={service.refresh}
+                />
+              </Suspense>
+            ) : current.id === "rules" ? (
+              <Suspense fallback={<p className="muted">正在读取规则…</p>}>
+                <RulesPage
                   key={service.data.endpoint}
                   refreshService={service.refresh}
                 />

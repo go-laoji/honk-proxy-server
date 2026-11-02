@@ -68,7 +68,12 @@ pub struct Dialer {
     pub(crate) health: Arc<crate::health::HealthRegistry>,
     policy: std::sync::RwLock<crate::health::HealthPolicy>,
     sources: std::sync::RwLock<std::collections::HashMap<String, String>>,
+    source_protocols: std::sync::RwLock<std::collections::HashMap<String, ProxyProtocol>>,
+    refill_fingerprint: String,
     selector: crate::selection::Selector,
+    router: crate::routing::Router,
+    revision: std::sync::atomic::AtomicI64,
+    inbound_protocols: std::collections::HashMap<String, String>,
     timeout: Duration,
     min_lifetime: u64,
     max_header: usize,
@@ -177,6 +182,7 @@ pub struct Connected {
     pub identity: String,
     pub absolute_form: bool,
     pub proxy_authorization: Option<HeaderValue>,
+    pub routing: Option<hps_domain::RouteDecision>,
 }
 impl Dialer {
     pub(crate) fn preserve_static_deadlines(&mut self, previous: &Self) {
@@ -206,6 +212,16 @@ impl Dialer {
         }
     }
     pub fn new(config: &ProxyConfig) -> Result<Self, ProxyError> {
+        let mut scope = Sha256::new();
+        scope.update(
+            serde_json::to_vec(&(&config.selection, &config.routing, &config.inbounds))
+                .map_err(|_| ProxyError::RuleConfiguration)?,
+        );
+        let refill_fingerprint = format!("{:x}", scope.finalize());
+        let router = crate::routing::Router::compile(
+            config,
+            crate::routing::RoutingCapabilities::default(),
+        )?;
         let upstreams = config
             .upstreams
             .iter()
@@ -218,7 +234,16 @@ impl Dialer {
             health: Arc::new(crate::health::HealthRegistry::default()),
             policy: Default::default(),
             sources: std::sync::RwLock::new(std::collections::HashMap::new()),
+            source_protocols: Default::default(),
+            refill_fingerprint,
             selector: crate::selection::Selector::new(config.selection.clone()),
+            router,
+            revision: Default::default(),
+            inbound_protocols: config
+                .inbounds
+                .iter()
+                .map(|i| (i.id.clone(), format!("{:?}", i.protocol).to_lowercase()))
+                .collect(),
             timeout: Duration::from_millis(config.limits.connect_timeout_ms),
             min_lifetime: config.limits.min_remaining_lifetime_secs,
             max_header: config.limits.max_header_bytes,
@@ -260,6 +285,9 @@ impl Dialer {
         code: &str,
         global: bool,
     ) {
+        if identity.is_empty() {
+            return;
+        }
         self.health.traffic(
             node_id,
             identity,
@@ -279,6 +307,22 @@ impl Dialer {
     pub fn set_sources(&self, sources: std::collections::HashMap<String, String>) {
         *self.sources.write().unwrap() = sources;
     }
+    pub fn set_source_protocols(
+        &self,
+        protocols: std::collections::HashMap<String, ProxyProtocol>,
+    ) {
+        *self.source_protocols.write().unwrap() = protocols;
+    }
+    pub fn source_demand(&self, id: &str, inbound: &str) -> (bool, Option<Duration>) {
+        self.sources
+            .read()
+            .unwrap()
+            .get(id)
+            .map_or((false, None), |fp| {
+                self.demand
+                    .source(id, &format!("{fp}:{}:{inbound}", self.refill_fingerprint))
+            })
+    }
     pub fn eligible_count(&self) -> usize {
         self.selection(&hps_domain::SelectionQuery::default())
             .eligible
@@ -288,6 +332,101 @@ impl Dialer {
     }
     pub(crate) fn retire_selection(&self) {
         self.selector.retire();
+    }
+    pub(crate) fn set_revision(&self, revision: i64) {
+        self.revision.store(revision, Ordering::Release);
+    }
+    pub fn routing_context(
+        &self,
+        target: &Target,
+        context: &hps_domain::SelectionQuery,
+    ) -> hps_domain::RoutingContext {
+        let observed = target
+            .host
+            .parse()
+            .ok()
+            .and_then(|ip| {
+                self.resolver
+                    .read()
+                    .unwrap()
+                    .as_ref()
+                    .map(|r| r.observed_domains(ip))
+            })
+            .unwrap_or_default();
+        hps_domain::RoutingContext {
+            destination_host: target.host.clone(),
+            destination_port: target.port,
+            transport: context.transport,
+            source_ip: context.source_ip,
+            inbound: context.inbound.clone(),
+            inbound_protocol: context
+                .inbound
+                .as_ref()
+                .and_then(|id| self.inbound_protocols.get(id))
+                .cloned(),
+            observed_domains: observed,
+            origin: hps_domain::FlowOrigin::Explicit,
+            process: None,
+        }
+    }
+    pub fn simulate_route(
+        &self,
+        context: &hps_domain::RoutingContext,
+        revision: i64,
+    ) -> hps_domain::RouteSimulation {
+        let decision = self.router.evaluate(context, revision, true);
+        let mut query = hps_domain::SelectionQuery {
+            inbound: context.inbound.clone(),
+            source_ip: context.source_ip,
+            destination_host: Some(context.destination_host.clone()),
+            destination_port: Some(context.destination_port),
+            transport: context.transport,
+            ..Default::default()
+        };
+        let selection = match &decision.action {
+            hps_domain::RouteAction::Default => Some(self.selection(&query)),
+            hps_domain::RouteAction::Node { id } => {
+                query.node = Some(id.clone());
+                Some(self.selection(&query))
+            }
+            hps_domain::RouteAction::Group { id } => {
+                query.group = Some(id.clone());
+                Some(self.selection(&query))
+            }
+            _ => None,
+        };
+        let health_evaluated_at_unix = selection.as_ref().map(|_| crate::routing::unix_now());
+        hps_domain::RouteSimulation {
+            action_supported: context.transport == hps_domain::SelectionTransport::Tcp || decision.action == hps_domain::RouteAction::Reject,
+            decision,
+            selection,
+            health_evaluated_at_unix,
+            notes: vec!["Simulation reads current health and leases without network, demand or session mutations".into()],
+        }
+    }
+    pub fn can_forward(&self, inbound: &str, protocol: &str) -> bool {
+        self.router
+            .potential_actions(inbound, protocol)
+            .iter()
+            .any(|action| {
+                let mut query = hps_domain::SelectionQuery {
+                    inbound: Some(inbound.into()),
+                    ..Default::default()
+                };
+                match action {
+                    hps_domain::RouteAction::Reject => false,
+                    hps_domain::RouteAction::Direct => true,
+                    hps_domain::RouteAction::Node { id } => {
+                        query.node = Some(id.clone());
+                        self.selection(&query).eligible > 0
+                    }
+                    hps_domain::RouteAction::Group { id } => {
+                        query.group = Some(id.clone());
+                        self.selection(&query).eligible > 0
+                    }
+                    hps_domain::RouteAction::Default => self.selection(&query).eligible > 0,
+                }
+            })
     }
     pub fn selection(&self, query: &hps_domain::SelectionQuery) -> hps_domain::SelectionDecision {
         self.select(query, false).0
@@ -371,10 +510,65 @@ impl Dialer {
         http_forward: bool,
         context: &hps_domain::SelectionQuery,
     ) -> Result<Connected, ProxyError> {
-        let demand = self.demand.begin();
-        let mut query = context.clone();
-        query.destination_host = Some(target.host.clone());
-        query.destination_port = Some(target.port);
+        self.connect_routed(target, http_forward, &self.routing_context(target, context))
+            .await
+    }
+    pub async fn connect_routed(
+        &self,
+        target: &Target,
+        http_forward: bool,
+        context: &hps_domain::RoutingContext,
+    ) -> Result<Connected, ProxyError> {
+        if context.destination_host != target.host || context.destination_port != target.port {
+            return Err(ProxyError::InvalidTarget);
+        }
+        let decision = self
+            .router
+            .evaluate(context, self.revision.load(Ordering::Acquire), false);
+        if decision.action == hps_domain::RouteAction::Reject {
+            return Err(ProxyError::Rejected);
+        }
+        if context.transport != hps_domain::SelectionTransport::Tcp {
+            return Err(ProxyError::UnsupportedRule);
+        }
+        if decision.action == hps_domain::RouteAction::Direct {
+            return self.connect_direct(target, decision).await;
+        }
+        let mut query = hps_domain::SelectionQuery {
+            inbound: context.inbound.clone(),
+            source_ip: context.source_ip,
+            destination_host: Some(target.host.clone()),
+            destination_port: Some(target.port),
+            transport: context.transport,
+            ..Default::default()
+        };
+        match &decision.action {
+            hps_domain::RouteAction::Node { id } => query.node = Some(id.clone()),
+            hps_domain::RouteAction::Group { id } => query.group = Some(id.clone()),
+            _ => {}
+        }
+        let refill_sources = {
+            let sources = self.sources.read().unwrap();
+            let protocols = self.source_protocols.read().unwrap();
+            sources
+                .iter()
+                .filter(|(id, _)| {
+                    self.selector
+                        .allows_refill(&query, id, protocols.get(*id).copied())
+                })
+                .map(|(id, fp)| {
+                    (
+                        id.clone(),
+                        format!(
+                            "{fp}:{}:{}",
+                            self.refill_fingerprint,
+                            query.inbound.as_deref().unwrap_or("@unbound")
+                        ),
+                    )
+                })
+                .collect()
+        };
+        let demand = self.demand.begin(refill_sources);
         let (_, upstream) = self.select(&query, true);
         let upstream = upstream.ok_or(ProxyError::NoUpstream)?;
         if remaining(&upstream).is_some_and(|r| {
@@ -444,7 +638,53 @@ impl Dialer {
         }
         outcome.map(|mut connected| {
             connected.io = demand.wrap(connected.io);
+            connected.routing = Some(decision);
             connected
+        })
+    }
+    async fn connect_direct(
+        &self,
+        target: &Target,
+        decision: hps_domain::RouteDecision,
+    ) -> Result<Connected, ProxyError> {
+        let resolver = self.resolver.read().unwrap().clone();
+        let tcp = tokio::time::timeout(self.timeout, async {
+            let result = if target.host.parse::<std::net::IpAddr>().is_err()
+                && let Some(resolver) = resolver
+            {
+                let addresses = resolver
+                    .lookup(target.host.clone(), hps_net::ResolvePurpose::Business)
+                    .await
+                    .map_err(|_| ProxyError::Dns)?;
+                if addresses.is_empty() {
+                    return Err(ProxyError::Dns);
+                }
+                let addresses = addresses
+                    .into_iter()
+                    .map(|ip| std::net::SocketAddr::new(ip, target.port))
+                    .collect::<Vec<_>>();
+                TcpStream::connect(addresses.as_slice()).await
+            } else {
+                TcpStream::connect((target.host.as_str(), target.port)).await
+            };
+            result.map_err(|e| {
+                if matches!(socket_error(e), ProxyError::LocalResource) {
+                    ProxyError::LocalResource
+                } else {
+                    ProxyError::TargetConnect
+                }
+            })
+        })
+        .await
+        .map_err(|_| ProxyError::Timeout)??;
+        tcp.set_nodelay(true)?;
+        Ok(Connected {
+            io: Box::new(tcp),
+            upstream_id: "@direct".into(),
+            identity: String::new(),
+            absolute_form: false,
+            proxy_authorization: None,
+            routing: Some(decision),
         })
     }
 
@@ -605,6 +845,7 @@ impl Dialer {
             identity: upstream.identity.clone(),
             absolute_form,
             proxy_authorization: auth,
+            routing: None,
         })
     }
 }

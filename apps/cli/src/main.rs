@@ -54,6 +54,10 @@ enum Command {
         #[command(subcommand)]
         command: GroupCommand,
     },
+    Rule {
+        #[command(subcommand)]
+        command: RuleCommand,
+    },
     Provider {
         #[command(subcommand)]
         command: ProviderCommand,
@@ -177,6 +181,71 @@ enum GroupCommand {
         id: String,
         #[arg(long)]
         expected_revision: i64,
+    },
+}
+#[derive(Subcommand)]
+enum RuleCommand {
+    Show {
+        #[arg(long)]
+        revision: Option<i64>,
+    },
+    /// Save an unactivated routing policy candidate.
+    Save {
+        path: PathBuf,
+        #[arg(long)]
+        expected_revision: i64,
+        #[arg(long)]
+        base_revision: Option<i64>,
+    },
+    /// Create or update a rule in a new unactivated candidate.
+    Upsert {
+        path: PathBuf,
+        #[arg(long)]
+        index: Option<usize>,
+        #[arg(long)]
+        expected_revision: i64,
+        #[arg(long)]
+        base_revision: Option<i64>,
+    },
+    Delete {
+        id: String,
+        #[arg(long)]
+        expected_revision: i64,
+        #[arg(long)]
+        base_revision: Option<i64>,
+    },
+    Enable {
+        id: String,
+        #[arg(long)]
+        expected_revision: i64,
+        #[arg(long)]
+        base_revision: Option<i64>,
+    },
+    Disable {
+        id: String,
+        #[arg(long)]
+        expected_revision: i64,
+        #[arg(long)]
+        base_revision: Option<i64>,
+    },
+    Reorder {
+        ids: Vec<String>,
+        #[arg(long)]
+        expected_revision: i64,
+        #[arg(long)]
+        base_revision: Option<i64>,
+    },
+    /// Explicitly activate a saved rules-only configuration candidate.
+    Apply {
+        revision: i64,
+        #[arg(long)]
+        expected_revision: i64,
+    },
+    /// Read a JSON context and simulate without network or purchase side effects.
+    Simulate {
+        path: PathBuf,
+        #[arg(long)]
+        revision: Option<i64>,
     },
 }
 #[derive(Clone, Copy, clap::ValueEnum)]
@@ -482,6 +551,126 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
                 serde_json::to_value(client.stop_inbound(id).await.map_err(client_error)?)
             }
         },
+        Command::Rule { command } => match command {
+            RuleCommand::Show { revision } => {
+                serde_json::to_value(client.rules(*revision).await.map_err(client_error)?)
+            }
+            RuleCommand::Save {
+                path,
+                expected_revision,
+                base_revision,
+            } => {
+                let body = read_policy_file(path)?;
+                let configuration = toml::from_str::<hps_config::RoutingConfig>(&body)
+                    .map_err(|_| (2, "invalid routing policy TOML".into()))?;
+                serde_json::to_value(
+                    client
+                        .save_rules(&hps_config::RulesSave {
+                            configuration,
+                            expected_revision: *expected_revision,
+                            base_revision: *base_revision,
+                        })
+                        .await
+                        .map_err(client_error)?,
+                )
+            }
+            RuleCommand::Upsert {
+                path,
+                index,
+                expected_revision,
+                base_revision,
+            } => {
+                let body = read_policy_file(path)?;
+                let rule = toml::from_str::<hps_config::RuleConfig>(&body)
+                    .map_err(|_| (2, "invalid rule TOML".into()))?;
+                serde_json::to_value(
+                    client
+                        .upsert_rule(&hps_config::RuleUpsert {
+                            rule,
+                            index: *index,
+                            expected_revision: *expected_revision,
+                            base_revision: *base_revision,
+                        })
+                        .await
+                        .map_err(client_error)?,
+                )
+            }
+            RuleCommand::Delete {
+                id,
+                expected_revision,
+                base_revision,
+            } => serde_json::to_value(
+                client
+                    .delete_rule(&hps_config::RuleDelete {
+                        id: id.clone(),
+                        expected_revision: *expected_revision,
+                        base_revision: *base_revision,
+                    })
+                    .await
+                    .map_err(client_error)?,
+            ),
+            RuleCommand::Enable {
+                id,
+                expected_revision,
+                base_revision,
+            }
+            | RuleCommand::Disable {
+                id,
+                expected_revision,
+                base_revision,
+            } => serde_json::to_value(
+                client
+                    .toggle_rule(&hps_config::RuleToggle {
+                        id: id.clone(),
+                        enabled: matches!(command, RuleCommand::Enable { .. }),
+                        expected_revision: *expected_revision,
+                        base_revision: *base_revision,
+                    })
+                    .await
+                    .map_err(client_error)?,
+            ),
+            RuleCommand::Reorder {
+                ids,
+                expected_revision,
+                base_revision,
+            } => serde_json::to_value(
+                client
+                    .reorder_rules(&hps_config::RuleOrder {
+                        ids: ids.clone(),
+                        expected_revision: *expected_revision,
+                        base_revision: *base_revision,
+                    })
+                    .await
+                    .map_err(client_error)?,
+            ),
+            RuleCommand::Apply {
+                revision,
+                expected_revision,
+            } => serde_json::to_value(
+                client
+                    .apply_rules(&hps_domain::ConfigActivate {
+                        revision: *revision,
+                        expected_revision: *expected_revision,
+                        defer_until_restart: false,
+                    })
+                    .await
+                    .map_err(client_error)?,
+            ),
+            RuleCommand::Simulate { path, revision } => {
+                let body = read_policy_file(path)?;
+                let context = serde_json::from_str::<hps_domain::RoutingContext>(&body)
+                    .map_err(|_| (2, "invalid routing context JSON".into()))?;
+                serde_json::to_value(
+                    client
+                        .simulate_rules(&hps_domain::RulesSimulationInput {
+                            context,
+                            revision: *revision,
+                        })
+                        .await
+                        .map_err(client_error)?,
+                )
+            }
+        },
         Command::Group { command } => match command {
             GroupCommand::Show => {
                 serde_json::to_value(client.groups().await.map_err(client_error)?)
@@ -498,6 +687,7 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
             } => serde_json::to_value(
                 client
                     .simulate_group(&hps_domain::SelectionQuery {
+                        node: None,
                         group: group.clone(),
                         inbound: inbound.clone(),
                         source_ip: *source_ip,
@@ -518,7 +708,7 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
                 path,
                 expected_revision,
             } => {
-                let body = read_group_toml(path)?;
+                let body = read_policy_file(path)?;
                 let configuration = toml::from_str::<hps_config::SelectionConfig>(&body)
                     .map_err(|_| (2, "invalid group policy TOML".into()))?;
                 serde_json::to_value(
@@ -535,7 +725,7 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
                 path,
                 expected_revision,
             } => {
-                let body = read_group_toml(path)?;
+                let body = read_policy_file(path)?;
                 let group = toml::from_str::<hps_config::GroupConfig>(&body)
                     .map_err(|_| (2, "invalid group TOML".into()))?;
                 serde_json::to_value(
@@ -947,12 +1137,12 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
     value.map_err(|e| (5, e.to_string()))
 }
 
-fn read_group_toml(path: &std::path::Path) -> Result<String, (u8, String)> {
+fn read_policy_file(path: &std::path::Path) -> Result<String, (u8, String)> {
     let metadata = std::fs::metadata(path).map_err(|e| (2, e.to_string()))?;
     if !metadata.is_file() || metadata.len() > 8 * 1024 * 1024 {
         return Err((
             2,
-            "group TOML must be a regular file no larger than 8 MiB".into(),
+            "policy file must be a regular file no larger than 8 MiB".into(),
         ));
     }
     std::fs::read_to_string(path).map_err(|e| (2, e.to_string()))

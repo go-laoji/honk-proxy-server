@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 mod selection;
 pub use selection::*;
+mod routing;
+pub use routing::*;
 
 pub const API_VERSION: &str = "v1";
 
@@ -193,6 +195,8 @@ pub struct InboundStatus {
     pub protocol: String,
     pub configured_listen: String,
     pub configured_enabled: bool,
+    #[serde(default)]
+    pub runtime_override: Option<bool>,
     pub listen: Option<String>,
     pub running: bool,
     pub active_connections: usize,

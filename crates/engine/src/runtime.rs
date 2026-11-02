@@ -23,6 +23,10 @@ use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
 #[derive(Debug, thiserror::Error)]
 pub enum EngineError {
+    #[error(
+        "routing requires an unavailable data-plane capability, including verified Linux process origin"
+    )]
+    Routing,
     #[error("invalid proxy configuration")]
     Configuration,
     #[error("invalid TLS configuration")]
@@ -47,6 +51,7 @@ pub struct Engine {
 }
 struct Entry {
     config: InboundConfig,
+    runtime_override: Mutex<Option<bool>>,
     tls: Option<TlsAcceptor>,
     certificate: Option<CertificateStatus>,
     control: tokio::sync::Mutex<Option<Run>>,
@@ -118,7 +123,16 @@ impl Engine {
         previous: Option<&Arc<Self>>,
     ) -> Result<Arc<Self>, EngineError> {
         config.validate().map_err(|_| EngineError::Configuration)?;
-        let mut dialer = Dialer::new(&config).map_err(|_| EngineError::Tls)?;
+        let mut dialer = Dialer::new(&config).map_err(|e| {
+            if matches!(
+                e,
+                crate::ProxyError::UnsupportedRule | crate::ProxyError::RuleConfiguration
+            ) {
+                EngineError::Routing
+            } else {
+                EngineError::Tls
+            }
+        })?;
         if let Some(old) = previous {
             dialer.preserve_static_deadlines(&old.dialer);
             dialer.pool = old.dialer.pool.clone();
@@ -147,7 +161,11 @@ impl Engine {
                 }
                 None => (None, None),
             };
+            let runtime_override = old
+                .filter(|old| old.config.enabled == config.enabled)
+                .and_then(|old| *old.runtime_override.lock().unwrap());
             let entry = Entry {
+                runtime_override: Mutex::new(runtime_override),
                 capacity: old
                     .map_or_else(|| Arc::new(Capacity::default()), |old| old.capacity.clone()),
                 bandwidth: old
@@ -211,6 +229,13 @@ impl Engine {
     pub fn selection(&self, query: &hps_domain::SelectionQuery) -> hps_domain::SelectionDecision {
         self.dialer.selection(query)
     }
+    pub fn simulate_route(
+        &self,
+        context: &hps_domain::RoutingContext,
+        revision: i64,
+    ) -> hps_domain::RouteSimulation {
+        self.dialer.simulate_route(context, revision)
+    }
     pub fn group_last_choices(&self) -> std::collections::HashMap<String, String> {
         self.dialer.group_last_choices()
     }
@@ -220,6 +245,28 @@ impl Engine {
     pub fn demand_age(&self) -> Option<Duration> {
         self.dialer.demand.age()
     }
+    pub fn source_demand(&self, id: &str) -> (bool, Option<Duration>) {
+        let mut active = false;
+        let mut age: Option<Duration> = None;
+        for entry in self
+            .entries
+            .values()
+            .filter(|e| e.running.load(Ordering::Acquire))
+        {
+            let (current, time) = self.dialer.source_demand(id, &entry.config.id);
+            active |= current;
+            if let Some(time) = time {
+                age = Some(age.map_or(time, |old| old.min(time)));
+            }
+        }
+        (active, age)
+    }
+    pub fn set_provider_source_protocols(
+        &self,
+        protocols: std::collections::HashMap<String, ProxyProtocol>,
+    ) {
+        self.dialer.set_source_protocols(protocols);
+    }
     pub fn dynamic_pool(&self) -> Arc<crate::pool::DynamicPool> {
         self.dialer.pool.clone()
     }
@@ -227,8 +274,8 @@ impl Engine {
         self.dialer.set_sources(sources);
     }
     pub async fn start_enabled(self: &Arc<Self>) -> Result<(), EngineError> {
-        for entry in self.entries.values().filter(|entry| entry.config.enabled) {
-            if let Err(error) = self.start(&entry.config.id).await {
+        for entry in self.entries.values().filter(|entry| entry.should_start()) {
+            if let Err(error) = self.start_entry(&entry.config.id).await {
                 self.shutdown().await;
                 return Err(error);
             }
@@ -238,7 +285,7 @@ impl Engine {
     /// Bind all new sockets without accepting traffic. Existing sockets can be
     /// shared during a generation handoff, including an unchanged ephemeral ID.
     pub async fn prepare_enabled(&self, previous: Option<&Arc<Self>>) -> Result<(), EngineError> {
-        for entry in self.entries.values().filter(|entry| entry.config.enabled) {
+        for entry in self.entries.values().filter(|entry| entry.should_start()) {
             let existing = previous.and_then(|previous| {
                 previous.entries.values().find_map(|old| {
                     let same = old.config.listen == entry.config.listen
@@ -278,6 +325,7 @@ impl Engine {
         self.entries.values().all(|entry| entry.tracker.is_empty())
     }
     pub fn set_generation(&self, id: i64) {
+        self.dialer.set_revision(id);
         let _ = self
             .generation
             .compare_exchange(0, id, Ordering::AcqRel, Ordering::Acquire);
@@ -286,6 +334,11 @@ impl Engine {
         self.generation.load(Ordering::Acquire)
     }
     pub async fn start(self: &Arc<Self>, id: &str) -> Result<InboundStatus, EngineError> {
+        let entry = self.entries.get(id).ok_or(EngineError::NotFound)?;
+        *entry.runtime_override.lock().unwrap() = Some(true);
+        self.start_entry(id).await
+    }
+    async fn start_entry(self: &Arc<Self>, id: &str) -> Result<InboundStatus, EngineError> {
         let entry = self.entries.get(id).ok_or(EngineError::NotFound)?.clone();
         let mut control = entry.control.lock().await;
         if self.cancel.is_cancelled() {
@@ -366,6 +419,7 @@ impl Engine {
     }
     pub async fn stop(&self, id: &str) -> Result<InboundStatus, EngineError> {
         let entry = self.entries.get(id).ok_or(EngineError::NotFound)?;
+        *entry.runtime_override.lock().unwrap() = Some(false);
         let mut control = entry.control.lock().await;
         if let Some(cancel) = control.take() {
             cancel.accept.cancel();
@@ -396,14 +450,10 @@ impl Engine {
         !self.cancel.is_cancelled()
             && self.entries.values().any(|entry| {
                 entry.running.load(Ordering::Acquire)
-                    && self
-                        .dialer
-                        .selection(&hps_domain::SelectionQuery {
-                            inbound: Some(entry.config.id.clone()),
-                            ..Default::default()
-                        })
-                        .eligible
-                        > 0
+                    && self.dialer.can_forward(
+                        &entry.config.id,
+                        &format!("{:?}", entry.config.protocol).to_lowercase(),
+                    )
                     && entry
                         .status()
                         .certificate
@@ -412,6 +462,12 @@ impl Engine {
     }
 }
 impl Entry {
+    fn should_start(&self) -> bool {
+        self.runtime_override
+            .lock()
+            .unwrap()
+            .unwrap_or(self.config.enabled)
+    }
     fn status(&self) -> InboundStatus {
         let mut certificate = self.certificate.clone();
         if let Some(info) = &mut certificate {
@@ -426,6 +482,7 @@ impl Entry {
             protocol: format!("{:?}", self.config.protocol).to_lowercase(),
             configured_listen: self.config.listen.to_string(),
             configured_enabled: self.config.enabled,
+            runtime_override: *self.runtime_override.lock().unwrap(),
             listen: self
                 .address
                 .lock()

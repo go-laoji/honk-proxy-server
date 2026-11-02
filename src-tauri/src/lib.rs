@@ -53,6 +53,7 @@ fn supported_api(path: &str) -> bool {
             | "api/v1/providers"
             | "api/v1/groups"
     ) || supported_health_get(path)
+        || supported_rules_get(path)
         || supported_dns_get(path)
         || supported_provider_get(path)
         || path
@@ -87,6 +88,16 @@ fn supported_dns_get(path: &str) -> bool {
                     }
             })
     })
+}
+fn supported_rules_get(path: &str) -> bool {
+    if path == "api/v1/rules" {
+        return true;
+    }
+    let Some(query) = path.strip_prefix("api/v1/rules?") else {
+        return false;
+    };
+    let pairs = url::form_urlencoded::parse(query.as_bytes()).collect::<Vec<_>>();
+    pairs.len() == 1 && pairs[0].0 == "revision" && pairs[0].1.parse::<i64>().is_ok_and(|id| id > 0)
 }
 
 fn supported_health_get(path: &str) -> bool {
@@ -161,6 +172,13 @@ fn supported_action(path: &str) -> bool {
     if matches!(
         path,
         "api/v1/health/probe"
+            | "api/v1/rules/save"
+            | "api/v1/rules/upsert"
+            | "api/v1/rules/delete"
+            | "api/v1/rules/toggle"
+            | "api/v1/rules/reorder"
+            | "api/v1/rules/apply"
+            | "api/v1/rules/simulate"
             | "api/v1/groups/simulate"
             | "api/v1/groups/save"
             | "api/v1/groups/upsert"
@@ -311,6 +329,13 @@ mod tests {
     fn transport_accepts_implemented_api_only() {
         assert!(supported_api("api/v1/status"));
         assert!(supported_api("api/v1/groups"));
+        assert!(supported_api("api/v1/rules"));
+        assert!(supported_api("api/v1/rules?revision=42"));
+        assert!(!supported_api("api/v1/rules?revision=1&revision=2"));
+        assert!(!supported_api("api/v1/rules?revision=0"));
+        assert!(!supported_api("api/v1/rules?url=http://external"));
+        assert!(supported_action("api/v1/rules/simulate"));
+        assert!(supported_action("api/v1/rules/apply"));
         assert!(supported_action("api/v1/groups/simulate"));
         assert!(supported_action("api/v1/groups/pin"));
         assert!(!supported_action("api/v1/groups/unknown"));

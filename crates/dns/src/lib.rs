@@ -564,6 +564,9 @@ impl Resolver {
     }
 }
 impl NameResolver for Resolver {
+    fn observed_domains(&self, ip: IpAddr) -> Vec<String> {
+        self.domain_context(ip).domains
+    }
     fn lookup(&self, host: String, purpose: ResolvePurpose) -> NetworkFuture<'_, Vec<IpAddr>> {
         Box::pin(async move {
             if let Ok(ip) = host.parse() {

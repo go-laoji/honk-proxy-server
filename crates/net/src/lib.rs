@@ -28,6 +28,10 @@ pub enum ResolvePurpose {
 pub struct NetworkError(pub &'static str);
 
 pub trait NameResolver: Send + Sync {
+    /// Read-only, unexpired observations; candidates are not confirmed flow identities.
+    fn observed_domains(&self, _ip: IpAddr) -> Vec<String> {
+        vec![]
+    }
     fn lookup(&self, host: String, purpose: ResolvePurpose) -> NetworkFuture<'_, Vec<IpAddr>>;
     fn lookup_family(
         &self,

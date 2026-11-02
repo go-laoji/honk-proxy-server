@@ -130,6 +130,58 @@ impl HpsClient {
     ) -> Result<hps_domain::GroupsOverview<hps_config::SelectionConfig>, ClientError> {
         self.get_json("api/v1/groups").await
     }
+    pub async fn rules(
+        &self,
+        revision: Option<i64>,
+    ) -> Result<hps_domain::RulesOverview<hps_config::RoutingConfig>, ClientError> {
+        self.get_json(&revision.map_or_else(
+            || "api/v1/rules".into(),
+            |id| format!("api/v1/rules?revision={id}"),
+        ))
+        .await
+    }
+    pub async fn save_rules(
+        &self,
+        input: &hps_config::RulesSave,
+    ) -> Result<hps_domain::ConfigRevision, ClientError> {
+        self.post_body("api/v1/rules/save", input).await
+    }
+    pub async fn upsert_rule(
+        &self,
+        input: &hps_config::RuleUpsert,
+    ) -> Result<hps_domain::ConfigRevision, ClientError> {
+        self.post_body("api/v1/rules/upsert", input).await
+    }
+    pub async fn delete_rule(
+        &self,
+        input: &hps_config::RuleDelete,
+    ) -> Result<hps_domain::ConfigRevision, ClientError> {
+        self.post_body("api/v1/rules/delete", input).await
+    }
+    pub async fn toggle_rule(
+        &self,
+        input: &hps_config::RuleToggle,
+    ) -> Result<hps_domain::ConfigRevision, ClientError> {
+        self.post_body("api/v1/rules/toggle", input).await
+    }
+    pub async fn reorder_rules(
+        &self,
+        input: &hps_config::RuleOrder,
+    ) -> Result<hps_domain::ConfigRevision, ClientError> {
+        self.post_body("api/v1/rules/reorder", input).await
+    }
+    pub async fn apply_rules(
+        &self,
+        input: &hps_domain::ConfigActivate,
+    ) -> Result<hps_domain::ConfigActivationResult, ClientError> {
+        self.post_body("api/v1/rules/apply", input).await
+    }
+    pub async fn simulate_rules(
+        &self,
+        input: &hps_domain::RulesSimulationInput,
+    ) -> Result<hps_domain::RouteSimulation, ClientError> {
+        self.post_body("api/v1/rules/simulate", input).await
+    }
     pub async fn simulate_group(
         &self,
         input: &hps_domain::SelectionQuery,
