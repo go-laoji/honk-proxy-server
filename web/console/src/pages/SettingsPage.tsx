@@ -4,6 +4,8 @@ import { isDesktop } from "../platform";
 import { getJson } from "../platform";
 import { useEffect, useState } from "react";
 import type { ConfigWorkspace } from "../types";
+import DesktopPreferencesPanel from "../components/DesktopPreferencesPanel";
+import BackupPanel from "../components/BackupPanel";
 import LocalSystemPanel from "../components/LocalSystemPanel";
 
 export default function SettingsPage({
@@ -22,12 +24,14 @@ export default function SettingsPage({
     return () => controller.abort();
   }, []);
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
+    <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-2">
       {isDesktop && (
         <div className="lg:col-span-2">
           <LocalSystemPanel data={data} refreshService={refreshService} />
         </div>
       )}
+      {isDesktop && <DesktopPreferencesPanel />}
+      <BackupPanel />
       <section className="panel">
         <h2 className="border-b border-slate-100 p-5 font-semibold dark:border-slate-800">
           当前运行配置

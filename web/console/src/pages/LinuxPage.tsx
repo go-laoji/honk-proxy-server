@@ -4,6 +4,7 @@ import type { ServiceData } from "../use-service";
 import type { LinuxPreflight } from "../types";
 import { Badge } from "../components/ui";
 import { getJson } from "../platform";
+import LinuxDiagnosticsPanel from "../components/LinuxDiagnosticsPanel";
 import CapturePanel from "./CapturePanel";
 const statuses = {
   pass: "条件通过",
@@ -47,6 +48,9 @@ export default function LinuxPage({
       <CapturePanel
         key={`${data.endpoint}:${data.status.instance_id}`}
         refreshService={refreshService}
+      />
+      <LinuxDiagnosticsPanel
+        key={`${data.endpoint}:${data.status.instance_id}`}
       />
       <section className="panel overflow-hidden" aria-label="Linux 环境预检">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-5 dark:border-slate-800">
