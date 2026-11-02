@@ -218,4 +218,12 @@ Linux MPA 展示实际监听、链接/路由、内核与用户态代际、原位
 
 服务 `/status` 和 `/readyz` 将实际捕获就绪与可用的转发策略共同计算；没有显式 listener 的透明服务也可正确就绪，UDP-only 策略不会冒充 TCP 转发能力。新增 transport 回归：UDP Direct 规则只让 UDP 潜在路径可用，关闭引擎后不可用；只有对象就绪、无实际可用出口时不宣称 proxy_ready。
 
-验证：Mac engine/application/API 普通回归 101 项通过，另新增就绪传输回归 1 项通过；Mac Clippy 通过。Linux 7.0 的实际故障/恢复与 LAN 用例通过，覆盖规则 capability 在本机、网关、暂停、停止时的实际变化；Linux engine/application/API Clippy 通过。完整跨架构矩阵、SIGKILL 和实际 Linux 浏览器操作仍继续验证。
+验证：Mac engine/application/API 普通回归 98 项通过，另新增就绪传输回归 1 项通过；Mac Clippy 通过。Linux 7.0 的实际故障/恢复与 LAN 用例通过，覆盖规则 capability 在本机、网关、暂停、停止时的实际变化；Linux engine/application/API Clippy 通过。完整跨架构矩阵、SIGKILL 和实际 Linux 浏览器操作仍继续验证。
+
+## 第 23 批：独立 hpsd 的 SIGKILL、冲突拒绝与重启
+
+实际 Linux 7.0.14/aarch64 和 6.12.115/aarch64，使用真正独立的 headless `hpsd` 二进制和持久数据目录。接管前后都完成 IPv4 TCP 与 IPv6 UDP 收发；通过实际连接 API 核对 LinuxLocal、真实测试进程 PID、revision=1 和每方向 9 字节。`/status` 与 `/readyz` 在无显式入口时凭实际透明捕获和可用 Direct 路径就绪。
+
+向测试子 Daemon 发送真实 SIGKILL 并确认 signal=9，核对全部自有 program ID 释放、自有 route/rule 残留仍可见；注入同优先级外部规则后，下一子进程明确失败，不 replace/delete 外部对象。移除冲突规则后再次启动，从 SQLite 恢复 revision=1、实例 epoch 变化、真实 TCP/UDP 再次通过。最后 SIGTERM 正常退出、自有路由移除，两次退出和失败启动全程保留另一条外部规则。所有规则经 Rust RTNL 以精确 identity 创建、检查和清理。
+
+证据：`linux-transparent-crash-kernel7-2026-11-02.json` 与 `linux-transparent-crash-kernel612-2026-11-02.json`。Linux headless Daemon Clippy、Mac headless 测试编译通过。此前 initrd 使用 generic ELF strip 会丢失机器标识，首次客体未执行测试；已恢复 ARM 原生 strip，x86 改用原生 x86 容器先 strip 副本。失败启动或零匹配从未计入通过。当前仍等待完整双架构/双内核矩阵和实际 Linux 界面操作。
