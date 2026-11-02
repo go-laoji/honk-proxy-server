@@ -10,6 +10,7 @@ mod nodes;
 mod providers;
 mod rules;
 mod tasks;
+mod transparent;
 use arc_swap::ArcSwap;
 use hps_config::DaemonConfig;
 use hps_domain::{
@@ -93,7 +94,7 @@ pub enum ApplicationError {
     Provider(#[from] hps_provider::FetchError),
     #[error(transparent)]
     Dns(#[from] hps_dns::DnsError),
-    #[error("Linux DNS capture could not be prepared: {0}")]
+    #[error("Linux capture could not be prepared: {0}")]
     Capture(String),
 }
 #[derive(Default, Clone)]
@@ -130,6 +131,7 @@ pub struct RuntimeSnapshot {
     pub dns: hps_dns::Resolver,
     pub dns_server: Option<Arc<hps_dns::server::DnsServer>>,
     capture: Option<Arc<dns_capture::CaptureRuntime>>,
+    transparent: Option<Arc<transparent::Controller>>,
     base_config: DaemonConfig,
 }
 pub struct Supervisor {
@@ -175,6 +177,7 @@ impl Supervisor {
         engine.prepare_enabled(None).await?;
         let dns_server = dns::listener(&prepared.dns, None).await?;
         let capture = prepared.capture.ready(&prepared.dns).await?;
+        let transparent = prepared.transparent.ready().await?;
         engine.start_enabled().await?;
         let path_base = store
             .database_path
@@ -194,6 +197,7 @@ impl Supervisor {
                 dns: prepared.dns,
                 dns_server,
                 capture,
+                transparent,
             }),
             operation: tokio::sync::Mutex::new(()),
             retired: Mutex::new(vec![]),
@@ -226,6 +230,12 @@ impl Supervisor {
             service.shutdown().await?;
             return Err(error);
         }
+        if let Some(capture) = &current.transparent
+            && let Err(error) = capture.publish(current.engine.clone()).await
+        {
+            service.shutdown().await?;
+            return Err(error);
+        }
         Ok(service)
     }
     pub fn current(&self) -> Arc<RuntimeSnapshot> {
@@ -247,6 +257,22 @@ impl Supervisor {
         retired.retain(|engine| !engine.is_idle());
         let mut retired_dns = self.retired_dns.lock().unwrap();
         retired_dns.retain(|dns| !dns.is_released());
+        let capture_draining = current
+            .transparent
+            .as_ref()
+            .map(|capture| {
+                capture
+                    .pinned()
+                    .iter()
+                    .filter(|revision| {
+                        **revision != current.engine.generation()
+                            && !retired
+                                .iter()
+                                .any(|engine| engine.generation() == **revision)
+                    })
+                    .count()
+            })
+            .unwrap_or(0);
         let mut pending = restart_fields(&current.base_config, &workspace.desired.config);
         if let Some((revision, reasons)) = self.pending_restart.lock().unwrap().as_ref()
             && *revision == workspace.desired.revision.id
@@ -288,7 +314,7 @@ impl Supervisor {
                 .database_path
                 .as_ref()
                 .map(|path| path.display().to_string()),
-            draining_generations: retired.len() + retired_dns.len(),
+            draining_generations: retired.len() + retired_dns.len() + capture_draining,
             startup_overrides: self.overrides.fields(),
             management_certificate: current.management_tls.as_ref().map(|prepared| {
                 let info = &prepared.certificate;
@@ -538,6 +564,13 @@ impl Supervisor {
         {
             restart_required.push("dns.capture".into());
         }
+        if prepared
+            .transparent
+            .requires_restart(current.transparent.as_ref())
+            && !restart_required.iter().any(|s| s == "linux_capture")
+        {
+            restart_required.push("linux_capture".into());
+        }
         if !restart_required.is_empty() || input.defer_until_restart {
             let activation_id = self
                 .store
@@ -558,7 +591,8 @@ impl Supervisor {
                 restart_required,
             });
         }
-        if current.engine.preparation_fingerprint() == candidate.preparation_fingerprint()
+        if config.linux_capture.is_none()
+            && current.engine.preparation_fingerprint() == candidate.preparation_fingerprint()
             && current.dns.fingerprint() == prepared.dns.fingerprint()
             && serde_json::to_value(&current.base_config.proxy)
                 .map_err(|_| ApplicationError::Invalid)?
@@ -592,6 +626,7 @@ impl Supervisor {
                 dns: prepared.dns,
                 dns_server: current.dns_server.clone(),
                 capture: current.capture.clone(),
+                transparent: current.transparent.clone(),
             }));
             *self.pending_restart.lock().unwrap() = None;
             self.store
@@ -611,7 +646,21 @@ impl Supervisor {
             retired.retain(|engine| !engine.is_idle());
             let mut retired_dns = self.retired_dns.lock().unwrap();
             retired_dns.retain(|dns| !dns.is_released());
-            if retired.len() + retired_dns.len() >= 32 {
+            let capture_pins = current
+                .transparent
+                .as_ref()
+                .map(|c| c.pinned())
+                .unwrap_or_default();
+            let extra = capture_pins
+                .iter()
+                .filter(|revision| {
+                    **revision != current.engine.generation()
+                        && !retired.iter().any(|e| e.generation() == **revision)
+                })
+                .count();
+            if retired.len() + retired_dns.len() + extra >= 32
+                || (capture_pins.len() >= 32 && !capture_pins.contains(&input.revision))
+            {
                 return Err(ApplicationError::GenerationBudget);
             }
         }
@@ -651,6 +700,19 @@ impl Supervisor {
                 return Err(error);
             }
         };
+        let transparent = match prepared.transparent.ready().await {
+            Ok(value) => value,
+            Err(error) => {
+                self.store
+                    .record_failure(
+                        input.revision,
+                        input.expected_revision,
+                        "transparent_preparation_failed",
+                    )
+                    .await?;
+                return Err(error);
+            }
+        };
         let activation_id = self
             .store
             .activate(input.revision, input.expected_revision, false)
@@ -682,6 +744,34 @@ impl Supervisor {
             cleanup?;
             return Err(error);
         }
+        if let Some(transparent) = &transparent
+            && let Err(error) = transparent.publish(candidate.clone()).await
+        {
+            if !current
+                .transparent
+                .as_ref()
+                .is_some_and(|old| Arc::ptr_eq(old, transparent))
+            {
+                let _ = transparent.shutdown().await;
+            }
+            if let Some(capture) = &capture
+                && !current
+                    .capture
+                    .as_ref()
+                    .is_some_and(|old| Arc::ptr_eq(old, capture))
+            {
+                let _ = capture.shutdown().await;
+            }
+            candidate.shutdown().await;
+            let rollback = self
+                .store
+                .activate(current.revision, input.revision, false)
+                .await?;
+            self.store
+                .mark_applied(current.revision, Some(rollback))
+                .await?;
+            return Err(error);
+        }
         current.engine.drain_acceptors().await;
         let bootstrap_changed = current.dns.fingerprint() != prepared.dns.fingerprint()
             || !current
@@ -705,6 +795,7 @@ impl Supervisor {
                 dns: prepared.dns,
                 dns_server: dns_server.clone(),
                 capture,
+                transparent,
             }))
         });
         if current.dns.fingerprint() != self.current().dns.fingerprint() {
@@ -780,6 +871,9 @@ impl Supervisor {
             retired.retain(|engine| !engine.is_idle());
             pinned.extend(retired.iter().map(|engine| engine.generation()));
         }
+        if let Some(capture) = &current.transparent {
+            pinned.extend(capture.pinned());
+        }
         self.store
             .prune_versions(current.config.retention.config_versions, pinned)
             .await?;
@@ -797,6 +891,11 @@ impl Supervisor {
         self.provider_cancel.cancel();
         drop(_operation);
         self.provider_tasks.wait().await;
+        let transparent_error = if let Some(capture) = &self.current().transparent {
+            capture.shutdown().await.err()
+        } else {
+            None
+        };
         self.current().dns.shutdown().await;
         let retired_dns = std::mem::take(&mut *self.retired_dns.lock().unwrap());
         for dns in retired_dns {
@@ -825,7 +924,7 @@ impl Supervisor {
             )
             .await?;
         self.store.close().await?;
-        if let Some(error) = capture_error {
+        if let Some(error) = transparent_error.or(capture_error) {
             return Err(error);
         }
         Ok(())
@@ -870,6 +969,7 @@ fn export(config: &DaemonConfig) -> Result<String, ApplicationError> {
 }
 struct PreparedRuntime {
     capture: dns_capture::PreparedCapture,
+    transparent: transparent::Prepared,
     dns: hps_dns::Resolver,
     health_profiles: Vec<hps_health::PreparedProfile>,
     engine: Arc<Engine>,
@@ -893,6 +993,21 @@ fn prepare_engine(
     };
     let dns = dns::prepare(config, previous)?;
     let capture = dns_capture::PreparedCapture::prepare(config, previous)?;
+    let transparent = transparent::Prepared::prepare(config, previous)?;
+    #[cfg(target_os = "linux")]
+    let engine = if let Some(capture) = &config.linux_capture {
+        Engine::with_capture(
+            config.proxy.clone(),
+            previous.map(|p| &p.engine),
+            hps_engine::routing::RoutingCapabilities {
+                local_process: capture.local_cgroup.is_some(),
+                udp: capture.udp,
+            },
+        )?
+    } else {
+        Engine::with_previous(config.proxy.clone(), previous.map(|p| &p.engine))?
+    };
+    #[cfg(not(target_os = "linux"))]
     let engine = Engine::with_previous(config.proxy.clone(), previous.map(|p| &p.engine))?;
     let health_profiles = prepare_network(config, &engine, &dns)?;
     if engine.status().inbounds.iter().any(|entry| {
@@ -905,6 +1020,7 @@ fn prepare_engine(
     }
     Ok(PreparedRuntime {
         capture,
+        transparent,
         dns,
         health_profiles,
         engine,
@@ -919,6 +1035,9 @@ fn restart_fields(current: &DaemonConfig, target: &DaemonConfig) -> Vec<String> 
         .filter(|field| before[*field] != after[*field])
         .map(str::to_owned)
         .collect::<Vec<_>>();
+    if current.linux_capture.is_some() && current.linux_capture != target.linux_capture {
+        fields.push("linux_capture".into());
+    }
     if current.dns.capture.is_some() && current.dns.capture != target.dns.capture {
         fields.push("dns.capture".into());
     }
@@ -970,6 +1089,13 @@ fn changes(current: &DaemonConfig, target: &DaemonConfig) -> Vec<ConfigChange> {
     if current.dns.capture.is_some() {
         for change in &mut out {
             if change.path == "dns.capture" || change.path.starts_with("dns.capture.") {
+                change.apply_mode = "restart".into();
+            }
+        }
+    }
+    if current.linux_capture.is_some() {
+        for change in &mut out {
+            if change.path == "linux_capture" || change.path.starts_with("linux_capture.") {
                 change.apply_mode = "restart".into();
             }
         }

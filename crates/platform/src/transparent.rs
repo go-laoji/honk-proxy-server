@@ -65,6 +65,7 @@ pub struct CaptureSockets<'a> {
     pub udp4: Option<BorrowedFd<'a>>,
     pub udp6: Option<BorrowedFd<'a>>,
 }
+#[derive(Clone)]
 pub struct PreparedCapture {
     object: Vec<u8>,
     pub fingerprint: String,

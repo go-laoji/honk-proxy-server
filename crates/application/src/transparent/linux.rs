@@ -1,0 +1,489 @@
+use hps_config::LinuxCaptureConfig;
+use hps_ebpf_abi::{CapturedFlow, FlowKey};
+use hps_engine::{
+    capture::{CaptureBudget, CapturedTcpSession, CapturedUdpSession},
+    runtime::Engine,
+};
+use hps_platform::transparent::{Capture, CaptureSockets, PreparedCapture};
+use std::{
+    collections::{BTreeMap, HashMap, HashSet},
+    os::fd::AsFd,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, AtomicU64, Ordering},
+    },
+    time::{Duration, Instant},
+};
+use tokio::net::{TcpListener, TcpStream, UdpSocket};
+use tokio_util::{sync::CancellationToken, task::TaskTracker};
+
+pub(super) struct Controller {
+    running: Mutex<Option<Arc<Running>>>,
+    operation: tokio::sync::Mutex<()>,
+}
+impl Controller {
+    pub async fn prepare(prepared: PreparedCapture) -> Result<Self, String> {
+        Ok(Self {
+            running: Mutex::new(Some(Running::prepare(prepared).await?)),
+            operation: tokio::sync::Mutex::new(()),
+        })
+    }
+    pub async fn publish(&self, engine: Arc<Engine>) -> Result<(), String> {
+        let _operation = self.operation.lock().await;
+        let running = self
+            .running
+            .lock()
+            .unwrap()
+            .clone()
+            .ok_or("capture is stopped")?;
+        running.collect().await?;
+        running.publish(engine).await
+    }
+    pub async fn shutdown(&self) -> Result<(), String> {
+        let _operation = self.operation.lock().await;
+        let running = self.running.lock().unwrap().take();
+        if let Some(running) = running {
+            running.shutdown().await?;
+        }
+        Ok(())
+    }
+    pub fn pinned(&self) -> Vec<i64> {
+        self.running
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|r| r.engines.lock().unwrap().entries.keys().copied().collect())
+            .unwrap_or_default()
+    }
+}
+#[derive(Clone, Default)]
+struct Listeners {
+    tcp4: Option<Arc<TcpListener>>,
+    tcp6: Option<Arc<TcpListener>>,
+    udp4: Option<Arc<UdpSocket>>,
+    udp6: Option<Arc<UdpSocket>>,
+}
+impl Listeners {
+    fn bind(config: &LinuxCaptureConfig) -> Result<Self, String> {
+        let mut result = Self::default();
+        if config.tcp {
+            if config.ipv4 {
+                result.tcp4 = Some(Arc::new(
+                    hps_net::transparent::bind_tcp(
+                        ([0, 0, 0, 0], config.tcp_port).into(),
+                        config.bypass_mark,
+                        config.max_pending.min(4096),
+                    )
+                    .map_err(|e| format!("capture TCP4 bind: {e}"))?,
+                ));
+            }
+            if config.ipv6 {
+                result.tcp6 = Some(Arc::new(
+                    hps_net::transparent::bind_tcp(
+                        std::net::SocketAddr::new(
+                            std::net::Ipv6Addr::UNSPECIFIED.into(),
+                            config.tcp_port,
+                        ),
+                        config.bypass_mark,
+                        config.max_pending.min(4096),
+                    )
+                    .map_err(|e| format!("capture TCP6 bind: {e}"))?,
+                ));
+            }
+        }
+        if config.udp {
+            if config.ipv4 {
+                result.udp4 = Some(Arc::new(
+                    hps_net::transparent::bind_udp(
+                        ([0, 0, 0, 0], config.udp_port).into(),
+                        config.bypass_mark,
+                    )
+                    .map_err(|e| format!("capture UDP4 bind: {e}"))?,
+                ));
+            }
+            if config.ipv6 {
+                result.udp6 = Some(Arc::new(
+                    hps_net::transparent::bind_udp(
+                        std::net::SocketAddr::new(
+                            std::net::Ipv6Addr::UNSPECIFIED.into(),
+                            config.udp_port,
+                        ),
+                        config.bypass_mark,
+                    )
+                    .map_err(|e| format!("capture UDP6 bind: {e}"))?,
+                ));
+            }
+        }
+        Ok(result)
+    }
+}
+#[derive(Default)]
+struct Generations {
+    active: i64,
+    entries: BTreeMap<i64, Arc<Engine>>,
+}
+enum Session {
+    Tcp(CapturedTcpSession),
+    Udp(CapturedUdpSession),
+}
+impl Session {
+    fn cancel(&self) {
+        match self {
+            Self::Tcp(s) => s.cancel(),
+            Self::Udp(s) => s.cancel(),
+        }
+    }
+    fn finished(&self) -> bool {
+        match self {
+            Self::Tcp(s) => s.is_finished(),
+            Self::Udp(s) => s.is_finished(),
+        }
+    }
+    async fn wait(&self) {
+        match self {
+            Self::Tcp(s) => s.finished().await,
+            Self::Udp(s) => s.finished().await,
+        }
+    }
+}
+struct Owner {
+    flow: CapturedFlow,
+    session: Session,
+    completed: Option<Instant>,
+}
+struct Running {
+    capture: Arc<Capture>,
+    listeners: Listeners,
+    budget: Arc<CaptureBudget>,
+    engines: Mutex<Generations>,
+    owners: Mutex<HashMap<FlowKey, Owner>>,
+    publication: tokio::sync::Mutex<()>,
+    stop: CancellationToken,
+    tasks: TaskTracker,
+    started: AtomicBool,
+    error: Mutex<Option<String>>,
+    dropped: AtomicU64,
+}
+fn monotonic_ns() -> Result<u64, String> {
+    let mut time = libc::timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    if unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut time) } != 0 {
+        return Err("monotonic clock unavailable".into());
+    }
+    Ok((time.tv_sec as u64)
+        .saturating_mul(1_000_000_000)
+        .saturating_add(time.tv_nsec as u64))
+}
+impl Running {
+    async fn prepare(prepared: PreparedCapture) -> Result<Arc<Self>, String> {
+        let listeners = Listeners::bind(&prepared.specification)?;
+        let budget = CaptureBudget::new(&prepared.specification).map_err(|e| e.to_string())?;
+        let descriptors = listeners.clone();
+        let capture = tokio::task::spawn_blocking(move || {
+            let capture = prepared.load(CaptureSockets {
+                tcp4: descriptors.tcp4.as_ref().map(|s| s.as_fd()),
+                tcp6: descriptors.tcp6.as_ref().map(|s| s.as_fd()),
+                udp4: descriptors.udp4.as_ref().map(|s| s.as_fd()),
+                udp6: descriptors.udp6.as_ref().map(|s| s.as_fd()),
+            })?;
+            capture.prepare_routes()?;
+            capture.settled_revision()?;
+            Ok::<_, String>(capture)
+        })
+        .await
+        .map_err(|_| "capture preparation worker stopped")??;
+        Ok(Arc::new(Self {
+            capture: Arc::new(capture),
+            listeners,
+            budget,
+            engines: Mutex::new(Generations::default()),
+            owners: Mutex::new(HashMap::new()),
+            publication: tokio::sync::Mutex::new(()),
+            stop: CancellationToken::new(),
+            tasks: TaskTracker::new(),
+            started: AtomicBool::new(false),
+            error: Mutex::new(None),
+            dropped: AtomicU64::new(0),
+        }))
+    }
+    async fn publish(self: &Arc<Self>, engine: Arc<Engine>) -> Result<(), String> {
+        let _publication = self.publication.lock().await;
+        if self.stop.is_cancelled() {
+            return Err("capture is stopped".into());
+        }
+        if let Some(error) = self.error.lock().unwrap().clone() {
+            return Err(error);
+        }
+        let revision = engine.generation();
+        if revision <= 0 {
+            return Err("capture engine generation must be positive".into());
+        }
+        let inserted = {
+            let mut engines = self.engines.lock().unwrap();
+            if let Some(old) = engines.entries.get(&revision) {
+                if old.preparation_fingerprint() != engine.preparation_fingerprint() {
+                    return Err("capture revision already has a different prepared snapshot; restart is required".into());
+                }
+                false
+            } else {
+                if engines.entries.len() >= 32 {
+                    return Err(
+                        "capture generation budget reached; wait for flows to finish".into(),
+                    );
+                }
+                engines.entries.insert(revision, engine);
+                true
+            }
+        };
+        self.start_loops();
+        let capture = self.capture.clone();
+        let result = tokio::task::spawn_blocking(move || capture.activate(revision, true))
+            .await
+            .map_err(|_| "capture publication worker stopped".to_owned())
+            .and_then(|r| r);
+        match result {
+            Ok(()) => {
+                self.engines.lock().unwrap().active = revision;
+                Ok(())
+            }
+            Err(error) => {
+                if inserted {
+                    self.engines.lock().unwrap().entries.remove(&revision);
+                }
+                Err(error)
+            }
+        }
+    }
+    fn start_loops(self: &Arc<Self>) {
+        if self.started.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        for listener in [&self.listeners.tcp4, &self.listeners.tcp6]
+            .into_iter()
+            .flatten()
+        {
+            let listener = listener.clone();
+            let weak = Arc::downgrade(self);
+            let stop = self.stop.clone();
+            self.tasks.spawn(async move{loop{
+                let incoming=tokio::select!{biased;_=stop.cancelled()=>break,result=listener.accept()=>result};
+                let Some(running)=weak.upgrade()else{break};
+                match incoming {Ok((stream,_))=>{if running.tcp(stream).is_err(){running.dropped.fetch_add(1,Ordering::Relaxed);}},Err(e)=>{running.fail(format!("capture TCP accept: {e}"));break;}}
+            }});
+        }
+        for socket in [&self.listeners.udp4, &self.listeners.udp6]
+            .into_iter()
+            .flatten()
+        {
+            let socket = socket.clone();
+            let weak = Arc::downgrade(self);
+            let stop = self.stop.clone();
+            self.tasks.spawn(async move{let mut bytes=vec![0u8;65536];loop{
+                let incoming=tokio::select!{biased;_=stop.cancelled()=>break,result=hps_net::transparent::recv_original(&socket,&mut bytes)=>result};
+                let Some(running)=weak.upgrade()else{break};
+                match incoming {Ok(packet)=>{if running.udp(packet,&bytes[..packet.bytes]).is_err(){running.dropped.fetch_add(1,Ordering::Relaxed);}},Err(e)if e.kind()==std::io::ErrorKind::InvalidData=>{running.dropped.fetch_add(1,Ordering::Relaxed);},Err(e)=>{running.fail(format!("capture UDP receive: {e}"));break;}}
+            }});
+        }
+        let weak = Arc::downgrade(self);
+        let stop = self.stop.clone();
+        self.tasks.spawn(async move {
+            let mut timer = tokio::time::interval(Duration::from_millis(250));
+            timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                tokio::select! {biased;_=stop.cancelled()=>break,_=timer.tick()=>{}}
+                let Some(running) = weak.upgrade() else { break };
+                if let Err(error) = running.collect().await {
+                    running.fail(error);
+                    break;
+                }
+            }
+        });
+    }
+    fn engine(&self, revision: u64) -> Result<Arc<Engine>, String> {
+        self.engines
+            .lock()
+            .unwrap()
+            .entries
+            .get(&(revision as i64))
+            .cloned()
+            .ok_or_else(|| {
+                "captured generation is unavailable; refusing current-generation fallback".into()
+            })
+    }
+    fn tcp(&self, stream: TcpStream) -> Result<(), String> {
+        if self.stop.is_cancelled() {
+            return Err("capture stopped".into());
+        }
+        let metadata = self.capture.routing_metadata(
+            stream.peer_addr().map_err(|e| e.to_string())?,
+            stream.local_addr().map_err(|e| e.to_string())?,
+            6,
+        )?;
+        let engine = self.engine(metadata.flow.revision)?;
+        let mut owners = self.owners.lock().unwrap();
+        if owners.contains_key(&metadata.key)
+            || owners.len() >= self.capture.specification.max_flows as usize
+        {
+            return Err("capture tuple owner capacity or identity conflict".into());
+        }
+        let admission = self
+            .budget
+            .tcp_admission(&self.stop)
+            .map_err(|e| e.to_string())?;
+        let session = engine
+            .spawn_captured_tcp_scoped(
+                stream,
+                metadata.context,
+                metadata.flow.revision as i64,
+                admission,
+            )
+            .map_err(|e| e.to_string())?;
+        owners.insert(
+            metadata.key,
+            Owner {
+                flow: metadata.flow,
+                session: Session::Tcp(session),
+                completed: None,
+            },
+        );
+        Ok(())
+    }
+    fn udp(
+        &self,
+        packet: hps_net::transparent::OriginalDatagram,
+        bytes: &[u8],
+    ) -> Result<(), String> {
+        if self.stop.is_cancelled() {
+            return Err("capture stopped".into());
+        }
+        let metadata = self
+            .capture
+            .routing_metadata(packet.source, packet.destination, 17)?;
+        let engine = self.engine(metadata.flow.revision)?;
+        let mut owners = self.owners.lock().unwrap();
+        if let Some(owner) = owners.get(&metadata.key) {
+            if !owner.flow.same_identity(&metadata.flow) {
+                owner.session.cancel();
+                return Err("capture UDP identity changed before owner retirement".into());
+            }
+            return match &owner.session {
+                Session::Udp(session) => session.try_send(bytes).map_err(|e| e.to_string()),
+                _ => Err("capture transport owner mismatch".into()),
+            };
+        }
+        if owners.len() >= self.capture.specification.max_flows as usize {
+            return Err("capture tuple owner capacity reached".into());
+        }
+        let reply = hps_net::transparent::bind_udp_reply(
+            packet.destination,
+            packet.source,
+            self.capture.specification.bypass_mark,
+        )
+        .map_err(|e| e.to_string())?;
+        let admission = self
+            .budget
+            .udp_admission(&self.stop)
+            .map_err(|e| e.to_string())?;
+        let session = engine
+            .spawn_captured_udp(
+                reply,
+                metadata.context,
+                metadata.flow.revision as i64,
+                admission,
+            )
+            .map_err(|e| e.to_string())?;
+        let result = session.try_send(bytes).map_err(|e| e.to_string());
+        owners.insert(
+            metadata.key,
+            Owner {
+                flow: metadata.flow,
+                session: Session::Udp(session),
+                completed: None,
+            },
+        );
+        result
+    }
+    async fn collect(&self) -> Result<(), String> {
+        let _publication = self.publication.lock().await;
+        let active = self.engines.lock().unwrap().active;
+        if active == 0 || self.stop.is_cancelled() {
+            return Ok(());
+        }
+        let capture = self.capture.clone();
+        let (settled, flows) = tokio::task::spawn_blocking(move || {
+            Ok::<_, String>((capture.settled_revision()?, capture.flows()?))
+        })
+        .await
+        .map_err(|_| "capture GC worker stopped")??;
+        if settled != active {
+            return Err("capture kernel and user-space generations diverged".into());
+        }
+        let now = monotonic_ns()?;
+        let mut owners = self.owners.lock().unwrap();
+        for (key, flow) in flows {
+            let retire = if let Some(owner) = owners.get_mut(&key) {
+                if !owner.flow.same_identity(&flow) {
+                    owner.session.cancel();
+                    false
+                } else if owner.session.finished() {
+                    let completed = owner.completed.get_or_insert_with(Instant::now);
+                    key.protocol == 17 || completed.elapsed() >= Duration::from_secs(2)
+                } else {
+                    false
+                }
+            } else {
+                now.saturating_sub(flow.first_seen_ns) >= 30_000_000_000
+            };
+            if retire && self.capture.retire_flow(key, flow)? {
+                owners.remove(&key);
+            }
+        }
+        // Only this GC removes flow keys. Stable old keys cannot be skipped by
+        // a concurrent user-space removal during this bounded post-grace scan.
+        let retained = self
+            .capture
+            .flows()?
+            .into_iter()
+            .map(|(_, f)| f.revision as i64)
+            .collect::<HashSet<_>>();
+        self.engines
+            .lock()
+            .unwrap()
+            .entries
+            .retain(|revision, engine| {
+                *revision == active || retained.contains(revision) || !engine.is_idle()
+            });
+        Ok(())
+    }
+    fn fail(&self, error: String) {
+        *self.error.lock().unwrap() = Some(error);
+        self.stop.cancel();
+    }
+    async fn shutdown(&self) -> Result<(), String> {
+        self.stop.cancel();
+        self.tasks.close();
+        self.tasks.wait().await;
+        let owners = std::mem::take(&mut *self.owners.lock().unwrap());
+        for owner in owners.values() {
+            owner.session.cancel();
+        }
+        for owner in owners.values() {
+            owner.session.wait().await;
+        }
+        let _publication = self.publication.lock().await;
+        let capture = self.capture.clone();
+        tokio::task::spawn_blocking(move || capture.shutdown())
+            .await
+            .map_err(|_| "capture shutdown worker stopped")?
+    }
+}
+impl Drop for Running {
+    fn drop(&mut self) {
+        self.stop.cancel();
+        for owner in self.owners.get_mut().unwrap().values() {
+            owner.session.cancel();
+        }
+    }
+}

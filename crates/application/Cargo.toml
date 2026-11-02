@@ -43,3 +43,7 @@ tokio-rustls = { version = "0.26", default-features = false, features = ["ring",
 
 [target.'cfg(target_os = "linux")'.dev-dependencies]
 aya = "0.14"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
+hps-ebpf-abi = {workspace = true,features=["userspace"]}

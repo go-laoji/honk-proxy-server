@@ -135,3 +135,17 @@ TCP scoped 入口返回独立 CapturedTcpSession；UDP owner 也增加 finished/
 `settled_revision` 在配置状态互斥下关闭本次独占的 protocol=0 AF_PACKET socket，利用本项目验证内核 [6.12 packet_release](https://github.com/torvalds/linux/blob/v6.12/net/packet/af_packet.c) 和 [7.0 packet_release](https://github.com/torvalds/linux/blob/v7.0/net/packet/af_packet.c) 中无条件的 synchronize_net，建立策略发布后的网络 RCU grace period。protocol=0 不注册收包钩子、不接收/检查报文、不创建网卡或路由。该退休基础要求 CONFIG_PACKET 和 CAP_NET_RAW；失败时必须保留旧代际，不能用固定延时冒充完成。完整运行时仍须把发布、屏障、元数据扫描和快照回收串行化。没有采用 membarrier GLOBAL，因为验证内核在单个 online CPU 时可能跳过 synchronize_rcu。
 
 实际 aarch64 7.0.14 与 QEMU 6.12.115 均通过：分别卸载 sendmsg4 与 sock_create，同时保留独立程序 FD，仍能发现挂载已丢失并拒绝下一次启用；新线程进入另一 netns 后，挂载/路由操作拒绝，原日志逐字不变且原路由仍存在；持有路由 State 时元数据查询仍可完成；退休屏障返回实际代际 7；停止并关闭独立测试 FD 后全部 map 回收。两个实际内核的证据为 `linux-transparent-inspection-kernel{7,612}-2026-11-02.json`。7.0 的 TCP/UDP 转发回归两项也通过，Linux Clippy/格式/diff 通过。完整 Daemon 和最终矩阵尚待完成，full ready 保持 false。
+
+## Daemon 生命周期与持久代际接入（第十四批）
+
+默认关闭的 `DaemonConfig.linux_capture` 接入配置校验、相对对象路径解析和 Supervisor；非 Linux 在准备时明确拒绝启用。捕获身份、对象内容、预算或绑定变化要求重启。Linux 启用后使用相同 Engine::with_capture、拨号/选择/健康/租约/连接观察，启动时在载入健康与供应商事实后才发布内核策略。与 DNS 捕获共存时补齐双栈自有 alias 旁路，已有覆盖前缀不重复添加。
+
+运行对象持有有限 listener、共享预算、每条 TCP/UDP owner 与不超过 32 个引擎代际。循环使用 Weak，停止后先结束接纳/接收/GC，再逐条等待业务资源释放并回收内核对象。每次热更在持久 CAS 后登记候选引擎、RCU 发布完整内核策略；捕获流只按实际 map 中的 revision 找引擎，缺失时拒绝。仅改实例名称也创建对应代际，不能让内核新 revision 落到旧 generation 的 Engine。
+
+发布与 GC 共用串行互斥：发布后的退休屏障、流 map 扫描、owner 精确退休与旧引擎回收纳入同一序列。内核 pending 身份有 30 秒上限；已结束 TCP 为 FIN/ACK 留 2 秒安静期；UDP 仅在 owner 结束后退休，已收到的旧身份报文不改代际重放。待接纳的旧代际也固定数据库版本，并计入 draining_generations 与代际预算，避免 workspace/prune 只按用户态 active 数回收。
+
+实际 aarch64 7.0.14 与 QEMU 6.12.115 的 Supervisor 联合项均通过：持久 SQLite 启动，真实 cgroup PID/comm 命中 Direct 规则，双栈各一条 TCP/UDP；revision 2 改为 Reject，revision 3 仅改实例名称，4 条旧连接继续按 revision 1 收发，8 条新连接分别按 revision 2/3 拒绝。业务上下行各 24 B；管理断开、安静期 GC、旧代际排空、8 个自有程序回收、从持久 revision 3 重启均通过。证据为 `linux-transparent-daemon-kernel{7,612}-2026-11-02.json`。
+
+Linux config/application 普通回归 46 passed / 4 个特权入口 ignored（该批实际联合项另行显式通过）；macOS 45 项普通回归及新增非 Linux 拒绝项 1 项通过，相关 Clippy、格式和 diff 检查通过。首次联合项仅因测试误用 connection state=active 而未断开 open UDP 导致等待超时，修正后重验，未把该失败计为通过。
+
+本批不代表完整 T15：失败注入/自动恢复、实际 LAN、控制面 API/CLI/MPA 与 x86_64 联合矩阵仍待完成，公开完整 datapath_ready 继续保持 false，T11/T13/T15 不关闭。
