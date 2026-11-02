@@ -2,6 +2,14 @@ use crate::ConfigError;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, path::PathBuf};
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LinuxCaptureSave {
+    pub expected_revision: i64,
+    pub expected_epoch: String,
+    pub configuration: Option<LinuxCaptureConfig>,
+}
+
 /// Only explicit scopes are valid. Daemon wiring is added with the real loader;
 /// defining this contract does not enable capture on an existing installation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { Cpu, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import type { ServiceData } from "../use-service";
 import type { LinuxPreflight } from "../types";
-import { Badge, Details } from "../components/ui";
+import { Badge } from "../components/ui";
 import { getJson } from "../platform";
+import CapturePanel from "./CapturePanel";
 const statuses = {
   pass: "条件通过",
   fail: "条件不足",
@@ -11,7 +12,6 @@ const statuses = {
   unsupported: "不支持",
 };
 export default function LinuxPage({ data }: { data: ServiceData }) {
-  const ebpf = data.capabilities.linux_ebpf;
   const [preflight, setPreflight] = useState<LinuxPreflight | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -38,47 +38,7 @@ export default function LinuxPage({ data }: { data: ServiceData }) {
   }, [attempt]);
   return (
     <div className="space-y-6">
-      <section className="panel">
-        <div className="flex items-start gap-4 border-b border-slate-100 p-6 dark:border-slate-800">
-          <div className="rounded-xl bg-blue-50 p-3 text-blue-600 dark:bg-blue-950">
-            <Cpu size={26} />
-          </div>
-          <div>
-            <h2 className="font-semibold">透明 TCP/UDP 数据面状态</h2>
-            <p className="muted mt-2 text-sm leading-6">{ebpf.reason}</p>
-          </div>
-        </div>
-        <Details
-          rows={[
-            ["目标服务平台", data.status.platform],
-            [
-              "平台支持",
-              ebpf.platform_supported
-                ? "Linux 平台，仍需检查内核条件"
-                : "当前平台不支持",
-            ],
-            [
-              "目标服务包含 Rust 加载器",
-              preflight
-                ? preflight.loader_compiled
-                  ? "是"
-                  : "否"
-                : "正在读取",
-            ],
-            ["完整透明数据面内置对象", ebpf.compiled ? "是" : "否"],
-            ["透明捕获已配置", ebpf.configured ? "是" : "否"],
-            ["透明捕获已挂载", ebpf.attached ? "是" : "否"],
-            ["完整透明接管就绪", ebpf.ready ? "是" : "否"],
-          ]}
-        />
-        <p className="muted px-6 pb-5 text-xs leading-6">
-          本机应用的 UDP/TCP 53 端口 DNS 捕获可单独启用，运行状态及内核证据在{" "}
-          <a href="./dns.html" className="text-blue-600 hover:underline">
-            DNS 设置
-          </a>{" "}
-          中查看。
-        </p>
-      </section>
+      <CapturePanel key={`${data.endpoint}:${data.status.instance_id}`} />
       <section className="panel overflow-hidden" aria-label="Linux 环境预检">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-5 dark:border-slate-800">
           <div>

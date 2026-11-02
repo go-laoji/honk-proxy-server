@@ -180,6 +180,28 @@ impl Controller {
 }
 
 impl Supervisor {
+    pub async fn save_linux_capture(
+        self: &Arc<Self>,
+        input: hps_config::LinuxCaptureSave,
+    ) -> Result<ConfigRevision, ApplicationError> {
+        if input.expected_epoch != self.event_epoch() {
+            return Err(ApplicationError::ConnectionEpoch);
+        }
+        let current = self.current();
+        if current.revision != input.expected_revision {
+            return Err(StorageError::Conflict.into());
+        }
+        let mut config = current.base_config.clone();
+        config.linux_capture = input.configuration;
+        self.create_revision(ConfigInput {
+            toml: toml::to_string(&config).map_err(|_| ApplicationError::Invalid)?,
+            expected_revision: input.expected_revision,
+            expected_draft_version: None,
+            note: "Linux capture candidate".into(),
+            use_draft_credentials: false,
+        })
+        .await
+    }
     pub async fn control_linux_capture(
         self: &Arc<Self>,
         input: hps_domain::LinuxCaptureRequest,

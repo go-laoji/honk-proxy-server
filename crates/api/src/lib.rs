@@ -21,6 +21,7 @@ mod connections;
 mod dns;
 mod groups;
 mod health;
+mod linux;
 mod nodes;
 mod providers;
 mod rules;
@@ -161,6 +162,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .merge(nodes::router())
         .merge(rules::router())
         .merge(tasks::router())
+        .merge(linux::router())
         .layer(axum::extract::DefaultBodyLimit::max(4 * 1024 * 1024));
     #[cfg(feature = "web-ui")]
     let router = router.fallback(web::serve);
@@ -181,11 +183,21 @@ async fn version(State(state): State<Arc<AppState>>) -> Json<VersionInfo> {
     Json(state.version())
 }
 async fn capabilities(State(state): State<Arc<AppState>>) -> Json<Capabilities> {
-    Json(if state.runtime_engine().is_some() {
+    let mut capabilities = if state.runtime_engine().is_some() {
         Capabilities::explicit_proxy()
     } else {
         Capabilities::foundation()
-    })
+    };
+    if let Some(application) = &state.application {
+        let capture = application.linux_capture_status().await;
+        capabilities.linux_ebpf.configured = capture.configured;
+        capabilities.linux_ebpf.attached = capture.links_present == Some(true);
+        capabilities.linux_ebpf.ready = capture.ready;
+        capabilities.linux_ebpf.reason = capture.reason.unwrap_or_else(|| {
+            "所选透明捕获范围的监听、链接、路由及内核代际均已核验；对象由配置路径加载".into()
+        });
+    }
+    Json(capabilities)
 }
 
 async fn ready(State(state): State<Arc<AppState>>) -> (StatusCode, Json<serde_json::Value>) {
@@ -327,10 +339,7 @@ fn application_error(error: ApplicationError) -> (StatusCode, Json<ApiError>) {
             (StatusCode::TOO_MANY_REQUESTS, "rule_diagnostics_capacity")
         }
         ApplicationError::Provider(error) => (StatusCode::BAD_GATEWAY, error.code),
-        ApplicationError::Capture(_) => (
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "dns_capture_preparation_failed",
-        ),
+        ApplicationError::Capture(_) => (StatusCode::UNPROCESSABLE_ENTITY, "linux_capture_failed"),
         ApplicationError::Dns(error) => {
             use hps_dns::DnsError;
             match error {

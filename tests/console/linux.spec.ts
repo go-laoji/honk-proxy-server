@@ -5,6 +5,19 @@ test("Linux MPA reads actual daemon prerequisites without claiming capture", asy
 }) => {
   const report = await (await request.get("/api/v1/linux/preflight")).json();
   await page.goto("/console/linux.html");
+  const capture = await (await request.get("/api/v1/linux/capture")).json();
+  const runtime = page.getByRole("region", { name: "透明代理运行控制" });
+  await expect(runtime).toContainText(capture.status.reason);
+  await expect(
+    runtime.getByRole("button", { name: "启动透明代理", exact: true }),
+  ).toBeDisabled();
+  await expect(runtime).toContainText(
+    `r${capture.running_revision} / r${capture.desired_revision}`,
+  );
+  await runtime
+    .getByRole("button", { name: "刷新运行状态", exact: true })
+    .click();
+  await expect(runtime).toContainText("内核代际");
   const region = page.getByRole("region", { name: "Linux 环境预检" });
   await expect(region).toContainText(report.platform);
   for (const check of report.checks)

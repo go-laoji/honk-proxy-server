@@ -195,3 +195,11 @@ ABI v4 加入显式 suspended 策略：保留已配置范围与 bypass，对受�
 恢复保持原 Capture 和暂停范围，取消并等待每条旧 owner，执行网络 RCU 屏障，排空旧 listener backlog，精确退休旧元数据，再登记当前引擎并解除暂停。重挂只针对原 namespace、cgroup、interface index；自有 link ID 被保存并替换，避免重复修复积累失效 FD。外部归属冲突保留日志并拒绝接管。普通 Linux Clippy 的一处折叠 if 已按建议修复；不计作行为失败。
 
 证据：`linux-transparent-repair-kernel7-2026-11-02.json` 与 `linux-transparent-repair-kernel612-2026-11-02.json`。本批未覆盖完整 LAN、x86_64、SIGKILL 和共用 MPA，因此保持 full_transparent_datapath_ready=false，#16/#18/#20 仍开放。
+
+## 第 20 批：共用 API、CLI 与 Linux MPA
+
+新增 `/api/v1/linux/capture` 实际范围/配置/状态 overview、`/control` start/stop/recheck、`/save` 捕获候选保存；使用期望实例 epoch 与运行 revision 做一致性检查。保存复用已有配置版本的准备/校验/任务流程，范围、对象、端口或预算变更仍明确需要重启。`hps linux capture status`、`control start|stop|recheck --expected-revision … --expected-epoch …`、`save <JSON文件> …` 共用同一客户端；JSON null 表示持久禁用候选，不自动激活。
+
+Linux MPA 展示实际监听、链接/路由、内核与用户态代际、原位恢复次数、范围、对象/资源证据；可启停/复查、保存候选后跳转原配置工作区审阅激活，并跳转持久任务。非 Linux 明确禁用捕获操作；预检仍为只读。Desktop 使用同页，新增精确 native API 传输路径，不新增账号或权限。Capabilities 从实际状态读取 configured/attached/ready；compiled 继续表示内置对象，外部 ELF 不冒充内置。
+
+验证：Mac API 普通回归 14 项通过；真实未配置/错误 revision 的 API 客户端测试验证失败操作写入持久任务，候选不会自动启动。相同客户端测试在 Linux 7.0 通过；Mac 与 Linux 的 API/CLI Clippy 均通过，Linux 另包含 application/platform；native 7 项测试通过。TypeScript 检查、18 页生产构建及真实 Daemon 的 Linux MPA Playwright（含窄屏不溢出）通过。Web build ID `0f9a72014b3f4e19ccfb49a4fe987f6c9e0c4c4f838a9ac361b6c823e1cbc662`。这次尚未做实际 Linux 的浏览器启停或 Desktop 窗口验收，亦未完成 LAN/x86_64/SIGKILL 门槛。
