@@ -6,8 +6,10 @@ import { Badge } from "./ui";
 
 export default function LocalSystemPanel({
   data,
+  refreshService,
 }: {
   data: ServiceData | null;
+  refreshService: () => Promise<void>;
 }) {
   const [context, setContext] = useState<LocalContext | null>(null);
   const [error, setError] = useState("");
@@ -42,6 +44,7 @@ export default function LocalSystemPanel({
         ...args,
       });
       await refresh();
+      await refreshService();
     } catch (e) {
       setError(String(e));
     } finally {

@@ -6,7 +6,13 @@ import { endpoint, connect, isDesktop } from "../platform";
 import ProfilesPanel from "../components/ProfilesPanel";
 import LocalSystemPanel from "../components/LocalSystemPanel";
 
-export default function ConnectPage({ data }: { data: ServiceData | null }) {
+export default function ConnectPage({
+  data,
+  refreshService,
+}: {
+  data: ServiceData | null;
+  refreshService: () => Promise<void>;
+}) {
   const [address, setAddress] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -83,7 +89,7 @@ export default function ConnectPage({ data }: { data: ServiceData | null }) {
       {isDesktop && (
         <>
           <ProfilesPanel />
-          <LocalSystemPanel data={data} />
+          <LocalSystemPanel data={data} refreshService={refreshService} />
         </>
       )}
     </div>

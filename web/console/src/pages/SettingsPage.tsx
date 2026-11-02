@@ -6,7 +6,13 @@ import { useEffect, useState } from "react";
 import type { ConfigWorkspace } from "../types";
 import LocalSystemPanel from "../components/LocalSystemPanel";
 
-export default function SettingsPage({ data }: { data: ServiceData }) {
+export default function SettingsPage({
+  data,
+  refreshService,
+}: {
+  data: ServiceData;
+  refreshService: () => Promise<void>;
+}) {
   const [workspace, setWorkspace] = useState<ConfigWorkspace | null>(null);
   useEffect(() => {
     const controller = new AbortController();
@@ -19,7 +25,7 @@ export default function SettingsPage({ data }: { data: ServiceData }) {
     <div className="grid gap-6 lg:grid-cols-2">
       {isDesktop && (
         <div className="lg:col-span-2">
-          <LocalSystemPanel data={data} />
+          <LocalSystemPanel data={data} refreshService={refreshService} />
         </div>
       )}
       <section className="panel">

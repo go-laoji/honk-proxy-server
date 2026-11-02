@@ -19,6 +19,7 @@ pub struct Status {
     pub detail: String,
 }
 
+#[cfg(any(target_os = "macos", test))]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Journal {
@@ -28,6 +29,7 @@ struct Journal {
     original: Option<plist::Value>,
     applied: plist::Value,
 }
+#[cfg(any(target_os = "macos", test))]
 pub(crate) trait Backend {
     fn services(&self) -> Result<Vec<NetworkService>>;
     fn read(&self, service: &str) -> Result<Option<plist::Value>>;
@@ -40,6 +42,7 @@ pub struct Apply {
     pub http: Option<u16>,
     pub socks5: Option<u16>,
 }
+#[cfg(any(target_os = "macos", test))]
 fn applied(original: Option<&plist::Value>, input: &Apply) -> Result<plist::Value> {
     if input.http.is_none() && input.socks5.is_none()
         || input.http == Some(0)
@@ -83,6 +86,7 @@ fn applied(original: Option<&plist::Value>, input: &Apply) -> Result<plist::Valu
     );
     Ok(plist::Value::Dictionary(dictionary))
 }
+#[cfg(any(target_os = "macos", test))]
 fn load(root: &Path) -> Result<Option<Journal>> {
     let journal: Option<Journal> = files::read(&root.join("system-proxy.json"))?;
     if journal.as_ref().is_some_and(|j| j.format_version != 1) {
@@ -90,6 +94,7 @@ fn load(root: &Path) -> Result<Option<Journal>> {
     }
     Ok(journal)
 }
+#[cfg(any(target_os = "macos", test))]
 fn status_with(root: &Path, backend: &impl Backend) -> Result<Status> {
     let Some(j) = load(root)? else {
         return Ok(Status {
@@ -110,6 +115,7 @@ fn status_with(root: &Path, backend: &impl Backend) -> Result<Status> {
     };
     Ok(Status{supported:true,state:state.into(),network_service:Some(j.service),endpoint:Some(j.endpoint),detail:"Original settings are retained until an explicit successful restore; window exit does not change them".into()})
 }
+#[cfg(any(target_os = "macos", test))]
 fn apply_with(
     root: &Path,
     backend: &mut impl Backend,
@@ -142,6 +148,7 @@ fn apply_with(
     backend.write(&j.service, Some(&j.applied))?;
     status_with(root, backend)
 }
+#[cfg(any(target_os = "macos", test))]
 fn restore_with(root: &Path, backend: &mut impl Backend) -> Result<Status> {
     if let Some(j) = load(root)? {
         let actual = backend.read(&j.service)?;

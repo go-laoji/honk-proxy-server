@@ -96,7 +96,7 @@ fn unit_path(id: &str, scope: Scope) -> Result<PathBuf> {
             Scope::User => home()?.join("Library/LaunchAgents"),
             Scope::System => PathBuf::from("/Library/LaunchDaemons"),
         };
-        return Ok(root.join(format!("{}.plist", label(id))));
+        Ok(root.join(format!("{}.plist", label(id))))
     }
     #[cfg(target_os = "linux")]
     {
@@ -108,7 +108,7 @@ fn unit_path(id: &str, scope: Scope) -> Result<PathBuf> {
                 .unwrap_or(home()?.join(".config"))
                 .join("systemd/user"),
         };
-        return Ok(root.join(format!("{}.service", label(id))));
+        Ok(root.join(format!("{}.service", label(id))))
     }
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
@@ -161,12 +161,12 @@ fn render(m: &Manifest) -> Result<String> {
             .parent()
             .ok_or("missing service parent")?
             .join("daemon.log");
-        return Ok(format!(
+        Ok(format!(
             "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\"><dict><key>Label</key><string>{}</string><key>ProgramArguments</key><array>{arguments}</array><key>RunAtLoad</key><true/><key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict><key>ThrottleInterval</key><integer>5</integer><key>ProcessType</key><string>Background</string><key>StandardOutPath</key><string>{}</string><key>StandardErrorPath</key><string>{}</string></dict></plist>\n",
             label(&m.id),
             xml(text(&log)?),
             xml(text(&log)?)
-        ));
+        ))
     }
     #[cfg(not(target_os = "macos"))]
     {
@@ -216,6 +216,15 @@ impl Manager {
         else {
             return Ok(None);
         };
+        self.verify_manifest(&m, id)?;
+        let actual = fs::read_to_string(&m.unit)
+            .map_err(|e| format!("cannot verify owned service unit: {e}"))?;
+        if actual != m.unit_text {
+            return Err("service unit ownership conflict; no OS objects modified".into());
+        }
+        Ok(Some(m))
+    }
+    fn verify_manifest(&self, m: &Manifest, id: &str) -> Result<()> {
         let directory = self.directory(id)?;
         if m.format_version != 1
             || m.id != id
@@ -223,16 +232,11 @@ impl Manager {
             || m.config != directory.join("hps.toml")
             || m.data != directory.join("data")
             || m.unit != unit_path(id, m.scope)?
-            || render(&m)? != m.unit_text
+            || render(m)? != m.unit_text
         {
             return Err("service manifest identity mismatch; no OS objects modified".into());
         }
-        let actual = fs::read_to_string(&m.unit)
-            .map_err(|e| format!("cannot verify owned service unit: {e}"))?;
-        if actual != m.unit_text {
-            return Err("service unit ownership conflict; no OS objects modified".into());
-        }
-        Ok(Some(m))
+        Ok(())
     }
     pub fn install(&self, input: Install) -> Result<Status> {
         check_scope(input.scope)?;
@@ -272,7 +276,11 @@ impl Manager {
             );
         }
         if directory.exists() {
-            return Err("service staging directory already exists; inspect interrupted installation before retrying".into());
+            let archived:Manifest=files::read(&directory.join("uninstalled.json"))?.ok_or("service staging directory already exists; inspect interrupted installation before retrying")?;
+            self.verify_manifest(&archived, &input.id)?;
+            if archived.scope != input.scope || archived.endpoint != profile.endpoint {
+                return Err("reinstallation requires the same scope and endpoint; preserved data was not changed".into());
+            }
         }
         fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
         let binary = directory.join("hpsd");
@@ -281,17 +289,20 @@ impl Manager {
             if !source.is_file() {
                 return Err("daemon binary must be a regular file".into());
             }
-            fs::copy(source, &binary).map_err(|e| e.to_string())?;
+            // Replace the executable atomically so another process never observes a truncated image.
+            let staged = directory.join("hpsd.staged");
+            fs::copy(source, &staged).map_err(|e| e.to_string())?;
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
-                fs::set_permissions(&binary, fs::Permissions::from_mode(0o700))
+                fs::set_permissions(&staged, fs::Permissions::from_mode(0o700))
                     .map_err(|e| e.to_string())?;
             }
-            let version = process::checked(text(&binary)?, &["--version"])?;
+            let version = process::checked(text(&staged)?, &["--version"])?;
             if !version.trim().starts_with("hpsd ") {
                 return Err("selected binary is not hpsd".into());
             }
+            fs::rename(staged, &binary).map_err(|e| e.to_string())?;
             let mut m = Manifest {
                 format_version: 1,
                 id: input.id,
@@ -381,7 +392,7 @@ impl Manager {
             } else {
                 "stopped"
             };
-            return Ok(Status {
+            Ok(Status {
                 installed: true,
                 manager: "launchd".into(),
                 state: state.into(),
@@ -392,7 +403,7 @@ impl Manager {
                     result.text
                 },
                 manifest: Some(m),
-            });
+            })
         }
         #[cfg(target_os = "linux")]
         {
@@ -416,14 +427,14 @@ impl Manager {
                 .find_map(|l| l.strip_prefix("ActiveState="))
                 .unwrap_or("unknown")
                 .to_owned();
-            return Ok(Status {
+            Ok(Status {
                 installed: true,
                 manager: "systemd".into(),
                 state,
                 pid,
                 detail: output,
                 manifest: Some(m),
-            });
+            })
         }
         #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         {
