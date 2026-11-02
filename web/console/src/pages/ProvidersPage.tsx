@@ -9,6 +9,7 @@ import {
   Play,
 } from "lucide-react";
 import { Badge, Stat } from "../components/ui";
+import RefillPanel, { type ControllerAction } from "../components/RefillPanel";
 import { getJson, postJson } from "../platform";
 import type {
   ConfigWorkspace,
@@ -17,6 +18,8 @@ import type {
   ProviderConfig,
   ProviderDetail,
   ProviderView,
+  ProviderControllerStatus,
+  ControllerEvaluation,
 } from "../types";
 
 const message = (cause: unknown) =>
@@ -101,10 +104,16 @@ export default function ProvidersPage({
   const [providers, setProviders] = useState<ProviderView[]>([]);
   const [detail, setDetail] = useState<ProviderDetail | null>(null);
   const [head, setHead] = useState(0);
+  const [refill, setRefill] = useState<ProviderControllerStatus | null>(null);
+  const taskRef = useRef<ExtractionTask | null>(null);
+
   const [loaded, setLoaded] = useState(false);
   const [editor, setEditor] = useState("");
   const [editingId, setEditingId] = useState("");
   const [task, setTask] = useState<ExtractionTask | null>(null);
+  useEffect(() => {
+    taskRef.current = task;
+  }, [task]);
   const [leases, setLeases] = useState<LeaseInfo[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [busy, setBusy] = useState("");
@@ -115,7 +124,7 @@ export default function ProvidersPage({
   const requestKey = `hps.extract.${serviceEndpoint}:${id}`;
 
   async function load(signal?: AbortSignal, replaceEditor = false) {
-    const [items, workspace, item] = await Promise.all([
+    const [items, workspace, item, controller] = await Promise.all([
       getJson<ProviderView[]>("api/v1/providers", signal),
       getJson<ConfigWorkspace>("api/v1/config/workspace", signal),
       detailPage && id
@@ -124,9 +133,16 @@ export default function ProvidersPage({
             signal,
           )
         : Promise.resolve(null),
+      detailPage && id
+        ? getJson<ProviderControllerStatus>(
+            `api/v1/providers/${encodeURIComponent(id)}/controller`,
+            signal,
+          ).catch(() => null)
+        : Promise.resolve(null),
     ]);
     if (!mounted.current || signal?.aborted) return;
     setProviders(items);
+    setRefill(controller);
     setLoaded(true);
     setHead(workspace.desired_revision);
     if (item) {
@@ -177,7 +193,10 @@ export default function ProvidersPage({
           timer = setTimeout(() => void poll(), 500);
         }
       } catch (cause) {
-        if (!controller.signal.aborted) setError(message(cause));
+        if (!controller.signal.aborted) {
+          setError(message(cause));
+          timer = setTimeout(() => void poll(), 2000);
+        }
       }
     };
     timer = setTimeout(() => void poll(), 250);
@@ -186,6 +205,98 @@ export default function ProvidersPage({
       clearTimeout(timer);
     };
   }, [task?.id, task?.state, requestKey]);
+  const hasController = refill !== null;
+  useEffect(() => {
+    if (!detailPage || !id || !loaded || !hasController) return;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        const status = await getJson<ProviderControllerStatus>(
+          `api/v1/providers/${encodeURIComponent(id)}/controller`,
+          controller.signal,
+        );
+        if (controller.signal.aborted) return;
+        setRefill(status);
+        if (
+          status.last_task_id &&
+          status.last_task_id > (taskRef.current?.id ?? 0)
+        ) {
+          const latest = await getJson<ExtractionTask>(
+            `api/v1/provider-tasks/${status.last_task_id}`,
+            controller.signal,
+          );
+          if (controller.signal.aborted) return;
+          if (latest.id >= (taskRef.current?.id ?? 0)) {
+            if (!pending(latest)) await load(controller.signal);
+            else setTask(latest);
+          }
+        }
+      } catch (cause) {
+        if (!controller.signal.aborted) setError(message(cause));
+      }
+      if (!controller.signal.aborted)
+        timer = setTimeout(() => void poll(), 1500);
+    };
+    timer = setTimeout(() => void poll(), 1500);
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [detailPage, id, loaded, hasController, serviceEndpoint]);
+  async function control(action: ControllerAction) {
+    const result = await postJson<
+      ProviderControllerStatus | ControllerEvaluation
+    >(`api/v1/providers/${encodeURIComponent(id)}/controller/${action}`);
+    if (!mounted.current) return;
+    if ("status" in result) {
+      setRefill(result.status);
+      if (result.task) setTask(result.task);
+    } else setRefill(result);
+    const status = "status" in result ? result.status : result;
+    setInfo(
+      action === "resume" && status.paused_reason
+        ? `当前仍因 ${status.paused_reason} 暂停，请先处理原因。`
+        : action === "pause"
+          ? "后续提取已暂停；在途请求继续完成。"
+          : action === "resume"
+            ? "已确认并恢复；预算和冷却保持不变。"
+            : "补池评估已完成，请查看实际决策和任务。",
+    );
+  }
+  function refillTemplate() {
+    try {
+      const config = JSON.parse(editor) as ProviderConfig;
+      if (!config || typeof config.id !== "string") throw new Error();
+      config.refill = {
+        enabled: false,
+        mode: "on_demand",
+        min_nodes: 5,
+        target_nodes: 10,
+        max_nodes: 20,
+        batch_size: Math.min(5, config.count || 10),
+        retire_before_secs: 60,
+        forecast_secs: 30,
+        idle_timeout_secs: 300,
+        daily_request_budget: 10,
+        daily_node_budget: 100,
+        backoff_initial_secs: 5,
+        backoff_max_secs: 900,
+        failure_limit: 5,
+        ...(typeof config.refill === "object" && config.refill
+          ? config.refill
+          : {}),
+      };
+      if (["json", "text"].includes(config.kind) && !config.count_parameter)
+        config.count_parameter = "num";
+      setEditor(JSON.stringify(config, null, 2));
+      setInfo(
+        "补池模板已加入编辑器，尚未保存。请确认数量参数 count_parameter 与供应商文档一致，再设置 refill.enabled 并保存。",
+      );
+    } catch {
+      setError("请先选择来源模板或填写有效的供应商 JSON");
+    }
+  }
   async function act(key: string, action: () => Promise<void>) {
     setBusy(key);
     setError("");
@@ -417,6 +528,14 @@ export default function ProvidersPage({
               </pre>
             )}
           </div>
+          {refill && (
+            <RefillPanel
+              value={refill}
+              busy={!!busy}
+              onAction={(action) => void act(action, () => control(action))}
+              onTemplate={refillTemplate}
+            />
+          )}
           <div className="panel overflow-hidden">
             <h2 className="border-b border-slate-100 p-5 font-semibold dark:border-slate-800">
               批次与租约
@@ -705,7 +824,8 @@ export default function ProvidersPage({
           </a>
         </div>
         <p className="muted mt-3 text-xs">
-          删除会保留租约和批次历史，停止该来源的新选点；已有连接继续排空。自动水位补池与健康检测在对应模块启用。
+          删除会保留租约和批次历史，停止该来源的新选点；已有连接继续排空。自动补池需显式配置
+          refill.enabled；健康检测在对应模块启用。
         </p>
       </div>
     </div>

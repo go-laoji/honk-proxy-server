@@ -270,6 +270,16 @@ fn application_error(error: ApplicationError) -> (StatusCode, Json<ApiError>) {
         ApplicationError::Storage(StorageError::ProviderRateLimited) => {
             (StatusCode::TOO_MANY_REQUESTS, "provider_interval_limit")
         }
+        ApplicationError::Storage(StorageError::ProviderPaused) => {
+            (StatusCode::CONFLICT, "provider_paused")
+        }
+        ApplicationError::Storage(StorageError::ProviderBudgetExceeded) => {
+            (StatusCode::TOO_MANY_REQUESTS, "provider_budget_exhausted")
+        }
+        ApplicationError::ExtractionCapacity => {
+            (StatusCode::SERVICE_UNAVAILABLE, "supplier_fetch_capacity")
+        }
+        ApplicationError::ClockRollback => (StatusCode::CONFLICT, "clock_rollback"),
         ApplicationError::Storage(StorageError::PoolFull) => {
             (StatusCode::CONFLICT, "provider_pool_budget")
         }

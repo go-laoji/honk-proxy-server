@@ -1,4 +1,5 @@
 //! Vendor contracts and bounded fetching. No task scheduling or implicit retries.
+pub mod policy;
 use base64::Engine;
 use hmac::{Hmac, Mac};
 use hps_config::{
@@ -61,6 +62,7 @@ pub fn fingerprint(config: &ProviderConfig) -> String {
     provenance.mode = hps_config::LeaseMode::AppendLeases;
     provenance.full_snapshot = false;
     provenance.minimum_snapshot_percent = 0;
+    provenance.refill = hps_config::RefillConfig::default();
     format!(
         "{:x}",
         Sha256::digest(serde_json::to_vec(&provenance).expect("provider serialization"))
@@ -188,17 +190,28 @@ impl ProviderClient {
         let status = response.status().as_u16();
         if status != 200 {
             // A non-success HTTP response does not prove that extraction was not billed.
-            let mut error = FetchError::unknown(match status {
-                401 | 403 => "http_auth_or_whitelist",
-                429 => "rate_limited",
-                300..=399 => "redirect_rejected",
-                _ => "vendor_http_error",
-            });
+            let mut error = if status == 429 {
+                FetchError::known("rate_limited")
+            } else {
+                FetchError::unknown(match status {
+                    401 | 403 => "http_auth_or_whitelist",
+                    300..=399 => "redirect_rejected",
+                    _ => "vendor_http_error",
+                })
+            };
             error.retry_after_secs = response
                 .headers()
                 .get("retry-after")
                 .and_then(|v| v.to_str().ok())
-                .and_then(|v| v.parse::<u64>().ok())
+                .and_then(|v| {
+                    v.parse::<u64>().ok().or_else(|| {
+                        httpdate::parse_http_date(v).ok().map(|date| {
+                            date.duration_since(std::time::SystemTime::now())
+                                .unwrap_or_default()
+                                .as_secs()
+                        })
+                    })
+                })
                 .map(|s| s.min(86400));
             return Err(error);
         }
@@ -227,6 +240,9 @@ impl ProviderClient {
         started_at: i64,
     ) -> Result<FetchResult, FetchError> {
         let mut params = config.params.clone();
+        if let Some(key) = &config.count_parameter {
+            params.insert(key.clone(), config.count.to_string());
+        }
         if config.kind == ProviderKind::Kuaidaili {
             params.insert("format".into(), "json".into());
             params.insert("num".into(), config.count.to_string());

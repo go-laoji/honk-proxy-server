@@ -44,6 +44,7 @@ impl Upstream {
 pub struct Dialer {
     upstreams: Vec<Arc<Upstream>>,
     pub(crate) pool: Arc<crate::pool::DynamicPool>,
+    pub(crate) demand: Arc<crate::demand::Demand>,
     sources: std::sync::RwLock<std::collections::HashMap<String, String>>,
     cursor: AtomicUsize,
     timeout: Duration,
@@ -66,6 +67,7 @@ impl Dialer {
         Ok(Self {
             upstreams,
             pool: Arc::new(crate::pool::DynamicPool::default()),
+            demand: Arc::new(crate::demand::Demand::default()),
             sources: std::sync::RwLock::new(std::collections::HashMap::new()),
             cursor: AtomicUsize::new(0),
             timeout: Duration::from_millis(config.limits.connect_timeout_ms),
@@ -84,7 +86,8 @@ impl Dialer {
             .as_ref()
             .is_some_and(|(id, fp)| self.sources.read().unwrap().get(id) != Some(fp))
             || upstream.deadline.is_some_and(|deadline| {
-                deadline <= std::time::Instant::now() + Duration::from_secs(minimum)
+                deadline.saturating_duration_since(std::time::Instant::now())
+                    <= Duration::from_secs(minimum)
             })
         {
             return false;
@@ -112,6 +115,7 @@ impl Dialer {
         target: &Target,
         http_forward: bool,
     ) -> Result<Connected, ProxyError> {
+        let demand = self.demand.begin();
         let dynamic = self.pool.snapshot();
         let total = self.upstreams.len() + dynamic.len();
         if total == 0 {
@@ -135,6 +139,10 @@ impl Dialer {
         )
         .await
         .map_err(|_| ProxyError::Timeout)?
+        .map(|mut connected| {
+            connected.io = demand.wrap(connected.io);
+            connected
+        })
     }
     async fn connect_selected(
         &self,

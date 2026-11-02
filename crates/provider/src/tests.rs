@@ -201,3 +201,30 @@ async fn custom_post_form_is_encoded_once_and_bounded() {
     );
     server.await.unwrap();
 }
+
+#[tokio::test]
+async fn rate_limit_is_an_explicit_rejection_with_bounded_retry_after() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let mut config = fixture(ProviderKind::Text);
+    config.endpoint = format!("http://{}/extract", listener.local_addr().unwrap());
+    let until = httpdate::fmt_http_date(std::time::SystemTime::now() + Duration::from_secs(3600));
+    let server = tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await.unwrap();
+        let mut bytes = [0; 4096];
+        let _ = stream.read(&mut bytes).await;
+        stream.write_all(format!("HTTP/1.1 429 Too Many Requests\r\nRetry-After: {until}\r\nContent-Length: 0\r\n\r\n").as_bytes()).await.unwrap();
+    });
+    let error = ProviderClient::new(&config)
+        .unwrap()
+        .fetch(&config, unix_now())
+        .await
+        .unwrap_err();
+    assert_eq!(error.code, "rate_limited");
+    assert!(!error.outcome_unknown);
+    assert!(
+        error
+            .retry_after_secs
+            .is_some_and(|n| (3598..=3600).contains(&n))
+    );
+    server.await.unwrap();
+}

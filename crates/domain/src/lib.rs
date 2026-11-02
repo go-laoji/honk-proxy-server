@@ -283,6 +283,8 @@ pub struct ConfigActivationResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExtractionTask {
     pub id: i64,
+    #[serde(default = "manual_trigger")]
+    pub trigger: String,
     pub provider_id: String,
     pub request_id: String,
     pub config_fingerprint: String,
@@ -333,4 +335,41 @@ pub struct ProviderDetail<T> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExpectedRevision {
     pub expected_revision: i64,
+}
+
+fn manual_trigger() -> String {
+    "manual".into()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderControllerStatus {
+    pub provider_id: String,
+    pub enabled: bool,
+    pub mode: String,
+    pub min_nodes: u32,
+    pub target_nodes: u32,
+    pub max_nodes: u32,
+    pub current_inventory: u32,
+    pub projected_inventory: u32,
+    pub inflight_nodes: u32,
+    pub demand_active: bool,
+    pub refilling: bool,
+    pub decision: String,
+    pub planned_count: u32,
+    pub day_started_at: i64,
+    pub resets_at: i64,
+    pub used_requests: u32,
+    pub request_budget: u32,
+    pub reserved_nodes: u32,
+    pub node_budget: u32,
+    pub next_allowed_at: i64,
+    pub failure_count: u32,
+    pub paused_reason: Option<String>,
+    pub last_task_id: Option<i64>,
+    pub acknowledged_at: Option<i64>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ControllerEvaluation {
+    pub status: ProviderControllerStatus,
+    pub task: Option<ExtractionTask>,
 }

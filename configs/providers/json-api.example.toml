@@ -1,0 +1,35 @@
+id = "json-api"
+name = "通用短效接口"
+enabled = false
+kind = "json"
+endpoint = "https://vendor.example/extract"
+method = "GET"
+protocol = "http"
+count = 10
+# Must match the vendor contract; enables bounded automatic quantities.
+count_parameter = "num"
+min_remaining_secs = 30
+min_interval_secs = 60
+
+[json]
+list = "/data/proxies"
+host = "/ip"
+port = "/port"
+ttl = "/ttl"
+expiry_milliseconds = false
+
+[refill]
+enabled = false
+mode = "on_demand"
+min_nodes = 5
+target_nodes = 10
+max_nodes = 20
+batch_size = 5
+retire_before_secs = 60
+forecast_secs = 30
+idle_timeout_secs = 300
+daily_request_budget = 10
+daily_node_budget = 100
+backoff_initial_secs = 5
+backoff_max_secs = 900
+failure_limit = 5

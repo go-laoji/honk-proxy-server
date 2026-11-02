@@ -36,10 +36,11 @@ impl StoredLease {
         }
     }
 }
-const TASK_COLUMNS: &str = "id,provider_id,request_id,fingerprint,state,requested_count,started_at,finished_at,added,rejected,removed,quota,error_code,retry_after_secs";
-fn task(row: &rusqlite::Row<'_>) -> rusqlite::Result<ExtractionTask> {
+pub(super) const TASK_COLUMNS: &str = "id,provider_id,request_id,fingerprint,state,requested_count,started_at,finished_at,added,rejected,removed,quota,error_code,retry_after_secs,trigger";
+pub(super) fn task(row: &rusqlite::Row<'_>) -> rusqlite::Result<ExtractionTask> {
     Ok(ExtractionTask {
         id: row.get(0)?,
+        trigger: row.get(14)?,
         provider_id: row.get(1)?,
         request_id: row.get(2)?,
         config_fingerprint: row.get(3)?,
@@ -107,6 +108,19 @@ impl Store {
         request_id: String,
         fingerprint: String,
     ) -> Result<(ExtractionTask, bool), StorageError> {
+        self.begin_extraction_with_trigger(config, request_id, fingerprint, "manual".into())
+            .await
+    }
+    pub async fn begin_extraction_with_trigger(
+        &self,
+        config: ProviderConfig,
+        request_id: String,
+        fingerprint: String,
+        trigger: String,
+    ) -> Result<(ExtractionTask, bool), StorageError> {
+        if !["manual", "automatic"].contains(&trigger.as_str()) {
+            return Err(StorageError::Invalid);
+        }
         if request_id.is_empty()
             || request_id.len() > 64
             || !request_id
@@ -121,14 +135,30 @@ impl Store {
             if let Some(previous)=previous {return Ok((previous,false));}
             let now=unix_now();
             prune_history(&tx,now)?;
+            super::controller::reserve(&tx,&config,now)?;
             let last:Option<i64>=tx.query_row("SELECT max(started_at) FROM provider_tasks WHERE provider_id=?1",[&config.id],|r|r.get(0))?;
             if last.is_some_and(|last|now.saturating_sub(last)<config.min_interval_secs as i64) {return Err(StorageError::ProviderRateLimited);}
             let size:i64=tx.query_row("SELECT count(*) FROM provider_leases WHERE expires_at>?1 AND state='active'",[now],|r|r.get(0))?;
             let reserved:i64=tx.query_row("SELECT coalesce(sum(requested_count),0) FROM provider_tasks WHERE state IN ('accepted','requesting')",[],|r|r.get(0))?;
             if size+reserved+i64::from(config.count)>100000 {return Err(StorageError::PoolFull);}
-            tx.execute("INSERT INTO provider_tasks(provider_id,request_id,fingerprint,state,requested_count,started_at) VALUES(?1,?2,?3,'accepted',?4,?5)",params![config.id,request_id,fingerprint,config.count,now])?;
-            let result=get_task(&tx,tx.last_insert_rowid())?;tx.commit()?;Ok((result,true))
+            tx.execute("INSERT INTO provider_tasks(provider_id,request_id,fingerprint,state,requested_count,started_at,trigger,policy_json,min_interval_secs) VALUES(?1,?2,?3,'accepted',?4,?5,?6,?7,?8)",params![config.id,request_id,fingerprint,config.count,now,trigger,serde_json::to_string(&config.refill).map_err(|_|StorageError::Invalid)?,config.min_interval_secs as i64])?;
+            let id=tx.last_insert_rowid();
+            tx.execute("UPDATE provider_control SET last_task_id=?2,acknowledged_at=NULL,next_allowed_at=max(next_allowed_at,?3),updated_at=?4 WHERE provider_id=?1",params![config.id,id,now.saturating_add(config.min_interval_secs as i64),now])?;
+            let result=get_task(&tx,id)?;tx.commit()?;Ok((result,true))
         }).await
+    }
+    pub async fn existing_extraction(
+        &self,
+        provider_id: String,
+        request_id: String,
+    ) -> Result<Option<ExtractionTask>, StorageError> {
+        self.call(move|c|Ok(c.query_row(&format!("SELECT {TASK_COLUMNS} FROM provider_tasks WHERE provider_id=?1 AND (request_id=?2 OR state IN ('accepted','requesting')) ORDER BY CASE WHEN request_id=?2 THEN 0 ELSE 1 END,id DESC LIMIT 1"),params![provider_id,request_id],task).optional()?)).await
+    }
+    pub async fn active_source_leases(
+        &self,
+        provider_id: String,
+    ) -> Result<Vec<StoredLease>, StorageError> {
+        self.call(move|c|Ok(c.prepare("SELECT id,batch_id,provider_id,fingerprint,document,received_at,state FROM provider_leases WHERE provider_id=?1 AND state='active' AND expires_at>?2 ORDER BY expires_at DESC,id DESC LIMIT 100000")?.query_map(params![provider_id,unix_now()],lease)?.collect::<Result<Vec<_>,_>>()?)).await
     }
     pub async fn extraction_requesting(&self, id: i64) -> Result<(), StorageError> {
         self.call(move |c| {
@@ -153,7 +183,12 @@ impl Store {
         self.call(move|c|Ok(c.prepare(&format!("SELECT {TASK_COLUMNS} FROM provider_tasks WHERE (?1 IS NULL OR provider_id=?1) ORDER BY id DESC LIMIT 50"))?.query_map([provider_id],task)?.collect::<Result<Vec<_>,_>>()?)).await
     }
     pub async fn fail_extraction(&self, id: i64, error: FetchError) -> Result<(), StorageError> {
-        self.call(move|c| {c.execute("UPDATE provider_tasks SET state=?2,error_code=?3,retry_after_secs=?4,finished_at=?5 WHERE id=?1 AND state IN ('accepted','requesting')",params![id,if error.outcome_unknown{"outcome_unknown"}else{"failed"},error.code,error.retry_after_secs.map(|n|n.min(i64::MAX as u64) as i64),unix_now()])?;Ok(())}).await
+        self.call(move|c|{
+            let tx=c.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;let now=unix_now();
+            let changed=tx.execute("UPDATE provider_tasks SET state=?2,error_code=?3,retry_after_secs=?4,finished_at=?5 WHERE id=?1 AND state IN ('accepted','requesting')",params![id,if error.outcome_unknown{"outcome_unknown"}else{"failed"},error.code,error.retry_after_secs.map(|n|n.min(i64::MAX as u64) as i64),now])?;
+            if changed>0 {super::controller::failure(&tx,id,&error,now)?;}
+            tx.commit()?;Ok(())
+        }).await
     }
     pub async fn finish_extraction(
         &self,
@@ -168,13 +203,16 @@ impl Store {
             let now=unix_now();
             if !publish {
                 tx.execute("UPDATE provider_tasks SET state='discarded',finished_at=?2,error_code='source_configuration_changed' WHERE id=?1",params![id,now])?;
+                super::controller::success(&tx,&config.id,now)?;
                 let result=get_task(&tx,id)?;tx.commit()?;return Ok(result);
             }
             let mut rejected=result.rejected;
             let nodes=result.nodes.into_iter().filter(|node|{let valid=node.expires_at>now.saturating_add(config.min_remaining_secs as i64);if !valid {rejected+=1;} valid}).collect::<Vec<_>>();
             let old:i64=tx.query_row("SELECT count(DISTINCT json_extract(document,'$.upstream.protocol') || '|' || json_extract(document,'$.upstream.host') || '|' || json_extract(document,'$.upstream.port')) FROM provider_leases WHERE provider_id=?1 AND state='active' AND expires_at>?2",params![config.id,now],|r|r.get(0))?;
             if nodes.is_empty() || (config.mode==LeaseMode::ReplaceSnapshot && nodes.len()*100<(old as usize)*usize::from(config.minimum_snapshot_percent)) {
-                tx.execute("UPDATE provider_tasks SET state='failed',finished_at=?2,error_code='snapshot_or_empty_result_protection',rejected=?3 WHERE id=?1",params![id,now,rejected as i64])?;
+                let code=if nodes.is_empty(){"leases_too_short"}else{"snapshot_or_empty_result_protection"};
+                tx.execute("UPDATE provider_tasks SET state='failed',finished_at=?2,error_code=?4,rejected=?3 WHERE id=?1",params![id,now,rejected as i64,code])?;
+                super::controller::failure(&tx,id,&FetchError{code,outcome_unknown:false,retry_after_secs:None},now)?;
                 let result=get_task(&tx,id)?;tx.commit()?;return Ok(result);
             }
             let removed=if config.mode==LeaseMode::ReplaceSnapshot {tx.execute("UPDATE provider_leases SET state='revoked' WHERE provider_id=?1 AND state='active' AND expires_at>?2",params![config.id,now])?}else{0};
@@ -188,6 +226,7 @@ impl Store {
             }
             tx.execute("UPDATE provider_tasks SET state='succeeded',finished_at=?2,added=?3,rejected=?4,removed=?5,quota=?6 WHERE id=?1",params![id,now,added as i64,rejected as i64,removed as i64,result.quota.map(|n|n.min(i64::MAX as u64) as i64)])?;
             tx.execute("UPDATE provider_clock SET observed_at=max(observed_at,?1) WHERE singleton=1",[now])?;
+            super::controller::success(&tx,&config.id,now)?;
             // Completed IDs are retained within the bounded history window; active batches remain pinned.
             prune_history(&tx,now)?;
             let result=get_task(&tx,id)?;tx.commit()?;Ok(result)
@@ -232,6 +271,10 @@ mod tests {
         store
             .call(|db| {
                 db.execute("UPDATE provider_tasks SET started_at=started_at-120", [])?;
+                db.execute(
+                    "UPDATE provider_control SET next_allowed_at=0,paused_reason=NULL",
+                    [],
+                )?;
                 Ok(())
             })
             .await
@@ -466,6 +509,34 @@ mod tests {
         assert_eq!(result.state, "succeeded");
         assert_eq!(result.removed, 3);
         assert_eq!(store.active_leases().await.unwrap().len(), 1);
+        store.close().await.unwrap();
+    }
+    #[tokio::test]
+    async fn source_lease_pages_do_not_include_other_provider_history() {
+        let store = Store::open(None, DaemonConfig::default()).unwrap();
+        let mut a = config();
+        a.id = "first-source".into();
+        let mut b = config();
+        b.id = "second-source".into();
+        for c in [&a, &b] {
+            let task = next(&store, c, "one").await;
+            store
+                .finish_extraction(task.id, c.clone(), nodes(1), true)
+                .await
+                .unwrap();
+        }
+        let a_rows = store
+            .provider_leases(Some(a.id.clone()), None, 50)
+            .await
+            .unwrap();
+        assert_eq!(a_rows.len(), 1);
+        assert_eq!(a_rows[0].provider_id, a.id);
+        let b_rows = store
+            .provider_leases(Some(b.id.clone()), None, 50)
+            .await
+            .unwrap();
+        assert_eq!(b_rows.len(), 1);
+        assert_eq!(b_rows[0].provider_id, b.id);
         store.close().await.unwrap();
     }
 }

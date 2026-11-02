@@ -81,6 +81,8 @@ pub struct ProviderConfig {
     pub auth: ProviderAuth,
     pub protocol: ProxyProtocol,
     pub count: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub count_parameter: Option<String>,
     pub ttl_secs: Option<u64>,
     pub query_valid_time: bool,
     pub min_remaining_secs: u64,
@@ -93,6 +95,8 @@ pub struct ProviderConfig {
     pub fetch_proxy: Option<String>,
     pub upstream_credentials: Option<UpstreamCredentials>,
     pub json: JsonFields,
+    #[serde(skip_serializing_if = "RefillConfig::is_default")]
+    pub refill: RefillConfig,
 }
 impl Default for ProviderConfig {
     fn default() -> Self {
@@ -108,6 +112,7 @@ impl Default for ProviderConfig {
             auth: ProviderAuth::None,
             protocol: ProxyProtocol::Http,
             count: 10,
+            count_parameter: None,
             ttl_secs: None,
             query_valid_time: false,
             min_remaining_secs: 30,
@@ -120,6 +125,7 @@ impl Default for ProviderConfig {
             fetch_proxy: None,
             upstream_credentials: None,
             json: JsonFields::default(),
+            refill: RefillConfig::default(),
         }
     }
 }
@@ -134,6 +140,8 @@ impl std::fmt::Debug for ProviderConfig {
 }
 impl ProviderConfig {
     pub fn validate(&self) -> Result<(), ConfigError> {
+        self.refill
+            .validate(self.count, self.ttl_secs, self.min_remaining_secs)?;
         let invalid = || {
             ConfigError::Invalid("invalid provider configuration; check ID, endpoint, lease, limits and authentication fields".into())
         };
@@ -189,6 +197,30 @@ impl ProviderConfig {
             && self.ttl_secs.is_none()
         {
             return Err(invalid());
+        }
+        if self.count_parameter.as_ref().is_some_and(|key| {
+            key.is_empty()
+                || key.len() > 128
+                || !key
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b"_-".contains(&b))
+                || [
+                    "secret_id",
+                    "signature",
+                    "sign_type",
+                    "timestamp",
+                    "nonce",
+                    "format",
+                ]
+                .contains(&key.as_str())
+        }) {
+            return Err(invalid());
+        }
+        if self.refill.enabled
+            && matches!(self.kind, ProviderKind::Json | ProviderKind::Text)
+            && self.count_parameter.is_none()
+        {
+            return Err(ConfigError::Invalid("automatic generic sources require count_parameter for bounded extraction quantities".into()));
         }
         if self.query_valid_time && self.kind != ProviderKind::Kuaidaili {
             return Err(invalid());
@@ -369,4 +401,90 @@ fn sensitive_parameter(key: &str) -> bool {
 pub struct ProviderSave {
     pub configuration: ProviderConfig,
     pub expected_revision: i64,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RefillMode {
+    #[default]
+    OnDemand,
+    Maintain,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct RefillConfig {
+    pub enabled: bool,
+    pub mode: RefillMode,
+    pub min_nodes: u32,
+    pub target_nodes: u32,
+    pub max_nodes: u32,
+    pub batch_size: u32,
+    pub retire_before_secs: u64,
+    pub forecast_secs: u64,
+    pub idle_timeout_secs: u64,
+    pub daily_request_budget: u32,
+    pub daily_node_budget: u32,
+    pub backoff_initial_secs: u64,
+    pub backoff_max_secs: u64,
+    pub failure_limit: u32,
+}
+impl Default for RefillConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            mode: RefillMode::OnDemand,
+            min_nodes: 5,
+            target_nodes: 10,
+            max_nodes: 20,
+            batch_size: 5,
+            retire_before_secs: 60,
+            forecast_secs: 30,
+            idle_timeout_secs: 300,
+            daily_request_budget: 10,
+            daily_node_budget: 100,
+            backoff_initial_secs: 5,
+            backoff_max_secs: 900,
+            failure_limit: 5,
+        }
+    }
+}
+impl RefillConfig {
+    pub fn is_default(&self) -> bool {
+        self == &Self::default()
+    }
+    pub fn validate(
+        &self,
+        max_batch: u32,
+        ttl: Option<u64>,
+        minimum_lifetime: u64,
+    ) -> Result<(), ConfigError> {
+        if self.min_nodes == 0
+            || self.target_nodes < self.min_nodes
+            || self.max_nodes < self.target_nodes
+            || self.max_nodes > 100000
+            || !(1..=1000).contains(&self.batch_size)
+            || !(1..=86400).contains(&self.idle_timeout_secs)
+            || self.retire_before_secs > 86400
+            || self.forecast_secs > 86400
+            || !(1..=1000000).contains(&self.daily_request_budget)
+            || !(1..=1000000000).contains(&self.daily_node_budget)
+            || !(1..=86400).contains(&self.backoff_initial_secs)
+            || self.backoff_max_secs < self.backoff_initial_secs
+            || self.backoff_max_secs > 86400
+            || !(1..=100).contains(&self.failure_limit)
+            || (self.enabled
+                && (self.batch_size > max_batch
+                    || ttl.is_some_and(|ttl| {
+                        ttl <= self
+                            .retire_before_secs
+                            .max(minimum_lifetime)
+                            .saturating_add(self.forecast_secs)
+                    })))
+        {
+            return Err(ConfigError::Invalid(
+                "invalid refill watermarks, batch, lifetime, budget or backoff limits".into(),
+            ));
+        }
+        Ok(())
+    }
 }
