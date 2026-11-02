@@ -30,6 +30,19 @@ def digest(path):
     return value.hexdigest()
 
 
+def source_revision(requested, packaging_revision):
+    if requested is None:
+        return packaging_revision
+    require(re.fullmatch(r"[0-9a-f]{40}", requested), "source revision must be an exact commit")
+    # Packaging/docs can be repaired without relabelling old binaries as newly
+    # compiled source. All compiler and Web inputs must remain byte-identical.
+    command = ["git", "-c", "safe.directory=" + str(ROOT), "diff", "--quiet", requested, packaging_revision, "--",
+               "Cargo.toml", "Cargo.lock", "rust-toolchain.toml", ".cargo", "apps", "crates", "src-tauri",
+               "web", "vite.config.ts", "tsconfig.json", "tsconfig.node.json", "package.json", "pnpm-lock.yaml", "packaging/toolchains.json"]
+    require(subprocess.run(command, cwd=ROOT).returncode == 0, "compiler/Web inputs changed since the requested source commit; rebuild instead")
+    return requested
+
+
 def inspect_binary(path, target):
     with path.open("rb") as stream:
         header = stream.read(64)
@@ -78,9 +91,11 @@ def main():
     parser.add_argument("--ebpf", type=Path)
     parser.add_argument("--kernel-report", type=Path, default=ROOT / "docs/validation/linux-transparent-acceptance-2026-11-02.json")
     parser.add_argument("--allow-dirty", action="store_true", help="mark local exploratory artifacts; never treat them as release-ready")
+    parser.add_argument("--source-revision", help="exact compiled commit; only packaging/docs may differ from HEAD")
     args = parser.parse_args()
     version = re.search(r'\[workspace.package\]\s*version\s*=\s*"([^"]+)"', (ROOT / "Cargo.toml").read_text()).group(1)
     revision = subprocess.check_output(["git", "-c", "safe.directory=" + str(ROOT), "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    compiled_revision = source_revision(args.source_revision, revision)
     dirty = subprocess.run(["git", "-c", "safe.directory=" + str(ROOT), "diff", "--quiet", "HEAD", "--"], cwd=ROOT).returncode != 0
     require(not dirty or args.allow_dirty, 'tracked working tree is dirty; commit first or explicitly mark an exploratory artifact')
     compiled = args.bin_dir.resolve()
@@ -108,7 +123,7 @@ def main():
         info = build_info(compiled / "hpsd", True)
         if not args.allow_dirty:
             for built in (cli_info,info):
-                require(built.get("source_revision")==revision and built.get("source_dirty") is False,"compiled source revision is stale or unknown; rebuild the clean source using the release build script")
+                require(built.get("source_revision")==compiled_revision and built.get("source_dirty") is False,"compiled source revision is stale or unknown; rebuild the clean source using the release build script")
         require(cli_info['version']['version'] == info['version']['version'] == version, 'invalid compiled package metadata')
         require(info['version']['web_build_id'] == (web['web_build_id'] if web else None), 'daemon embeds a different web artifact')
 

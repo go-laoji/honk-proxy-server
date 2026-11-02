@@ -12,6 +12,8 @@ python3 scripts/package-desktop.py --daemon target/release/hpsd
 
 命令中的 target 必须匹配实际执行平台。Linux 便携包使用原生架构 Alpine builder，并显式设置 `RUSTFLAGS='-C target-feature=+crt-static'`、`--target <arch>-unknown-linux-musl`。打包器检查 ELF 架构、静态链接、实际可执行的源码元数据及 Web 构建 ID。默认不接受旧源码、未知来源或未提交源码。`--allow-dirty` 只生成明确标记的试验包，不能作为正式候选；`--debug` Desktop 也必须带此标记。
 
+仅修正文档或安装/打包脚本后，headless 可显式传 `--source-revision <完整40位已编译commit>`。它检查 Rust、锁文件、构建配置、Desktop 和前端输入与当前 HEAD 完全一致，再分别记录真实编译源码与打包源码；任何编译输入变化都必须重建，不能用此参数给旧二进制换标签。
+
 Linux 两类安装包还必须传入 `--ebpf /absolute/hps-ebpf.elf --kernel-report /absolute/acceptance.json`。报告必须来自真实的 52 项双架构/双内核案例，并与对象 SHA256 一致；只编译对象、预检或单个内核通过都不够。旧 ABI 对象仅是拒绝测试夹具，不进入发行包。最低实测内核为 6.12.115，ABI 4。
 
 Headless 包含 hps/hpsd、默认配置、用法文档、清单和校验和；Linux 另外包含 eBPF 对象和 systemd 示例。解压后先核对外部 `.sha256`，运行目录内的安装脚本再次核对每个文件：

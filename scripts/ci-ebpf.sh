@@ -9,7 +9,7 @@ case "$(uname -m)" in
 esac
 mkdir -p /out /tmp/hps-linker
 curl --fail --location --retry 2 -o /tmp/hps-linker.tar.zst "https://github.com/aya-rs/bpf-linker/releases/download/v0.12.0/bpf-linker-$(uname -m)-unknown-linux-musl.tar.zst"
-printf '%s  %s\n' "$hps_linker_sha" /tmp/hps-linker.tar.zst | sha256sum --check
+printf '%s  %s\n' "$hps_linker_sha" /tmp/hps-linker.tar.zst | sha256sum -c
 tar --zstd -xf /tmp/hps-linker.tar.zst -C /tmp/hps-linker
 export PATH="/tmp/hps-linker:$PATH"
 rustup toolchain install nightly-2026-09-01 --profile minimal --component rust-src

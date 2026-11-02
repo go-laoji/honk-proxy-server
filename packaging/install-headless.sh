@@ -15,7 +15,7 @@ case "$hps_prefix" in /*) ;; *) echo 'prefix must be absolute' >&2; exit 2;; esa
 case "$hps_config_dir" in ''|/*) ;; *) echo 'config directory must be absolute' >&2; exit 2;; esac
 cd "$hps_package"
 if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum --check SHA256SUMS >/dev/null
+    sha256sum -c SHA256SUMS >/dev/null
 else
     shasum -a 256 -c SHA256SUMS >/dev/null
 fi
