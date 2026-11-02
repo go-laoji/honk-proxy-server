@@ -49,3 +49,9 @@ Rust 直接通过 route-netlink 建立私有表 10530 的双栈 local route 与�
 CIDR/UDP 端口旁路使用独占 mark 的精确 GOTO 规则与自有 NOP 恢复目标，恢复到捕获规则之后的原规则链，不将 main 无路由错误回落到 local 捕获表。保护 priority-1、priority、priority+1 三个优先级；有旁路条件时配置范围为 2..32764。双栈 CIDR/端口、0/0 全旁路、正常不可达、归属日志恢复与精确清理均在两个内核通过，证据为 `linux-transparent-udp-routes-*`。归属日志升级为严格格式 2、上限 64 KiB；仅接纳已验证的内核规范化字段，如 7.0 导出的全 1 端口掩码，以及 IPv6 查询中值完全相同的重复首选源。冲突值或未知条件仍拒绝，修改后的归属标记保留日志而不宽泛删除。
 
 相同对象的禁用加载、资源回收与原 DNS 捕获回归在两个内核通过（`linux-transparent-udp-loader-*` / `linux-transparent-udp-dns-*`）。普通 Linux 库测试 16 通过、1 个特权项忽略；特权项已独立显式通过。Linux/macOS 相关 Clippy、格式检查通过。TCP/UDP 上游转发、原子代际发布、LAN、状态监视与完整 Daemon 恢复仍未验收，T11/T13/T15 保持开放。
+
+## 共享 TCP 引擎入口（第四批，普通引擎契约）
+
+`Engine::with_capture` 仅在 Linux 提供，明确准备进程规则能力；显式入口构造仍拒绝未提供的进程能力。`spawn_captured_tcp` 检查原始 socket 两端地址、正代际与引擎代际、TCP 和来源；本机缺少可信进程拒绝，Gateway 的 process 永远清空。接入同一 Dialer/router/group/health/lease/node/observation，复用全局连接额度与带宽；独立任务登记与 shutdown 共用互斥，停止等待全部捕获任务。重复设置代际不再改变已创建引擎的拨号规则版本。
+
+普通 Linux `captured_tcp_contract_shares_process_rules_group_admission_bytes_disconnect_and_immutable_revision` 通过 HTTP、HTTPS、SOCKS5 三类真实上游路径验证：进程规则选定固定组/节点、业务字节、源端口、旧代际拒绝、端点不符拒绝、缺少本机进程拒绝、全局额度耗尽、主动断开回收、Gateway 不匹配进程规则。该项进程输入是测试构造的可信调用契约，不是内核 PID 证据；内核到共享引擎的联合验收仍待下一批。Linux/macOS 全部 engine tests 与 Clippy 均通过。

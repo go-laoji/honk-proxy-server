@@ -217,16 +217,19 @@ impl Dialer {
         }
     }
     pub fn new(config: &ProxyConfig) -> Result<Self, ProxyError> {
+        Self::with_routing_capabilities(config, crate::routing::RoutingCapabilities::default())
+    }
+    pub(crate) fn with_routing_capabilities(
+        config: &ProxyConfig,
+        capabilities: crate::routing::RoutingCapabilities,
+    ) -> Result<Self, ProxyError> {
         let mut scope = Sha256::new();
         scope.update(
             serde_json::to_vec(&(&config.selection, &config.routing, &config.inbounds))
                 .map_err(|_| ProxyError::RuleConfiguration)?,
         );
         let refill_fingerprint = format!("{:x}", scope.finalize());
-        let router = crate::routing::Router::compile(
-            config,
-            crate::routing::RoutingCapabilities::default(),
-        )?;
+        let router = crate::routing::Router::compile(config, capabilities)?;
         let upstreams = config
             .upstreams
             .iter()
