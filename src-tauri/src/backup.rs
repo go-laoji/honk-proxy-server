@@ -1,4 +1,5 @@
 use super::*;
+static SAVE_SLOT: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
 #[tauri::command]
 pub(super) async fn save_database_backup(
     app: tauri::AppHandle,
@@ -7,6 +8,9 @@ pub(super) async fn save_database_backup(
     window: tauri::WebviewWindow,
     context: events::SubscriptionContext,
 ) -> Result<serde_json::Value, String> {
+    let _slot = SAVE_SLOT
+        .try_acquire()
+        .map_err(|_| "another database backup save is in progress")?;
     subscriptions
         .validate_context(window.label(), context)
         .map_err(|e| e.message)?;

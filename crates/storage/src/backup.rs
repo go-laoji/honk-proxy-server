@@ -37,6 +37,7 @@ pub enum BackupError {
 pub struct Snapshot {
     pub metadata: hps_domain::BackupMetadata,
     pub bytes: Vec<u8>,
+    _permit: tokio::sync::OwnedSemaphorePermit,
 }
 #[derive(Debug, Serialize)]
 pub struct RestoreResult {
@@ -125,7 +126,58 @@ fn validate(connection: &Connection) -> Result<i64, BackupError> {
         config.validate().map_err(|_| BackupError::Invalid)?;
     }
     let _:i64=connection.query_row("SELECT r.id FROM config_revisions r JOIN config_head h ON r.id=h.desired_revision WHERE h.singleton=1",[],|r|r.get(0))?;
+    let draft: String = connection.query_row(
+        "SELECT document FROM config_draft WHERE singleton=1",
+        [],
+        |r| r.get(0),
+    )?;
+    let config: DaemonConfig = serde_json::from_str(&draft).map_err(|_| BackupError::Invalid)?;
+    config.validate().map_err(|_| BackupError::Invalid)?;
+    if version >= 3 {
+        let observed: i64 = connection.query_row(
+            "SELECT observed_at FROM provider_clock WHERE singleton=1",
+            [],
+            |r| r.get(0),
+        )?;
+        if observed < 0 {
+            return Err(BackupError::Invalid);
+        }
+        validate_documents::<hps_provider::LeaseCandidate>(
+            connection,
+            "SELECT document FROM provider_leases",
+        )?;
+    }
+    if version >= 6 {
+        validate_documents::<hps_domain::ProbeResult>(
+            connection,
+            "SELECT result FROM health_state",
+        )?;
+        validate_documents::<hps_domain::ProbeResult>(
+            connection,
+            "SELECT result FROM health_runs WHERE result IS NOT NULL",
+        )?;
+    }
+    if version >= 8 {
+        let epoch: String = connection.query_row(
+            "SELECT epoch FROM event_context WHERE singleton=1",
+            [],
+            |r| r.get(0),
+        )?;
+        if !hps_domain::valid_connection_epoch(&epoch) {
+            return Err(BackupError::Invalid);
+        }
+    }
     Ok(version)
+}
+fn validate_documents<T: serde::de::DeserializeOwned>(
+    connection: &Connection,
+    sql: &str,
+) -> Result<(), BackupError> {
+    let mut statement = connection.prepare(sql)?;
+    for row in statement.query_map([], |r| r.get::<_, String>(0))? {
+        serde_json::from_str::<T>(&row?).map_err(|_| BackupError::Invalid)?;
+    }
+    Ok(())
 }
 fn copy(source: &Connection, destination: &Path) -> Result<(), BackupError> {
     // Pin a WAL read snapshot so a continuously writing source cannot restart every step.
@@ -277,13 +329,16 @@ impl Store {
             .map_err(|_| BackupError::Busy)?;
         let path = self.database_path.clone().ok_or(BackupError::Ephemeral)?;
         tokio::task::spawn_blocking(move || {
-            let _permit = permit;
             let temporary =
                 Temporary(path.with_file_name(format!(".backup-{}.sqlite3", uuid::Uuid::new_v4())));
             copy(&readonly(&path)?, &temporary.0)?;
             let metadata = inspect(&temporary.0, None)?;
             let bytes = std::fs::read(&temporary.0)?;
-            Ok(Snapshot { metadata, bytes })
+            Ok(Snapshot {
+                metadata,
+                bytes,
+                _permit: permit,
+            })
         })
         .await
         .map_err(|_| BackupError::Worker)?
@@ -352,6 +407,79 @@ mod tests {
         store.close().await.unwrap();
     }
     #[tokio::test]
+    async fn supported_old_schema_restores_without_forging_version_and_migrates_on_restart() {
+        let source_dir = tempfile::tempdir().unwrap();
+        let source = source_dir.path().join("legacy.sqlite3");
+        let db = Connection::open(&source).unwrap();
+        db.execute_batch(include_str!("../migrations/0001_configuration.up.sql"))
+            .unwrap();
+        db.execute_batch("CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY,applied_at INTEGER NOT NULL);INSERT INTO schema_migrations VALUES(1,0)").unwrap();
+        let body = document(&DaemonConfig::default()).unwrap();
+        let id = insert_revision(&db, None, &body, "legacy").unwrap();
+        db.execute(
+            "INSERT INTO config_head(singleton,desired_revision) VALUES(1,?1)",
+            [id],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO config_draft VALUES(1,1,?1,?2,0)",
+            params![id, body],
+        )
+        .unwrap();
+        drop(db);
+        let metadata = inspect(&source, None).unwrap();
+        assert_eq!(metadata.schema_version, 1);
+        let destination = tempfile::tempdir().unwrap();
+        let restored = restore(destination.path(), &source, &metadata.sha256).unwrap();
+        assert_eq!(restored.restored.schema_version, 1);
+        assert!(restored.preserved_database.is_none());
+        let store = Store::open(Some(destination.path()), DaemonConfig::default()).unwrap();
+        assert_eq!(store.workspace().await.unwrap().desired.revision.id, 1);
+        store.close().await.unwrap();
+        assert_eq!(
+            readonly(&destination.path().join("hps.sqlite3"))
+                .unwrap()
+                .query_row("SELECT max(version) FROM schema_migrations", [], |r| r
+                    .get::<_, i64>(0))
+                .unwrap(),
+            SCHEMA_VERSION
+        );
+    }
+    #[tokio::test]
+    async fn missing_singletons_or_invalid_draft_cannot_replace_a_working_database() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(Some(dir.path()), DaemonConfig::default()).unwrap();
+        let snapshot = store.backup().await.unwrap();
+        store.close().await.unwrap();
+        let target = dir.path().join("hps.sqlite3");
+        let before = std::fs::read(&target).unwrap();
+        for sql in [
+            "DELETE FROM config_draft",
+            "UPDATE config_draft SET document='{\"unknown_setting\":true}'",
+            "DELETE FROM config_head",
+            "DELETE FROM event_context",
+            "DELETE FROM provider_clock",
+            "DROP TABLE config_activations",
+        ] {
+            let source = dir.path().join("damaged.sqlite3");
+            std::fs::write(&source, &snapshot.bytes).unwrap();
+            let db = Connection::open(&source).unwrap();
+            db.execute_batch(sql).unwrap();
+            drop(db);
+            let digest = format!("{:x}", Sha256::digest(std::fs::read(&source).unwrap()));
+            assert!(inspect(&source, Some(&digest)).is_err(), "accepted {sql}");
+            assert!(
+                restore(dir.path(), &source, &digest).is_err(),
+                "restored {sql}"
+            );
+            assert_eq!(
+                before,
+                std::fs::read(&target).unwrap(),
+                "changed target for {sql}"
+            );
+        }
+    }
+    #[tokio::test]
     async fn restore_refuses_running_invalid_digest_new_schema_and_preserves_original() {
         let source_dir = tempfile::tempdir().unwrap();
         let source = Store::open(Some(source_dir.path()), DaemonConfig::default()).unwrap();
@@ -402,6 +530,7 @@ mod tests {
             before,
             std::fs::read(target_dir.path().join("hps.sqlite3")).unwrap()
         );
+        std::fs::write(&export, &snapshot.bytes).unwrap();
         let newer = Connection::open(&export).unwrap();
         newer
             .execute("INSERT INTO schema_migrations VALUES(999,0)", [])

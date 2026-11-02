@@ -40,12 +40,43 @@ async fn download(
             "X-HPS-Backup",
             serde_json::to_string(&snapshot.metadata).expect("serializable backup metadata"),
         )
-        .body(Body::from(snapshot.bytes))
+        .body(Body::from_stream(async_stream::stream! {
+            // Keep the per-instance snapshot budget through response backpressure/drop.
+            // Copy bounded chunks so a final slow frame cannot retain a full 64MiB allocation.
+            for chunk in snapshot.bytes.chunks(64*1024) {
+                yield Ok::<_,std::convert::Infallible>(axum::body::Bytes::copy_from_slice(chunk));
+            }
+            drop(snapshot);
+        }))
         .expect("valid fixed backup headers"))
 }
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    async fn unconsumed_response_holds_snapshot_budget_until_body_is_dropped() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut config = DaemonConfig::default();
+        config.health.enabled = false;
+        config.dns.enabled = false;
+        let service = Supervisor::boot(
+            hps_storage::Store::open(Some(directory.path()), config).unwrap(),
+            Default::default(),
+        )
+        .await
+        .unwrap();
+        service.confirm_startup().await.unwrap();
+        let state = Arc::new(AppState::with_application(service.clone()));
+        let first = download(State(state.clone())).await.unwrap();
+        let (status, error) = download(State(state.clone())).await.unwrap_err();
+        assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(error.0.code, "backup_capacity");
+        drop(first);
+        let third = download(State(state)).await.unwrap();
+        assert_eq!(third.status(), StatusCode::OK);
+        drop(third);
+        service.shutdown().await.unwrap();
+    }
     #[tokio::test]
     async fn real_http_download_verifies_metadata_and_restore_lock() {
         let directory = tempfile::tempdir().unwrap();
