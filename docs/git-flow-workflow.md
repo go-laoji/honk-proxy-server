@@ -64,3 +64,5 @@
 第五批：#23 历史观测、诊断、告警与受限任务控制完成并关闭后，`observability-history` 原 tip `c6f0755` 独立 finish 为 `ec69bc3`，双父与内容树一致。用户授权余下 #24/#25/#26 使用独立 managed worktree 并行开发和交叉审查；只有各项集成验收完成后按该顺序逐项 finish，不批量删除分支。
 
 第六批：#24 在协议、订阅代际和来源寿命修复与组合验收后关闭，`protocol-subscriptions` 原 tip `9639b69` 独立 finish 为双父合并 `d3123be`，内容树一致，已归档对应 managed worktree，原 tip 由第二父保留。#25/#26 继续按该顺序收尾；用户随后明确允许编译没有报错时先合并代码，仍在进行的 x86 静态 release 额外发行验收单独记录为 pending，不提前计为通过。
+
+第七批：按用户“编译没有问题可以先合并”的最新指示，#25 在核心组合验收完成、x86 额外静态发行验证明确 pending 的边界下回复并关闭。`backup-desktop-diagnostics` 原 tip `fedc475` finish 为 `92e95a6`，双父与内容树一致；完成后 detach，保留该 checkout 供正在运行的冻结发行构建使用。随后在 #26 分支 merge develop，按顺序处理最后的储备契约分支；不因收尾而中断构建或提前归档其目录。
