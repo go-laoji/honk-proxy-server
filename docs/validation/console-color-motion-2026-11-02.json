@@ -1,0 +1,95 @@
+{
+  "date": "2026-11-02",
+  "issue": 27,
+  "branch": "feature/console-color-motion",
+  "ui_code_revision": "72583366c897b37d8914f122b4245932038ef8a3",
+  "web_build_id": "c583968f9a618638ed3129632966847ed74e05317e481de5d575801cefd6f78f",
+  "shared_mpa_pages": 18,
+  "direction": "cobalt blue; restrained technology style; no unapproved logo replacement",
+  "colors": {
+    "primary": "#2563EB",
+    "primary_hover": "#1D4ED8",
+    "light_page": "#F4F7FC",
+    "light_surface": "#FFFFFF",
+    "dark_page": "#0B1220",
+    "dark_surface": "#111C30",
+    "dark_border": "#24334D",
+    "dark_accent": "#60A5FA",
+    "dark_upload_detail": "#38BDF8",
+    "light_upload_contrast": "#0284C7"
+  },
+  "checks": {
+    "typescript": true,
+    "prettier": true,
+    "production_mpa_build": true,
+    "mac_daemon_embeds_exact_web_build": true,
+    "browser_full_suite_passed": 27,
+    "visual_export_focused_passed": 2,
+    "focused_not_added_to_full_count": true,
+    "key_text_contrast_minimum": 4.5,
+    "themes": [
+      "light",
+      "dark"
+    ],
+    "viewports": [
+      [
+        1440,
+        1000
+      ],
+      [
+        390,
+        844
+      ]
+    ],
+    "actual_refresh_respects_reduced_motion": true,
+    "mobile_overflow_checked": true
+  },
+  "screenshots": {
+    "mobile-dark-navigation.png": {
+      "path": "target/validation/console-color-motion-2026-11-02/mobile-dark-navigation.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "e51bb60dedd99f6ca4ce33f8efeb16ffe856254a84b4c14796883890891775f8"
+    },
+    "mobile-dark-settings.png": {
+      "path": "target/validation/console-color-motion-2026-11-02/mobile-dark-settings.png",
+      "width": 390,
+      "height": 2138,
+      "sha256": "f6cab7d0dc9500b4e5360dd090569de68cd2523d9dd40911dab0ea8119aaec3f"
+    },
+    "overview-dark-viewport.png": {
+      "path": "target/validation/console-color-motion-2026-11-02/overview-dark-viewport.png",
+      "width": 1440,
+      "height": 1000,
+      "sha256": "b9818f327dc241eabff447be31ba54485222d115841ed6063421e423832ce594"
+    },
+    "overview-dark.png": {
+      "path": "target/validation/console-color-motion-2026-11-02/overview-dark.png",
+      "width": 1440,
+      "height": 2261,
+      "sha256": "2cd3ec48a84b0a80eff60f5990153624bba95010227e7938820d5f465154c147"
+    },
+    "overview-light-viewport.png": {
+      "path": "target/validation/console-color-motion-2026-11-02/overview-light-viewport.png",
+      "width": 1440,
+      "height": 1000,
+      "sha256": "f52f632de4052cf9803015e44b7e7ee59d1e4a0b9dece1b85f94e44bc95723a5"
+    },
+    "overview-light.png": {
+      "path": "target/validation/console-color-motion-2026-11-02/overview-light.png",
+      "width": 1440,
+      "height": 2261,
+      "sha256": "ecd5327949b0d3b76ed69f541ecf83bb88a3466b5a0faddf1d6039760e16b561"
+    }
+  },
+  "full_suite_log_sha256": "4c9bc0745cb73d11afaaf55bd9fb548c3734868fff5c560c96dd4413aece00e2",
+  "native_desktop_window_tested": false,
+  "installed_bundle_overwritten": false,
+  "new_logo_or_favicon_integrated": false,
+  "host_network_configuration_written": false,
+  "docker_or_x86_build_started": false,
+  "feature_finished": false,
+  "pushed": false,
+  "record_finalized_at_utc": "2026-11-02T16:01:51.816182+00:00",
+  "filename_date_basis": "task start date, 2026-11-02; final record completed 2026-11-03 Asia/Shanghai"
+}

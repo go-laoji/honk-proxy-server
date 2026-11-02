@@ -64,14 +64,23 @@ test("both themes keep navigation, primary actions and secondary text readable a
     await page.screenshot({
       path: testInfo.outputPath(`overview-${mode}.png`),
       fullPage: true,
+      animations: "disabled",
+    });
+    await page.screenshot({
+      path: testInfo.outputPath(`overview-${mode}-viewport.png`),
+      animations: "disabled",
     });
     if (mode === "light")
       await page.getByRole("link", { name: "连接服务", exact: true }).click();
   }
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: "打开导航" }).click();
+  await expect(
+    page.getByRole("link", { name: "运行概览", exact: true }),
+  ).toBeInViewport({ ratio: 1 });
   await page.screenshot({
     path: testInfo.outputPath("mobile-dark-navigation.png"),
+    animations: "disabled",
   });
   await page.getByRole("link", { name: "系统设置", exact: true }).click();
   await expect(page.locator("html")).toHaveClass("dark");
@@ -84,6 +93,7 @@ test("both themes keep navigation, primary actions and secondary text readable a
   await page.screenshot({
     path: testInfo.outputPath("mobile-dark-settings.png"),
     fullPage: true,
+    animations: "disabled",
   });
 });
 
