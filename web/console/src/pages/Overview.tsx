@@ -44,7 +44,7 @@ export default function Overview({ data }: { data: ServiceData }) {
               : "当前服务不在 Linux 上运行"
           }
           icon={Cpu}
-          tone={capabilities.linux_ebpf.ready ? "teal" : "neutral"}
+          tone={capabilities.linux_ebpf.ready ? "brand" : "neutral"}
         />
         <Stat
           title="持续运行"

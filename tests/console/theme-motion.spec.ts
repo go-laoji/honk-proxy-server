@@ -53,10 +53,11 @@ test("both themes keep navigation, primary actions and secondary text readable a
       [".btn-primary", ".btn-primary"],
       [".panel p.muted", ".panel"],
     ])
-      expect(
-        await contrast(page, text, background),
-        `${mode} ${text}`,
-      ).toBeGreaterThanOrEqual(4.5);
+      await expect
+        .poll(() => contrast(page, text, background), {
+          message: `${mode} ${text}`,
+        })
+        .toBeGreaterThanOrEqual(4.5);
     await page.getByRole("link", { name: "运行概览", exact: true }).click();
     await expect(page.locator(".stat-card").first()).toBeVisible();
     await expect(page.getByRole("figure").first()).toBeVisible();
@@ -65,7 +66,7 @@ test("both themes keep navigation, primary actions and secondary text readable a
       fullPage: true,
     });
     if (mode === "light")
-      await page.getByRole("link", { name: "实例连接", exact: true }).click();
+      await page.getByRole("link", { name: "连接服务", exact: true }).click();
   }
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: "打开导航" }).click();

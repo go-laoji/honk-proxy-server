@@ -20,13 +20,13 @@ export function Stat({
   value,
   detail,
   icon: Icon,
-  tone = "teal",
+  tone = "brand",
 }: {
   title: string;
   value: string;
   detail: string;
   icon: ComponentType<{ size?: number; className?: string }>;
-  tone?: "teal" | "blue" | "neutral";
+  tone?: "brand" | "blue" | "neutral";
 }) {
   return (
     <div className="panel stat-card p-5" data-tone={tone}>
