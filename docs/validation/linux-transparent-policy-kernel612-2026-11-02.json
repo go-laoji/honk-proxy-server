@@ -1,0 +1,73 @@
+[
+  {
+    "abi_version": 2,
+    "full_transparent_datapath_ready": false,
+    "kernel": "6.12.115-0-virt",
+    "object_sha256": "d46c290a48354f6751b8b85e493441e693c007414442809239986b06cf8cee7e",
+    "reader_lookups": [
+      10642,
+      21962
+    ],
+    "scope": "kernel_policy_publication_only",
+    "torn_snapshots": 0,
+    "updates": 10000
+  },
+  {
+    "business_bytes_down": 114,
+    "business_bytes_up": 102,
+    "client_pid": 367,
+    "forwarding_verified": true,
+    "full_transparent_datapath_ready": false,
+    "http_upstream": true,
+    "https_upstream": true,
+    "ipv4": true,
+    "ipv6": true,
+    "kernel": "6.12.115-0-virt",
+    "object_sha256": "d46c290a48354f6751b8b85e493441e693c007414442809239986b06cf8cee7e",
+    "process_rules_and_fixed_groups": true,
+    "revision": 7,
+    "scope": "local_tcp_shared_engine_only",
+    "socks5_upstream": true,
+    "verified_flows": 6
+  },
+  {
+    "business_bytes_down": 128,
+    "business_bytes_up": 144,
+    "client_pid": 366,
+    "connected_and_unconnected_udp": true,
+    "daemon_in_selected_cgroup_bypassed": true,
+    "forwarding_verified": true,
+    "full_transparent_datapath_ready": false,
+    "idle_sessions_released": 8,
+    "ipv4": true,
+    "ipv6": true,
+    "kernel": "6.12.115-0-virt",
+    "mode": "direct",
+    "object_sha256": "d46c290a48354f6751b8b85e493441e693c007414442809239986b06cf8cee7e",
+    "original_reply_source": true,
+    "process_rule": true,
+    "revision": 7,
+    "scope": "local_udp_shared_engine_only",
+    "verified_flows": 8
+  },
+  {
+    "business_bytes_down": 128,
+    "business_bytes_up": 144,
+    "client_pid": 368,
+    "connected_and_unconnected_udp": true,
+    "daemon_in_selected_cgroup_bypassed": true,
+    "forwarding_verified": true,
+    "full_transparent_datapath_ready": false,
+    "idle_sessions_released": 8,
+    "ipv4": true,
+    "ipv6": true,
+    "kernel": "6.12.115-0-virt",
+    "mode": "socks5",
+    "object_sha256": "d46c290a48354f6751b8b85e493441e693c007414442809239986b06cf8cee7e",
+    "original_reply_source": true,
+    "process_rule": true,
+    "revision": 7,
+    "scope": "local_udp_shared_engine_only",
+    "verified_flows": 8
+  }
+]

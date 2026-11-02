@@ -1,6 +1,7 @@
 //! Shared, fixed-width transparent capture boundary. Addresses are network-order
 //! words; ports are host-order. Neither kernel pointers nor payload bytes cross it.
-pub const TP_ABI_VERSION: u32 = 1;
+// v2 requires a non-preallocated HASH policy map for whole-value publication.
+pub const TP_ABI_VERSION: u32 = 2;
 pub const TP_ENABLED: u32 = 1;
 pub const TP_TCP: u32 = 2;
 pub const TP_UDP: u32 = 4;
@@ -20,7 +21,7 @@ pub const TP_MAX_INTERFACES: u32 = 16;
 pub const TP_MAX_BYPASS: u32 = 256;
 
 #[repr(C)]
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
 pub struct CapturePolicy {
     pub abi_version: u32,
     pub flags: u32,

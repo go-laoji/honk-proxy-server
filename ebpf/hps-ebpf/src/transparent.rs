@@ -7,7 +7,7 @@ use aya_ebpf::{
         bpf_map_lookup_elem, bpf_setsockopt, bpf_sk_assign, bpf_sk_release, bpf_skc_lookup_tcp,
     },
     macros::{cgroup_sock, cgroup_sock_addr, classifier, map},
-    maps::{Array, HashMap, LpmTrie, LruHashMap, PerCpuArray, SockMap, lpm_trie::Key},
+    maps::{HashMap, LpmTrie, LruHashMap, PerCpuArray, SockMap, lpm_trie::Key},
     programs::{SockAddrContext, SockContext, TcContext},
 };
 use hps_ebpf_abi::{
@@ -25,7 +25,9 @@ const SOL_SOCKET: i32 = 1;
 const SO_MARK: i32 = 36;
 
 #[map]
-static HPS_TP_POLICY: Array<CapturePolicy> = Array::with_max_entries(1, 0);
+// NO_PREALLOC hash updates publish a new immutable element under RCU. An Array
+// update copies into the live value and can expose a mixed policy to a hook.
+static HPS_TP_POLICY: HashMap<u32, CapturePolicy> = HashMap::with_max_entries(1, 1);
 #[map]
 static HPS_TP_STATS: PerCpuArray<CaptureStats> = PerCpuArray::with_max_entries(3, 0);
 #[map]
@@ -49,7 +51,7 @@ static HPS_TP_SOCKETS: SockMap = SockMap::with_max_entries(TP_SOCKET_COUNT, 0);
 
 #[inline(always)]
 fn policy() -> Option<CapturePolicy> {
-    let policy = *HPS_TP_POLICY.get(0)?;
+    let policy = *unsafe { HPS_TP_POLICY.get(&0) }?;
     if policy.abi_version != TP_ABI_VERSION
         || policy.flags & TP_ENABLED == 0
         || policy.revision == 0

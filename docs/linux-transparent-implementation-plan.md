@@ -30,7 +30,7 @@
 - IPv4 分片、IPv6 扩展头、GSO/GRO、TCP 已建立 socket 查找、UDP 无连接/多目标与异常数据报各有明确处理和上限。首轮可明确拒绝未实现形态，但文档和计数不能假称已支持。
 - UDP 不重传业务数据，不把 TCP CONNECT 当作 UDP 能力，不把 HTTP 供应商猜成可转发 UDP。只在 SOCKS5 实际成功建立 association 后声称相应出口可用。
 - 所有 map、关联、跟踪记录、工作队列和等待都有上限；完整 ready 由实际 listener、link、route、代际与可执行规则共同决定。仅对象成功 load/attach 或 DNS 可用不等于业务 ready。
-- 测试只操作自有 Docker/QEMU/netns/cgroup/临时服务；保留 Mac 原应用、17900/yun-free 状态以及原始未跟踪文件。开发分批提交，不 push、merge 或执行 feature finish。
+- 测试只操作自有 Docker/QEMU/netns/cgroup/临时服务；保留 Mac 原应用、17900/yun-free 状态以及原始未跟踪文件。开发分批提交；按用户最新授权及 [Git Flow 收尾规则](git-flow-workflow.md) 顺序检查和 finish 已验收分支，不 push 或合入 main。
 
 ## 后续 owner 与代际联调重点
 

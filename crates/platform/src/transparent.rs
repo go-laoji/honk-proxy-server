@@ -1,5 +1,7 @@
 //! Owns only this daemon's cgroup/TCX links and maps. Listeners and policy routes
 //! must be ready before activate; object loading alone never means forwarding.
+#[cfg(test)]
+mod generation_tests;
 mod metadata;
 mod routes;
 #[cfg(test)]
@@ -10,7 +12,7 @@ mod test_support;
 mod udp_tests;
 use aya::{
     Ebpf, EbpfLoader,
-    maps::{Array, HashMap, LpmTrie, PerCpuArray, SockMap, lpm_trie::Key},
+    maps::{HashMap, LpmTrie, PerCpuArray, SockMap, lpm_trie::Key},
     programs::{
         CgroupAttachMode, CgroupSock, CgroupSockAddr, LinkOrder, SchedClassifier, TcAttachType,
         tc::TcAttachOptions,
@@ -115,6 +117,15 @@ impl PreparedCapture {
             .map_max_entries("HPS_TP_SOCKETS", TP_SOCKET_COUNT)
             .load(&self.object)
             .map_err(|e| error("ELF/maps", e))?;
+        match bpf.map("HPS_TP_POLICY") {
+            Some(aya::maps::Map::HashMap(map)) => {
+                let info = map.info().map_err(|e| error("policy map info", e))?;
+                if info.map_flags() != 1 || info.max_entries() != 1 {
+                    return Err("capture policy requires a single-entry NO_PREALLOC hash".into());
+                }
+            }
+            _ => return Err("capture policy ABI v2 requires a NO_PREALLOC hash".into()),
+        }
         let pidns =
             std::fs::metadata("/proc/self/ns/pid").map_err(|e| error("PID namespace", e))?;
         let policy = CapturePolicy {
@@ -130,12 +141,12 @@ impl PreparedCapture {
             bypass_mark: self.specification.bypass_mark,
             reserved: 0,
         };
-        Array::<_, CapturePolicy>::try_from(
+        HashMap::<_, u32, CapturePolicy>::try_from(
             bpf.map_mut("HPS_TP_POLICY")
                 .ok_or("capture policy map missing")?,
         )
         .map_err(|e| error("policy ABI", e))?
-        .set(0, policy, 0)
+        .insert(0, policy, 1)
         .map_err(|e| error("initialize disabled policy", e))?;
         let _: HashMap<_, u64, SocketProcess> = HashMap::try_from(
             bpf.map("HPS_TP_PROCESS")
@@ -422,7 +433,8 @@ impl Capture {
             .map_or(Ok(false), |routes| routes.present())
     }
     /// Call only after route ownership, listeners and the revision's user-space
-    /// snapshot are ready. Updates exactly one complete policy value.
+    /// snapshot are ready. The non-preallocated hash publishes an immutable RCU
+    /// element, so each hook observes a complete old or new policy.
     pub fn activate(&self, revision: i64, require_process: bool) -> Result<(), String> {
         if revision <= 0 {
             return Err("capture revision must be positive".into());
@@ -448,14 +460,14 @@ impl Capture {
             } else {
                 0
             };
-        Array::<_, CapturePolicy>::try_from(
+        HashMap::<_, u32, CapturePolicy>::try_from(
             state
                 .bpf
                 .map_mut("HPS_TP_POLICY")
                 .ok_or("capture policy missing")?,
         )
         .map_err(|e| error("policy ABI", e))?
-        .set(0, next, 0)
+        .insert(0, next, 2)
         .map_err(|e| error("publish policy", e))?;
         state.policy = next;
         Ok(())
@@ -580,14 +592,14 @@ impl Capture {
         };
         // Closing owned links detaches even if the disabled-policy update fails.
         state.policy.flags = 0;
-        let result = Array::<_, CapturePolicy>::try_from(
+        let result = HashMap::<_, u32, CapturePolicy>::try_from(
             state
                 .bpf
                 .map_mut("HPS_TP_POLICY")
                 .ok_or("capture policy missing")?,
         )
         .map_err(|e| error("policy ABI", e))?
-        .set(0, state.policy, 0)
+        .insert(0, state.policy, 2)
         .map_err(|e| error("disable policy", e));
         drop(state.bpf);
         let cleanup = state

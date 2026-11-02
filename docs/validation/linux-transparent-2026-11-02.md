@@ -99,3 +99,11 @@ Daemon 测试进程及其工作线程在启用前进入受选 cgroup；其新建
 共享地址/cgroup fixture 提取到独立测试模块，使用 Rust route-netlink CREATE|EXCL 并按 ACK 所有权清理。Linux 与 macOS 相关 Clippy、格式检查通过。一次旧快照执行只匹配 0 项，不计入验收；本批证据均来自刷新源码后实际匹配的 1 项测试与两个模式的结果。
 
 这些证据覆盖本机 UDP 共享引擎路径，`forwarding_verified=true`；完整 Daemon 控制面、LAN、原子代际、接口/路由监视、异常恢复和 x86_64 矩阵仍未完成，`full_transparent_datapath_ready=false`，T11/T13/T15 继续保持开放。
+
+## 完整内核策略快照发布（第十批）
+
+ABI 升级为 v2：策略从原地更新的 Array 改成单元素、NO_PREALLOC 的 HashMap。加载器在挂载前严格核对实际 map 类型、flags 与容量，旧 Array 对象拒绝加载。依据 [Linux 6.12 hashtab 实现](https://github.com/torvalds/linux/blob/v6.12/kernel/bpf/hashtab.c)，普通 hash 更新先分配并写完新元素，再通过 RCU 加入替换；本项目不原地修改策略元素。启用/热更/禁用均发布完整策略值。
+
+新对象 SHA256 `d46c290a48354f6751b8b85e493441e693c007414442809239986b06cf8cee7e` 在实际 aarch64 Linux 7.0.14 与 QEMU 6.12.115 均通过：10,000 次完整 56 字节策略切换，两个独立 FD 的并发读取线程各至少 10,000 次查询，只观察到完整旧值或新值，混合快照为零。该压力项验证实际内核 map，不挂载链接或路由，不把它解释为完整业务热更。证据与新对象 TCP/UDP 回归一起保存于 `linux-transparent-policy-kernel{7,612}-2026-11-02.json`。
+
+相同新对象在两个内核重新通过六条 TCP 三类上游、Direct/SOCKS5 各八条 UDP 的实际业务路径，相关 Linux/macOS Clippy 和格式检查通过。当前只完成内核策略发布基础；流元数据刷新、用户态代际保留、配置持久 CAS 与回滚仍待联合验证，完整 ready 保持 false，T11/T13/T15 不关闭。
