@@ -1,0 +1,14 @@
+{
+  "fault_suspended": true,
+  "full_transparent_datapath_ready": false,
+  "initial_ready_verified": true,
+  "ipv4_tcp_udp_denied": true,
+  "ipv6_tcp_udp_denied": true,
+  "kernel": "6.12.115-0-virt",
+  "kernel_rejections": 4,
+  "object_sha256": "fa5449609f86a6b50300a83a6e10d2f2150aa42eaa6676c8e64dd1581bbd5286",
+  "persistent_restart_recovered": true,
+  "route_loss_detected": true,
+  "scope": "daemon_capture_monitor_only",
+  "stopped_not_ready": true
+}

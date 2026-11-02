@@ -20,12 +20,14 @@ use tokio_util::{sync::CancellationToken, task::TaskTracker};
 pub(super) struct Controller {
     running: Mutex<Option<Arc<Running>>>,
     operation: tokio::sync::Mutex<()>,
+    diagnostics: Arc<tokio::sync::Semaphore>,
 }
 impl Controller {
     pub async fn prepare(prepared: PreparedCapture) -> Result<Self, String> {
         Ok(Self {
             running: Mutex::new(Some(Running::prepare(prepared).await?)),
             operation: tokio::sync::Mutex::new(()),
+            diagnostics: Arc::new(tokio::sync::Semaphore::new(4)),
         })
     }
     pub async fn publish(&self, engine: Arc<Engine>) -> Result<(), String> {
@@ -46,6 +48,145 @@ impl Controller {
             running.shutdown().await?;
         }
         Ok(())
+    }
+    pub async fn status(
+        &self,
+        mut view: hps_domain::LinuxCaptureStatus,
+    ) -> hps_domain::LinuxCaptureStatus {
+        let permit = match self.diagnostics.clone().try_acquire_owned() {
+            Ok(permit) => permit,
+            Err(_) => {
+                view.state = "busy".into();
+                view.reason = Some("capture diagnostics capacity reached".into());
+                return view;
+            }
+        };
+        let Ok(_operation) = self.operation.try_lock() else {
+            view.state = "busy".into();
+            view.reason = Some("capture operation in progress".into());
+            return view;
+        };
+        let running = self.running.lock().unwrap().clone();
+        let Some(running) = running else {
+            view.state = "stopped".into();
+            view.reason = Some("capture is stopped".into());
+            return view;
+        };
+        let _publication = running.publication.lock().await;
+        let capture = running.capture.clone();
+        let facts = tokio::task::spawn_blocking(move || {
+            let _permit = permit;
+            Ok::<_, String>((
+                capture.published_policy()?,
+                capture.links_present()?,
+                capture.routes_present()?,
+                capture.program_ids()?,
+                capture.map_ids()?,
+                capture.stats()?,
+                capture.flows()?.len(),
+            ))
+        })
+        .await
+        .map_err(|_| "capture inspection worker stopped".to_owned())
+        .and_then(|r| r);
+        view.generations = running
+            .engines
+            .lock()
+            .unwrap()
+            .entries
+            .keys()
+            .copied()
+            .collect();
+        view.resources = Some(running.budget.usage());
+        view.active_owners = running
+            .owners
+            .lock()
+            .unwrap()
+            .values()
+            .filter(|owner| !owner.session.finished())
+            .count();
+        view.rejected_ingress = running.dropped.load(Ordering::Relaxed);
+        for listener in [&running.listeners.tcp4, &running.listeners.tcp6]
+            .into_iter()
+            .flatten()
+        {
+            match listener.local_addr() {
+                Ok(address) => view.listeners.push(hps_domain::CaptureListenerStatus {
+                    transport: "tcp".into(),
+                    address: address.to_string(),
+                }),
+                Err(error) => {
+                    view.state = "degraded".into();
+                    view.reason = Some(format!("capture listener: {error}"));
+                    return view;
+                }
+            }
+        }
+        for listener in [&running.listeners.udp4, &running.listeners.udp6]
+            .into_iter()
+            .flatten()
+        {
+            match listener.local_addr() {
+                Ok(address) => view.listeners.push(hps_domain::CaptureListenerStatus {
+                    transport: "udp".into(),
+                    address: address.to_string(),
+                }),
+                Err(error) => {
+                    view.state = "degraded".into();
+                    view.reason = Some(format!("capture listener: {error}"));
+                    return view;
+                }
+            }
+        }
+        match facts {
+            Err(error) => {
+                view.state = "degraded".into();
+                view.reason = Some(error);
+            }
+            Ok((policy, links, routes, programs, maps, stats, flows)) => {
+                view.kernel_revision = policy.map(|(revision, _)| revision);
+                view.suspended = policy.is_some_and(|(_, suspended)| suspended);
+                view.links_present = Some(links);
+                view.routes_present = Some(routes);
+                view.program_ids = programs;
+                view.map_ids = maps;
+                view.flow_entries = flows;
+                view.hooks = stats
+                    .into_iter()
+                    .zip(["cgroup", "egress", "ingress"])
+                    .map(|(s, hook)| hps_domain::CaptureHookStatus {
+                        hook: hook.into(),
+                        observed_sockets: s.observed_sockets,
+                        marked_sockets: s.marked_sockets,
+                        captured_packets: s.captured_packets,
+                        bypassed_packets: s.bypassed_packets,
+                        rejected_packets: s.rejected_packets,
+                        unsupported_packets: s.unsupported_packets,
+                        missing_process: s.missing_process,
+                        errors: s.errors,
+                        last_error: s.last_error,
+                        error_phase: s.error_phase,
+                    })
+                    .collect();
+                view.ready = links
+                    && routes
+                    && !view.suspended
+                    && policy.is_some_and(|(revision, _)| revision == view.userspace_revision)
+                    && running.engines.lock().unwrap().active == view.userspace_revision
+                    && running.started.load(Ordering::Acquire)
+                    && !running.stop.is_cancelled()
+                    && running.error.lock().unwrap().is_none();
+                view.state = if view.ready { "running" } else { "degraded" }.into();
+                view.reason = if view.ready {
+                    None
+                } else {
+                    Some(running.error.lock().unwrap().clone().unwrap_or_else(|| {
+                        "capture listeners, scope, routes or generations are not ready".into()
+                    }))
+                };
+            }
+        }
+        view
     }
     pub fn pinned(&self) -> Vec<i64> {
         self.running
@@ -270,7 +411,7 @@ impl Running {
             self.tasks.spawn(async move{loop{
                 let incoming=tokio::select!{biased;_=stop.cancelled()=>break,result=listener.accept()=>result};
                 let Some(running)=weak.upgrade()else{break};
-                match incoming {Ok((stream,_))=>{if running.tcp(stream).is_err(){running.dropped.fetch_add(1,Ordering::Relaxed);}},Err(e)=>{running.fail(format!("capture TCP accept: {e}"));break;}}
+                match incoming {Ok((stream,_))=>{if running.tcp(stream).is_err(){running.dropped.fetch_add(1,Ordering::Relaxed);}},Err(e)=>{running.fail(format!("capture TCP accept: {e}")).await;break;}}
             }});
         }
         for socket in [&self.listeners.udp4, &self.listeners.udp6]
@@ -283,7 +424,7 @@ impl Running {
             self.tasks.spawn(async move{let mut bytes=vec![0u8;65536];loop{
                 let incoming=tokio::select!{biased;_=stop.cancelled()=>break,result=hps_net::transparent::recv_original(&socket,&mut bytes)=>result};
                 let Some(running)=weak.upgrade()else{break};
-                match incoming {Ok(packet)=>{if running.udp(packet,&bytes[..packet.bytes]).is_err(){running.dropped.fetch_add(1,Ordering::Relaxed);}},Err(e)if e.kind()==std::io::ErrorKind::InvalidData=>{running.dropped.fetch_add(1,Ordering::Relaxed);},Err(e)=>{running.fail(format!("capture UDP receive: {e}"));break;}}
+                match incoming {Ok(packet)=>{if running.udp(packet,&bytes[..packet.bytes]).is_err(){running.dropped.fetch_add(1,Ordering::Relaxed);}},Err(e)if e.kind()==std::io::ErrorKind::InvalidData=>{running.dropped.fetch_add(1,Ordering::Relaxed);},Err(e)=>{running.fail(format!("capture UDP receive: {e}")).await;break;}}
             }});
         }
         let weak = Arc::downgrade(self);
@@ -295,7 +436,7 @@ impl Running {
                 tokio::select! {biased;_=stop.cancelled()=>break,_=timer.tick()=>{}}
                 let Some(running) = weak.upgrade() else { break };
                 if let Err(error) = running.collect().await {
-                    running.fail(error);
+                    running.fail(error).await;
                     break;
                 }
             }
@@ -413,6 +554,15 @@ impl Running {
         }
         let capture = self.capture.clone();
         let (settled, flows) = tokio::task::spawn_blocking(move || {
+            if !capture.links_present()? {
+                return Err("capture scope or an attached link was lost".into());
+            }
+            if !capture.routes_present()? {
+                return Err("capture owned routing objects were lost".into());
+            }
+            if capture.published_policy()? != Some((active, false)) {
+                return Err("capture kernel policy is suspended or changed".into());
+            }
             Ok::<_, String>((capture.settled_revision()?, capture.flows()?))
         })
         .await
@@ -457,7 +607,20 @@ impl Running {
             });
         Ok(())
     }
-    fn fail(&self, error: String) {
+    async fn fail(&self, mut error: String) {
+        let _publication = self.publication.lock().await;
+        if self.stop.is_cancelled() {
+            return;
+        }
+        let capture = self.capture.clone();
+        let suspended = tokio::task::spawn_blocking(move || capture.suspend())
+            .await
+            .map_err(|_| "capture fault worker stopped".to_owned())
+            .and_then(|r| r);
+        if let Err(cause) = suspended {
+            error.push_str("; ");
+            error.push_str(&cause);
+        }
         *self.error.lock().unwrap() = Some(error);
         self.stop.cancel();
     }

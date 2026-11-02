@@ -7,6 +7,8 @@ mod nodes;
 pub use nodes::*;
 mod connections;
 pub use connections::*;
+mod linux;
+pub use linux::*;
 mod tasks;
 pub use tasks::*;
 

@@ -50,3 +50,11 @@
 - 内核身份是 insert-only，活动时间只作为近似 GC 提示。每个用户态 owner 对应一次实际 `routing_metadata` 的完整身份；按该身份取消并等待单流结束，再精确退休。UDP 第一条已属旧身份的数据报不能在用户态换成当前引擎重放，后续由应用决定是否再次发送。TCP 已结束时仍需为 FIN/ACK 留有有界安静期。
 - 旧代际除了业务引擎活跃流，还要覆盖内核尚未交给 accept/recv 的身份；这些 pending 身份有有限期限，超时精确退休后才允许丢弃快照。代际预算保持 32，元数据/owner 上限沿用 max_flows；不能通过创建新预算绕过旧流占用。
 - 控制面 ready 必须核对当前用户态与内核代际、实际 listener、cgroup/TCX、路由和运行对象状态。接口移动、link/route 缺失或 namespace 不符立即降级；错误恢复不能以 program ID 存在代替实际挂载。
+
+## 有限恢复与控制面下一批
+
+- 已有实际 status/overview DTO、实例 epoch、请求 expected_revision/expected_epoch 契约和监视触发的 suspend。接下来加入 start/stop/recheck 的任务记录及有限恢复，不把尚未启用的自动重试记成已经执行。
+- 自动恢复优先原位修复：保持 suspended 的 cgroup/TCX 范围，先取消并等待旧 owner，再在原网络 namespace 内核对 cgroup/接口身份，只重建缺失的自有链接与路由；退休屏障后精确清空旧 pending 元数据。新运行循环和相应引擎登记完成后才能清除 suspend。不能先 detach 全部捕获，再留出自动直连的恢复窗口。
+- 缓存各个自有 attach 的 link ID；重挂前释放对应旧句柄，避免重复恢复累积失效 FD。外部路由/规则发生归属冲突时保留日志并拒绝接管。
+- 自动尝试最多三次并退避；超过上限保持 degraded，人工 start/recheck 可重新检查。用户 stop 与故障 suspend 分开，stop 只停止透明流，显式入口继续服务。配置热更在用户停止捕获时仍可保存并发布其余服务，下一次 start 使用当前引擎。
+- 管理操作进入 T14 owned task，客户端取消等待不能丢失已经接纳的工作；使用实例 epoch 与配置 revision 防止旧界面操作错误的服务实例，这不是登录或权限判断。

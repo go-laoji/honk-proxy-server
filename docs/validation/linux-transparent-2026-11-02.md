@@ -177,3 +177,13 @@ ABI v4 加入显式 suspended 策略：保留已配置范围与 bypass，对受�
 实际 aarch64 7.0.14 和 QEMU 6.12.115 均通过：双栈 TCP 各一次暂停 connect 返回 EPERM，恢复后六条 TCP 分别经过 HTTP/HTTPS/SOCKS5 出口；双栈 UDP 各一次暂停 send 返回 EPERM，恢复后由客户端重试，原流代际保持，73 条原身份/容量用例仍通过。ABI marker 的再次写入失败，保留的真实 ABI v3 对象在挂载前拒绝。cgroup 失联、跨 namespace 拒绝、元数据锁独立和 map 回收均重新通过。
 
 相同新对象的 Daemon 正常三代际，以及 DNS+业务发布失败回退两项也在两个内核复验通过。证据为 `linux-transparent-suspend-kernel{7,612}-2026-11-02.json`。相关 Linux/macOS Clippy、ABI 普通测试与格式/diff 通过。运行监视/自动恢复及其控制面、LAN、SIGKILL 和 x86_64 矩阵仍待完成，完整 ready 保持 false。
+
+## 实际服务状态与故障监视（第十八批）
+
+增加共用 LinuxCaptureStatus/Overview DTO：实际平台/范围、对象指纹、运行与内核代际、暂停位、listener 地址、link/route 检查、program/map ID、在途代际、flow/owner 数、额度与内核三阶段计数。诊断并发有界，发布/停止进行中报告 busy，不能把未检查的结果当作已挂载或已消失。管理请求预留 expected_revision 和 expected_epoch 的一致性边界，不增加项目账号或权限。
+
+运行 GC tick 同时检查真实 cgroup/TCX、路由与实际内核策略。故障在发布互斥下先设置 suspended，再取消自身接纳/业务 scope；现有显式入口不受该 scope 取消影响。此批只完成监视与暂停，尚未开启自动重试，状态中 max_retry_attempts=0。
+
+实际 aarch64 7.0.14 和 QEMU 6.12.115 均通过新监视项：启动检查真实 ready、四个 listener、八个程序和匹配代际；精确删除自有 IPv4 capture rule 后，报告 routes_present=false、links_present=true、suspended=true、ready=false。随后实际 cgroup 子进程的 IPv4/IPv6 TCP connect 与 UDP send 共四次均返回 EPERM，用户态连接登记数为零。停止后不报告 ready 或旧 program ID，按持久配置重启后重新就绪。证据为 `linux-transparent-monitor-kernel{7,612}-2026-11-02.json`。
+
+7.0 同时重新通过正常三代际和 DNS 共存回退两项，相关 Linux/macOS Clippy、格式/diff 通过。下一批为保持暂停边界的有限恢复、API/CLI/MPA；LAN、SIGKILL 与 x86_64 仍待完成，完整发行验收 ready 不据此宣称通过。

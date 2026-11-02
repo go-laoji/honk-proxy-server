@@ -92,6 +92,33 @@ impl Prepared {
     }
 }
 impl Controller {
+    pub async fn status(&self, revision: i64) -> hps_domain::LinuxCaptureStatus {
+        let mut view = hps_domain::LinuxCaptureStatus::unconfigured(revision);
+        view.configured = true;
+        view.object_path = Some(self.specification.object.display().to_string());
+        view.object_fingerprint = Some(self.fingerprint.clone());
+        view.scope = Some(hps_domain::CaptureScope {
+            local_cgroup: self
+                .specification
+                .local_cgroup
+                .as_ref()
+                .map(|p| p.display().to_string()),
+            lan_interfaces: self.specification.lan_interfaces.clone(),
+            ipv4: self.specification.ipv4,
+            ipv6: self.specification.ipv6,
+            tcp: self.specification.tcp,
+            udp: self.specification.udp,
+        });
+        #[cfg(target_os = "linux")]
+        {
+            self.runtime.status(view).await
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            view
+        }
+    }
+
     pub async fn publish(&self, engine: Arc<Engine>) -> Result<(), ApplicationError> {
         #[cfg(target_os = "linux")]
         {

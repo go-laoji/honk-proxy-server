@@ -238,6 +238,34 @@ impl Supervisor {
         }
         Ok(service)
     }
+    pub async fn linux_capture_status(&self) -> hps_domain::LinuxCaptureStatus {
+        let current = self.current();
+        if let Some(capture) = &current.transparent {
+            capture.status(current.revision).await
+        } else {
+            hps_domain::LinuxCaptureStatus::unconfigured(current.revision)
+        }
+    }
+    pub async fn linux_capture_overview(
+        &self,
+    ) -> Result<hps_domain::LinuxCaptureOverview<hps_config::LinuxCaptureConfig>, ApplicationError>
+    {
+        let workspace = self.store.workspace().await?;
+        let current = self.current();
+        let status = if let Some(capture) = &current.transparent {
+            capture.status(current.revision).await
+        } else {
+            hps_domain::LinuxCaptureStatus::unconfigured(current.revision)
+        };
+        Ok(hps_domain::LinuxCaptureOverview {
+            epoch: self.event_epoch().into(),
+            running_revision: current.revision,
+            desired_revision: workspace.desired.revision.id,
+            running_configuration: current.config.linux_capture.clone(),
+            desired_configuration: workspace.desired.config.linux_capture,
+            status,
+        })
+    }
     pub fn current(&self) -> Arc<RuntimeSnapshot> {
         self.current.load_full()
     }
