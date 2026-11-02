@@ -64,6 +64,7 @@ test("DNS MPA resolves through real UDP, shows TTL cache/context, clears and det
     await context
       .getByRole("button", { name: "查询上下文", exact: true })
       .click();
+    await expect(context).toContainText("剩余 TTL");
     await expect(
       context.getByText("console.example", { exact: true }),
     ).toBeVisible();

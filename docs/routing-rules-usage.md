@@ -112,3 +112,17 @@ hps rule apply 9 --expected-revision 3
 规则页只激活规则变更。候选混有其他设置或基于旧配置时，页面要求基于当前版本另存规则候选；新候选保留当前其他设置。完整配置混合激活应在配置工作台审查，不从规则页静默覆盖其他字段。
 
 `/console/rules.html` 提供独立 MPA：候选/运行切换、JSON 编辑、启停/删除、每页 50 条、上下移动及聚焦卡片时 Alt+↑/↓ 排序、变更审查、明确激活、上下文模拟和有时效的候选解释。未保存编辑离页会提示。Browser 与 Desktop 使用同一页面及接口，无项目登录、账号、权限或代理使用者身份规则。
+
+## 格式版本与批量导入导出
+
+`rules.html` 的批量面板和 CLI/API 共用 JSON 格式版本 1，文件只包含 `format_version`、说明性的 `source_revision` 和 `configuration`（路由规则/默认动作/DNS 观测选项），不包含上游凭据或其他服务配置。最大 1 MiB；源版本不是当前服务的权限或版本凭据，所有引用都按目标服务重新检查。
+
+```sh
+hps --output json rule export > rules.json
+hps rule import-preview rules.json --expected-revision 3
+hps rule import-apply rules.json --expected-revision 3 --checksum <preview-checksum>
+# 上一步只创建候选，核查差异后再显式激活
+hps rule apply <candidate-revision> --expected-revision 3
+```
+
+GET `/api/v1/rules/export?revision=N` 可导出所看版本；POST `/api/v1/rules/import/preview` 返回校验结果/变更/校验和，`import/apply` 必须提交相同内容和校验和，且期望运行/已保存版本仍一致。超限、未知格式或失效引用拒绝；预览不绑定监听或购买上游，导入不自动改变流量。浏览器保存 JSON 下载，Desktop 使用原生保存窗口，并在读取结果及写文件前检查目标/文档代际。创建响应丢失时先检查候选列表，不自动重放保存。

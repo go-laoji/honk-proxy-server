@@ -531,6 +531,9 @@ async fn save_config_export(
         .export_config(Some(revision))
         .await
         .map_err(|error| error.to_string())?;
+    subscriptions
+        .validate_context(window.label(), context)
+        .map_err(|e| e.message)?;
     let (sender, receiver) = tokio::sync::oneshot::channel();
     app.dialog()
         .file()
@@ -552,6 +555,57 @@ async fn save_config_export(
         .await
         .map_err(|_| "file save could not finish")?
         .map_err(|error| error.to_string())?;
+    Ok(true)
+}
+
+#[tauri::command]
+async fn save_rules_export(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Connection>,
+    subscriptions: tauri::State<'_, events::NativeEvents>,
+    window: tauri::WebviewWindow,
+    context: events::SubscriptionContext,
+    revision: i64,
+) -> Result<bool, String> {
+    let target = {
+        let target = state.0.lock().map_err(|_| "connection state unavailable")?;
+        subscriptions
+            .validate_context(window.label(), context)
+            .map_err(|e| e.message)?;
+        target.clone()
+    };
+    let exported = target
+        .client(Duration::from_secs(10))
+        .map_err(|e| e.to_string())?
+        .export_rules(Some(revision))
+        .await
+        .map_err(|e| e.to_string())?;
+    subscriptions
+        .validate_context(window.label(), context)
+        .map_err(|e| e.message)?;
+    let document =
+        serde_json::to_vec_pretty(&exported).map_err(|_| "rule export serialization failed")?;
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .file()
+        .set_file_name(format!("hps-rules-r{revision}.json"))
+        .add_filter("JSON", &["json"])
+        .save_file(move |path| {
+            let _ = sender.send(path);
+        });
+    let Some(path) = receiver.await.map_err(|_| "save dialog did not complete")? else {
+        return Ok(false);
+    };
+    subscriptions
+        .validate_context(window.label(), context)
+        .map_err(|e| e.message)?;
+    let path = path
+        .into_path()
+        .map_err(|_| "selected file path is unavailable")?;
+    tokio::task::spawn_blocking(move || std::fs::write(path, document))
+        .await
+        .map_err(|_| "file save could not finish")?
+        .map_err(|e| e.to_string())?;
     Ok(true)
 }
 
@@ -632,6 +686,7 @@ pub fn run() {
             api_get,
             api_post,
             save_config_export,
+            save_rules_export,
             get_web_build_id,
             local::profiles_get,
             local::profiles_change,
