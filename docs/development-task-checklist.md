@@ -42,7 +42,7 @@ T05 配置基础后推进 T06/T07 短效 API 与补池。T08–T14 逐步闭合�
 | T17 | P0 | [#22](https://github.com/go-laoji/honk-proxy-server/issues/22) 分包发行、端到端与发布门槛 | T01, T02, T04, T05, T06, T07, T08, T09, T10, T11, T12, T13, T14, T15, T16 | 已交付发行候选与明确平台限制，非全平台无条件放行 |
 | T18 | P1 | [#23](https://github.com/go-laoji/honk-proxy-server/issues/23) 历史观测、诊断导出与任务增强 | T17 | 已完成 |
 | T19 | P1 | [#24](https://github.com/go-laoji/honk-proxy-server/issues/24) SOCKS5 UDP、订阅与高级分组扩展 | T17 | 已完成 |
-| T20 | P1 | [#25](https://github.com/go-laoji/honk-proxy-server/issues/25) 备份恢复、系统体验与高级 Linux 诊断 | T17 | 实现与核心验收完成；额外发行验收进行中 |
+| T20 | P1 | [#25](https://github.com/go-laoji/honk-proxy-server/issues/25) 备份恢复、系统体验与高级 Linux 诊断 | T17 | 已完成；开发阶段以 macOS 验收为准 |
 | T21 | P2 | [#26](https://github.com/go-laoji/honk-proxy-server/issues/26) 多实例与其他平台等储备范围 | T17 | 储备范围与兼容契约已完成 |
 
 ## 3. 任务验收详情
@@ -238,3 +238,5 @@ T02 随后接管现有模板：共享页面清单、Tailwind 布局与 API trans
 - 2026-11-02：T20 #25 实现和核心组合验收完成，源码固定 `862ddad`。最终 Mac workspace 227 / Native 11、ARM Linux 234、x86 用户态 233（另 1 项原 socket 差异用同 ELF 在两个完整内核补验）、双架构双内核标准 52 项通过；见 [Mac 报告](validation/backlog-macos-2026-11-02.md) 和 [Linux 聚合](validation/backlog-kernel-2026-11-02/acceptance.json)。Mac/ARM 发行包已验收，x86 静态 release 仍在优化、暂未报错；按用户最新指示先按顺序合并代码，额外发行结果后补。原生窗口、OS 通知/登录自启及既有平台限制仍单列，不记为通过。
 
 - 2026-11-02：T21 #26 已交付 [未来范围契约](future-platform-contracts.md)、计划和 [验收记录](validation/future-platform-contracts-2026-11-02.md)，并形成 [跨分支审查](validation/parallel-review-2026-11-02.md)。本任务验收产品/平台/供应商/兼容性前置定义，不宣称未来运行能力已实现。T20 已先 finish 为 `92e95a6`，T21 随后通过 merge 同步；x86 额外发行验证继续运行，不阻塞用户授权的代码合并。
+
+- 2026-11-02 最终调整：用户要求当前开发只验证 macOS、取消耗时 x86 编译并清理环境。最终 Mac workspace 227 / Native 11 与同源码 Web/安装包验证保持有效；已停止 x86 编译并清理专属容器/镜像标签/缓存卷及四个 x86 target 子目录（18.97 GiB）。既有 Linux 证据保留，取消的 x86 release 从未生成、不算通过；见 [清理记录](validation/x86-development-cleanup-2026-11-02.json) 和 [组合报告](validation/backlog-integration-2026-11-02.md)。全部任务按实施或储备契约范围收尾，不扩大平台发行承诺。

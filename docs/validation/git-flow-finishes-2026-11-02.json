@@ -415,6 +415,8 @@
   "develop_head_kind": "last_feature_finish_before_followup_documentation",
   "total_independent_feature_finishes": 22,
   "source_revision": "862ddad624403e6f81bc994a7fe262ac04b7fb01",
-  "x86_extra_static_release_validation": "pending; compiler active without errors; not counted as passed",
-  "latest_user_merge_authorization": "编译没有问题就可以先来做代码的合并了"
+  "x86_extra_static_release_validation": "cancelled by explicit user instruction; build/package acceptance not completed, not counted as passed",
+  "latest_user_merge_authorization": "编译没有问题就可以先来做代码的合并了",
+  "latest_development_validation_scope": "macOS only for current development; existing Linux evidence retained",
+  "x86_cleanup_report": "x86-development-cleanup-2026-11-02.json"
 }

@@ -111,4 +111,4 @@ Linux 数据面需要在实际内核环境验证本项目自研 eBPF 程序及�
 
 后续平台与多实例的储备范围见 [产品与兼容契约](docs/future-platform-contracts.md)。这些前置定义不表示未来运行能力已经启用；当前实现与平台验收边界以 [任务清单](docs/development-task-checklist.md) 和对应验收报告为准。
 
-T18–T21 并行交付与最终版本对应关系见 [组合验收记录](docs/validation/backlog-integration-2026-11-02.md)，其中进行中的发行验收与已合并代码分开列出。
+T18–T21 并行交付与最终版本对应关系见 [组合验收记录](docs/validation/backlog-integration-2026-11-02.md)，其中记录 macOS 验收及按用户要求取消的 x86 发行验证；x86 专属环境已清理，既有内核证据保留。

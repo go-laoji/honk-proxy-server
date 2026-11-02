@@ -24,3 +24,5 @@ ARM 静态 headless 候选已用本架构执行元数据检查、打包及实际
 ARM 安装后的独立 CLI 另完成真实在线备份/摘要检查、运行锁拒绝恢复、停止后恢复保留原库、坏摘要拒绝和重新启动。[包清单与安装报告](backlog-kernel-2026-11-02/packages/aarch64/manifest.json)保留实际来源、Web ID、eBPF 对象和二进制摘要，其他原始结果位于同目录。已安装 `hpsd` SHA-256 `d6d6d7bec8e0224cb6c8ab642a08cfaf2a05403acc808cf21936c63e0931f728` 与两个完整 ARM 内核实际执行的 release daemon 相同。两条额外发行案例均精确 1 passed，确认真实 SIGKILL、外来规则保留及重启前后 TCP/UDP 转发，独立于标准 52。
 
 可恢复的实际包、manifest、安装结果与 installed-prefix 已复制至主工作目录 `target/validation/backlog-candidate/linux-aarch64`，不依赖当前工作树的 ignored target 留存。未打 deb/Desktop Linux 包、未发布 registry 或启用实际系统服务。
+
+用户最终调整开发验收范围为 macOS：x86 静态 release 在正常优化中主动取消，未生成最终包、未执行该发行程序的额外内核案例。上述历史矩阵与 ARM 候选证据保留；x86 专属环境清理见 [记录](x86-development-cleanup-2026-11-02.json)。未来正式 x86 发行时须重新完成该包验收。

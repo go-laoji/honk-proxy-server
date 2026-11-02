@@ -2,6 +2,8 @@
 
 本记录对应 2026-11-02 的 T18–T21 集成。功能源码固定为 `862ddad624403e6f81bc994a7fe262ac04b7fb01`，共享 Web build ID 为 `7c94170ee16c7b9c2f8e0aa08c219e172c2a7b6bb4834c71b2cf96a2fb4316e1`，18 个独立 HTML 入口。后续提交只记录文档、验收和 Git 收尾，不把文档 HEAD 重新标成已编译的源码版本。
 
+用户最终要求当前开发以 macOS 验收为准，停止 x86 静态构建并清理专属环境。以下已完成的 Linux 结果保留为历史证据；取消的 x86 发行构建/安装验收不算通过。
+
 ## 交付范围
 
 - T18 / #23：有界历史趋势、规则命中、健康历史、DNS64 映射视图、规则版本导入导出、诊断任务、取消/重试与告警。真实采集完成和持久任务终态分离，持久化失败不提前回收控制项。见 [使用说明](../observability-usage.md)。
@@ -34,7 +36,7 @@ Mac 额外使用实际旧版 T17 二进制（摘要 `9e90c470b2412d16df14690fa0e
 | macOS headless | `target/validation/backlog-candidate/macos-862ddad/hps-headless-0.1.0-aarch64-apple-darwin.tar.gz` | `573959469df074c9f11f650ce9ed61a8849a2878a44d01bebe29de6d25b7adb1` | 安装、协议、故障、备份、跨源码升级/回滚通过 |
 | macOS Desktop | `target/validation/backlog-candidate/macos-desktop-862ddad/hps-desktop-0.1.0-aarch64-apple-darwin.zip` | `723fca2a24927e0247425e9157fca554e492c5f1f454301c18fda478f67d5818` | 签名/归档/元数据通过；可见窗口及OS行为未实测 |
 | Linux aarch64 static | `target/validation/backlog-candidate/linux-aarch64/hps-headless-0.1.0-aarch64-unknown-linux-musl.tar.gz` | `74e0dc1bd1355e6f6693e67d7b3d2830968f01770eb82778cebde07ba6582906` | 安装、故障、备份及两个内核的release程序案例通过 |
-| Linux x86_64 static | 进行中 | 尚未生成 | 编译没有报错，但最终优化未完成；安装和release内核结果不计通过 |
+| Linux x86_64 static | 按用户要求取消 | 未生成 | 编译在最终优化中主动停止；未完成构建、安装和 release 内核验收，不算通过 |
 
 本地文件保存在主工作区 `target/validation/backlog-candidate/`；安装报告、manifest 和普通构建原始日志保存在主工作区，内核 JSON 与其引用串口日志纳入 Git。Desktop zip 是 ad-hoc 签名候选，已验证签名、归档和相同 Daemon/Web；未发布商店、registry 或远端 Release。
 
@@ -42,6 +44,10 @@ Mac 原生可见窗口、托盘展示、OS 通知及真实登录自启仍未实�
 
 ## Git 与宿主边界
 
-已依次完成 #24 `d3123be`、#25 `92e95a6`、#26 `4a45a58`，主工作区回到 develop。累计 22 项 feature finish 的第二父原 tip、双父、内容树一致及 develop 可达性逐条通过。见 [完整审计](git-flow-finishes-2026-11-02.json) 与 [收尾流程](../git-flow-workflow.md)。开发子 Issue #6–#26 均已回复实际结果并关闭；Epic #5 保留 open 补齐 x86 额外发行记录。按用户最新明确授权先合并代码，不将后续 pending 验证计为通过。main 保持 `18d589913b37ef4caa98c2c0a89f32ebfb38a3a9`；未 push、删除远端分支、合入 main 或移动旧 RC 标签。
+已依次完成 #24 `d3123be`、#25 `92e95a6`、#26 `4a45a58`，主工作区回到 develop。累计 22 项 feature finish 的第二父原 tip、双父、内容树一致及 develop 可达性逐条通过。见 [完整审计](git-flow-finishes-2026-11-02.json) 与 [收尾流程](../git-flow-workflow.md)。开发子 Issue #6–#26 均已回复实际结果并关闭；本轮以用户最后指定的 macOS 开发验收范围收尾，取消的 x86 额外发行验证不计为通过；未来正式 Linux x86 发行前须重建环境并完成该包验收。main 保持 `18d589913b37ef4caa98c2c0a89f32ebfb38a3a9`；未 push、删除远端分支、合入 main 或移动旧 RC 标签。
 
 开发宿主 Mac 未进行新的 Wi-Fi、DNS、路由或系统代理配置写入；验收网络操作只在自有 Linux 容器/完整虚拟机中进行。主工作区临时只读验收 Daemon 已停止；不恢复旧网络配置、不启动用户原服务、不覆盖原 Desktop bundle。无关原始未跟踪文件保持在主工作区。
+
+## x86 开发环境清理
+
+已停止并自动移除编译容器，删除两个内核保留容器、四个项目 x86 镜像标签和两个专属 cargo/rustup 卷；仅移除共享 target 中 `t17-static-x86`、`x86_64`、`x86-userland`、`x86-stripped` 四个目录，共 18.97 GiB。ARM 产物/缓存、ABI4/ABI3 对象、共享 Rust 基础标签、binfmt 和其他项目资源保留，没有全局 prune。详见 [清理记录](x86-development-cleanup-2026-11-02.json)。取消时 partial build 日志及已提交的真实内核证据保留；未生成 x86 最终包。

@@ -1,0 +1,59 @@
+{
+  "scope": "honk-proxy-server x86 validation resources only",
+  "user_requested_cancel": true,
+  "containers_removed": [
+    "hps-t20-kernel612-retain",
+    "hps-t20-kernel72-retain"
+  ],
+  "already_removed_containers": [
+    "hps-t20-static-x86-862"
+  ],
+  "image_tags_removed": [
+    "hps-ci-builder-x86:latest",
+    "hps-ebpf-x86-kernel612:dev",
+    "hps-ebpf-x86-kernel72:dev",
+    "hps-rust-x86_64:1.98.1"
+  ],
+  "volumes_removed": [
+    "hps-validation-cargo-x86",
+    "hps-validation-rustup-x86"
+  ],
+  "shared_target_directories_removed": [
+    {
+      "path": "/target/t17-static-x86",
+      "allocated_kib_before": 723380
+    },
+    {
+      "path": "/target/x86_64",
+      "allocated_kib_before": 18981660
+    },
+    {
+      "path": "/target/x86-userland",
+      "allocated_kib_before": 1456
+    },
+    {
+      "path": "/target/x86-stripped",
+      "allocated_kib_before": 186344
+    }
+  ],
+  "global_prune_used": false,
+  "host_network_configuration_written": false,
+  "shared_arm_target_and_objects_preserved": true,
+  "common_rust_base_tag_preserved": true,
+  "existing_systemd_fixture_preserved": true,
+  "shared_target_removed_kib": 19892840,
+  "date": "2026-11-02",
+  "development_validation_scope": "macOS, per latest user instruction",
+  "source_revision": "862ddad624403e6f81bc994a7fe262ac04b7fb01",
+  "x86_release_build_completed": false,
+  "x86_release_package_generated": false,
+  "x86_release_acceptance_passed": false,
+  "cancelled_build_log": "target/validation/backlog-retained-build-logs/x86_64-static-862ddad-cancelled.log",
+  "cancelled_build_log_sha256": "55971b41b1ef1561e18c2380fb1ae2071f49bb5765f4fe12e70a2885d6100adc",
+  "shared_buildkit_cache_pruned": false,
+  "binfmt_registration_changed": false,
+  "other_project_resources_removed": false,
+  "evidence_in_git_preserved": true,
+  "target_removed_gib": 18.97,
+  "compiler_container_stop_and_auto_remove_verified": true
+}

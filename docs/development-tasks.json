@@ -426,7 +426,7 @@
       "url": "https://github.com/go-laoji/honk-proxy-server/issues/25",
       "status": "completed",
       "implementation_plan": "docs/backup-desktop-diagnostics-plan.md",
-      "implementation_notes": "SQLite Backup API/封存输入/严格schema/离线锁恢复、Desktop托盘通知登录自启适配及Linux只读诊断实现完成；最终Mac227/Native11、ARM234、x86用户态233及同ELF双内核补验、标准52真实内核用例通过。Mac原生窗口/OS通知/登录项未实测。按用户最新授权先合并，x86静态release额外发行验收仍在进行，不作为已通过结论。"
+      "implementation_notes": "SQLite一致性备份、严格schema与封存输入、离线维护锁恢复、Desktop托盘/通知/登录自启适配、Linux只读诊断实现与核心回归完成。最终Mac227/Native11；既有Linux矩阵52项记录保留。用户最终要求开发阶段只验收macOS，x86静态发行验证已主动取消并清理，不记为通过；Mac原生窗口/OS行为仍未实测。"
     },
     {
       "id": "T21",
