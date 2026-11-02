@@ -149,3 +149,13 @@ TCP scoped 入口返回独立 CapturedTcpSession；UDP owner 也增加 finished/
 Linux config/application 普通回归 46 passed / 4 个特权入口 ignored（该批实际联合项另行显式通过）；macOS 45 项普通回归及新增非 Linux 拒绝项 1 项通过，相关 Clippy、格式和 diff 检查通过。首次联合项仅因测试误用 connection state=active 而未断开 open UDP 导致等待超时，修正后重验，未把该失败计为通过。
 
 本批不代表完整 T15：失败注入/自动恢复、实际 LAN、控制面 API/CLI/MPA 与 x86_64 联合矩阵仍待完成，公开完整 datapath_ready 继续保持 false，T11/T13/T15 不关闭。
+
+## 实际策略 map 发布失败与持久回退（第十五批）
+
+增加 SQLite 单事务的 rollback_publication：将失败激活从 prepared 改为 failed，并恢复之前的 desired/last_applied；若原 desired 尚待重启，继续保持 pending_restart，不把它覆盖为当前运行版本。监听、DNS 捕获和业务透明发布的启动后失败均走该补偿路径。共享 DNS 捕获实例在失败时恢复旧 resolver；新建捕获才回收，避免关闭旧实例。
+
+实际 aarch64 7.0.14 与 QEMU 6.12.115 均通过 BPF_MAP_FREEZE 注入：运行 revision 1 的 4 条真实双栈 TCP/UDP 流，先将 revision 2 设为待重启，再冻结实际已挂载程序使用的策略 map，尝试发布 Reject revision 3。内核拒绝更新后 desired=2、running=1，revision 3 激活准确记录 failed，没有遗留 prepared；4 条旧流仍按 revision 1 收发，业务上下行各 16 B。退出明确返回策略 map 禁用失败，同时仍 detach/回收自有程序和路由；随后能从持久 desired revision 2 重新取得归属并启动。
+
+同一最终源码的正常三代际路径也在两个内核复验通过，证据为 `linux-transparent-rollback-kernel{7,612}-2026-11-02.json`。Mac storage/application 普通回归 65 项、Linux 相关库 26 项通过，相关 Clippy 和格式/diff 通过。QEMU initrd 在 depmod 前展开模块压缩，使最小 BusyBox 加载 CONFIG_PACKET 时不再先提交压缩的 ELF；复验没有 Invalid ELF header 输出。
+
+本批的失败注入针对真实内核更新，未用 mock 替代。DNS 与业务同时启用时的 resolver 回退仍待下一批联合验证；LAN、异常退出恢复、控制面和 x86_64 矩阵未完成，完整 ready 保持 false。

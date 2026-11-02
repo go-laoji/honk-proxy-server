@@ -8,6 +8,10 @@ cp /bin/busybox "$rootfs/bin/busybox"
 cp /lib/ld-musl-aarch64.so.1 "$rootfs/lib/ld-musl-aarch64.so.1"
 for app in sh mount mkdir ip uname cat poweroff modprobe; do ln -s busybox "$rootfs/bin/$app"; done
 cp -a /qemu/kernel/lib/modules "$rootfs/lib/modules"
+# The minimal initrd uses BusyBox modprobe. Expand module compression before
+# depmod so loading CONFIG_PACKET does not first submit a compressed ELF image.
+find "$rootfs/lib/modules" -type f -name '*.ko.gz' -exec gzip -d {} +
+find "$rootfs/lib/modules" -type f -name '*.ko.zst' -exec zstd -q -d --rm {} +
 kver=$(basename /qemu/kernel/lib/modules/*)
 depmod -b "$rootfs" "$kver"
 if [ -n "${HPS_TEST_BINARY:-}" ]; then

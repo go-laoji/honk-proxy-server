@@ -313,6 +313,28 @@ impl Store {
             transaction.commit()?;Ok(())
         }).await
     }
+    /// Compensate a runtime publication failure without losing a previously
+    /// deferred desired head. Failure and restoration are one durable change.
+    pub async fn rollback_publication(
+        &self,
+        activation: i64,
+        failed_revision: i64,
+        previous_desired: i64,
+        previous_running: i64,
+        code: &'static str,
+    ) -> Result<(), StorageError> {
+        self.call(move|connection|{
+            let transaction=connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+            check_head(&transaction,failed_revision)?;
+            read_document(&transaction,previous_desired)?;
+            read_document(&transaction,previous_running)?;
+            let changed=transaction.execute("UPDATE config_activations SET state='failed',error_code=?1 WHERE id=?2 AND revision=?3 AND state='prepared'",params![code,activation,failed_revision])?;
+            if changed!=1{return Err(StorageError::Conflict);}
+            transaction.execute("UPDATE config_head SET desired_revision=?1,last_applied_revision=?2 WHERE singleton=1",params![previous_desired,previous_running])?;
+            transaction.execute("INSERT INTO config_activations(revision,previous_revision,state,created_at) VALUES(?1,?2,?3,?4)",params![previous_desired,failed_revision,if previous_desired==previous_running{"applied"}else{"pending_restart"},unix_now()])?;
+            transaction.commit()?;Ok(())
+        }).await
+    }
     pub async fn record_failure(
         &self,
         revision: i64,

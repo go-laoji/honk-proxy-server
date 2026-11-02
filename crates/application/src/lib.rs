@@ -720,26 +720,39 @@ impl Supervisor {
         candidate.set_generation(input.revision);
         if let Err(error) = candidate.start_enabled().await {
             candidate.shutdown().await;
-            let rollback = self
-                .store
-                .activate(current.revision, input.revision, false)
-                .await?;
             self.store
-                .mark_applied(current.revision, Some(rollback))
+                .rollback_publication(
+                    activation_id,
+                    input.revision,
+                    workspace.desired.revision.id,
+                    current.revision,
+                    "listen_publication_failed",
+                )
                 .await?;
             return Err(error.into());
         }
         if let Some(capture) = &capture
             && let Err(error) = capture.start(&prepared.dns)
         {
-            let cleanup = capture.shutdown().await;
+            let cleanup = if current
+                .capture
+                .as_ref()
+                .is_some_and(|old| Arc::ptr_eq(old, capture))
+            {
+                capture.restore_resolver(&current.dns);
+                Ok(())
+            } else {
+                capture.shutdown().await
+            };
             candidate.shutdown().await;
-            let rollback = self
-                .store
-                .activate(current.revision, input.revision, false)
-                .await?;
             self.store
-                .mark_applied(current.revision, Some(rollback))
+                .rollback_publication(
+                    activation_id,
+                    input.revision,
+                    workspace.desired.revision.id,
+                    current.revision,
+                    "dns_capture_publication_failed",
+                )
                 .await?;
             cleanup?;
             return Err(error);
@@ -754,21 +767,26 @@ impl Supervisor {
             {
                 let _ = transparent.shutdown().await;
             }
-            if let Some(capture) = &capture
-                && !current
+            if let Some(capture) = &capture {
+                if current
                     .capture
                     .as_ref()
                     .is_some_and(|old| Arc::ptr_eq(old, capture))
-            {
-                let _ = capture.shutdown().await;
+                {
+                    capture.restore_resolver(&current.dns);
+                } else {
+                    let _ = capture.shutdown().await;
+                }
             }
             candidate.shutdown().await;
-            let rollback = self
-                .store
-                .activate(current.revision, input.revision, false)
-                .await?;
             self.store
-                .mark_applied(current.revision, Some(rollback))
+                .rollback_publication(
+                    activation_id,
+                    input.revision,
+                    workspace.desired.revision.id,
+                    current.revision,
+                    "transparent_publication_failed",
+                )
                 .await?;
             return Err(error);
         }

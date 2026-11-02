@@ -76,7 +76,9 @@ fn transparent_supervisor_child() {
             (s, *target)
         })
         .collect::<Vec<_>>();
-    for phase in 0..3u8 {
+    let freeze = std::env::var("HPS_DAEMON_CAPTURE_FREEZE").is_ok();
+    let phases = if freeze { 2 } else { 3 };
+    for phase in 0..phases {
         for stream in &mut tcp {
             let body = [b't', phase];
             stream.write_all(&body).unwrap();
@@ -92,7 +94,7 @@ fn transparent_supervisor_child() {
             assert_eq!((n, source), (2, *target));
             assert_eq!(&reply[..n], &body);
         }
-        if phase > 0 {
+        if phase > 0 && !freeze {
             for target in &targets[..2] {
                 let mut s =
                     std::net::TcpStream::connect_timeout(target, Duration::from_secs(5)).unwrap();
@@ -129,7 +131,7 @@ fn transparent_supervisor_child() {
             }
         }
         control.write_all(&[b'0' + phase]).unwrap();
-        if phase < 2 {
+        if phase + 1 < phases {
             let mut next = [0];
             control.read_exact(&mut next).unwrap();
             assert_eq!(next, [b'N']);
@@ -171,6 +173,14 @@ async fn apply(service: &std::sync::Arc<Supervisor>, config: &DaemonConfig, expe
 #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
 #[ignore = "requires isolated privileged Linux, writable cgroup v2 and actual eBPF object"]
 async fn real_transparent_supervisor() {
+    run_supervisor(false).await;
+}
+#[tokio::test(flavor = "multi_thread", worker_threads = 3)]
+#[ignore = "requires isolated privileged Linux, cgroup v2 and freezing an actual owned BPF policy map"]
+async fn real_transparent_publication_failure_restores_deferred_head() {
+    run_supervisor(true).await;
+}
+async fn run_supervisor(freeze: bool) {
     let root = std::env::var("HPS_TEST_CGROUP_ROOT").unwrap();
     let group =
         Group(Path::new(&root).join(format!("hps-transparent-supervisor-{}", std::process::id())));
@@ -217,7 +227,7 @@ async fn real_transparent_supervisor() {
         jobs.0.push(tokio::spawn(async move {
             let (mut stream, _) = listener.accept().await.unwrap();
             let mut bytes = [0; 2];
-            for _ in 0..3 {
+            for _ in 0..(if freeze { 2 } else { 3 }) {
                 stream.read_exact(&mut bytes).await.unwrap();
                 stream.write_all(&bytes).await.unwrap();
             }
@@ -232,7 +242,7 @@ async fn real_transparent_supervisor() {
         targets.push(socket.local_addr().unwrap());
         jobs.0.push(tokio::spawn(async move {
             let mut bytes = [0; 64];
-            for _ in 0..3 {
+            for _ in 0..(if freeze { 2 } else { 3 }) {
                 let (n, peer) = socket.recv_from(&mut bytes).await.unwrap();
                 socket.send_to(&bytes[..n], peer).await.unwrap();
             }
@@ -252,6 +262,7 @@ async fn real_transparent_supervisor() {
             "--ignored",
             "--nocapture",
         ])
+        .envs(freeze.then_some(("HPS_DAEMON_CAPTURE_FREEZE", "1")))
         .env("HPS_DAEMON_CAPTURE_CGROUP", &group.0)
         .env(
             "HPS_DAEMON_CAPTURE_TARGETS",
@@ -284,23 +295,102 @@ async fn real_transparent_supervisor() {
         flows.iter().all(|f| f.routing.configuration_revision == 1
             && f.context.process.as_ref().unwrap().pid == pid)
     );
-    config.proxy.routing.rules[0].action = RouteAction::Reject;
-    let second = apply(&service, &config, 1).await;
-    control.write_all(b"N").await.unwrap();
-    tokio::time::timeout(Duration::from_secs(10), control.read_exact(&mut stage))
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(stage, [b'1']);
-    config.instance_name = "capture-name-only-revision".into();
-    let third = apply(&service, &config, second).await;
-    assert_eq!(service.current().engine.generation(), third);
-    control.write_all(b"N").await.unwrap();
-    tokio::time::timeout(Duration::from_secs(10), control.read_exact(&mut stage))
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(stage, [b'2']);
+    let boot_programs = ids().difference(&before).copied().collect::<BTreeSet<_>>();
+    assert_eq!(boot_programs.len(), 8);
+    let expected_revision = if freeze {
+        config.instance_name = "deferred-before-failure".into();
+        let deferred = service.create_revision(input(&config, 1)).await.unwrap();
+        let pending = service
+            .activate(ConfigActivate {
+                revision: deferred.id,
+                expected_revision: 1,
+                defer_until_restart: true,
+            })
+            .await
+            .unwrap();
+        assert_eq!(pending.state, "pending_restart");
+        assert_eq!(pending.running_revision, 1);
+        let policy_ids = aya::programs::loaded_programs()
+            .filter_map(Result::ok)
+            .filter(|p| boot_programs.contains(&p.id()))
+            .flat_map(|p| p.map_ids().unwrap().unwrap_or_default())
+            .collect::<BTreeSet<_>>();
+        let policy = policy_ids
+            .into_iter()
+            .find(|id| {
+                aya::maps::MapInfo::from_id(*id).is_ok_and(|info| info.name() == b"HPS_TP_POLICY")
+            })
+            .unwrap();
+        let map = aya::maps::MapData::from_id(policy).unwrap();
+        use std::os::fd::{AsFd, AsRawFd};
+        let fd = map.fd().as_fd().as_raw_fd() as u32;
+        assert_eq!(
+            unsafe { libc::syscall(libc::SYS_bpf, 22, &fd, std::mem::size_of::<u32>()) },
+            0
+        );
+        drop(map);
+        config.proxy.routing.rules[0].action = RouteAction::Reject;
+        let failed = service
+            .create_revision(input(&config, deferred.id))
+            .await
+            .unwrap();
+        assert!(matches!(
+            service
+                .activate(ConfigActivate {
+                    revision: failed.id,
+                    expected_revision: deferred.id,
+                    defer_until_restart: false
+                })
+                .await,
+            Err(hps_application::ApplicationError::Capture(_))
+        ));
+        let workspace = service.workspace().await.unwrap();
+        assert_eq!(
+            (workspace.running_revision, workspace.desired_revision),
+            (1, deferred.id)
+        );
+        assert!(
+            workspace
+                .pending_restart
+                .iter()
+                .any(|reason| reason == "explicit_restart_requested")
+        );
+        assert!(workspace.activations.iter().any(|a| a.revision == failed.id
+            && a.state == "failed"
+            && a.error_code.as_deref() == Some("transparent_publication_failed")));
+        assert!(
+            !workspace
+                .activations
+                .iter()
+                .any(|a| a.revision == failed.id && a.state == "prepared")
+        );
+        control.write_all(b"N").await.unwrap();
+        tokio::time::timeout(Duration::from_secs(10), control.read_exact(&mut stage))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(stage, [b'1']);
+        deferred.id
+    } else {
+        config.proxy.routing.rules[0].action = RouteAction::Reject;
+        let second = apply(&service, &config, 1).await;
+        control.write_all(b"N").await.unwrap();
+        tokio::time::timeout(Duration::from_secs(10), control.read_exact(&mut stage))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(stage, [b'1']);
+        config.instance_name = "capture-name-only-revision".into();
+        let third = apply(&service, &config, second).await;
+        assert_eq!(service.current().engine.generation(), third);
+        control.write_all(b"N").await.unwrap();
+        tokio::time::timeout(Duration::from_secs(10), control.read_exact(&mut stage))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(stage, [b'2']);
+        third
+    };
     let output = tokio::task::spawn_blocking(move || child.wait_with_output().unwrap())
         .await
         .unwrap();
@@ -328,10 +418,10 @@ async fn real_transparent_supervisor() {
             .all(|f| f.context.origin == FlowOrigin::LinuxLocal
                 && f.context.process.as_ref().unwrap().pid == pid
                 && f.routing.rule_id.as_deref() == Some("captured-process")
-                && f.bytes_up == 6
-                && f.bytes_down == 6)
+                && f.bytes_up == (if freeze { 4 } else { 6 })
+                && f.bytes_down == (if freeze { 4 } else { 6 }))
     );
-    for revision in [second, third] {
+    for revision in if freeze { vec![] } else { vec![2, 3] } {
         let rejected = flows
             .iter()
             .filter(|f| f.routing.configuration_revision == revision)
@@ -360,7 +450,15 @@ async fn real_transparent_supervisor() {
     .unwrap();
     let owned = ids().difference(&before).copied().collect::<BTreeSet<_>>();
     assert_eq!(owned.len(), 8);
-    service.shutdown().await.unwrap();
+    let shutdown = service.shutdown().await;
+    if freeze {
+        assert!(matches!(
+            shutdown,
+            Err(hps_application::ApplicationError::Capture(_))
+        ));
+    } else {
+        shutdown.unwrap();
+    }
     tokio::time::timeout(Duration::from_secs(3), async {
         while owned.iter().any(|id| ids().contains(id)) {
             tokio::time::sleep(Duration::from_millis(10)).await;
@@ -376,11 +474,14 @@ async fn real_transparent_supervisor() {
     .await
     .unwrap();
     restarted.confirm_startup().await.unwrap();
-    assert_eq!(restarted.workspace().await.unwrap().running_revision, third);
-    assert_eq!(restarted.current().engine.generation(), third);
+    assert_eq!(
+        restarted.workspace().await.unwrap().running_revision,
+        expected_revision
+    );
+    assert_eq!(restarted.current().engine.generation(), expected_revision);
     restarted.shutdown().await.unwrap();
     println!(
         "{}",
-        serde_json::json!({"scope":"daemon_transparent_local_only","kernel":std::fs::read_to_string("/proc/sys/kernel/osrelease").unwrap().trim(),"client_pid":pid,"ipv4":true,"ipv6":true,"tcp":true,"udp":true,"actual_process_rule":true,"old_revision":1,"reject_revision":second,"name_only_revision":third,"old_connections_retained":4,"new_connections_rejected":8,"business_bytes_up":24,"business_bytes_down":24,"persistent_restart":true,"owned_programs_released":true,"full_transparent_datapath_ready":false})
+        serde_json::json!({"scope":if freeze{"daemon_transparent_publication_failure"}else{"daemon_transparent_local_only"},"kernel":std::fs::read_to_string("/proc/sys/kernel/osrelease").unwrap().trim(),"client_pid":pid,"ipv4":true,"ipv6":true,"tcp":true,"udp":true,"actual_process_rule":true,"old_revision":1,"final_desired_revision":expected_revision,"old_connections_retained":4,"new_connections_rejected":if freeze{0}else{8},"business_bytes_up":if freeze{16}else{24},"business_bytes_down":if freeze{16}else{24},"policy_map_frozen":freeze,"deferred_desired_head_preserved":freeze,"failed_activation_recorded":freeze,"persistent_restart":true,"owned_programs_released":true,"full_transparent_datapath_ready":false})
     );
 }
