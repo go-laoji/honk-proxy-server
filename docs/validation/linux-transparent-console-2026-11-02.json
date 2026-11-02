@@ -1,0 +1,203 @@
+{
+  "scope": "actual_linux_capture_control_surface",
+  "test": "tests/linux/console/capture.spec.ts",
+  "test_result": "1 passed",
+  "version": {
+    "service": "honk-proxy-server",
+    "version": "0.1.0",
+    "api_version": "v1",
+    "web_build_id": "228c6cbfff44c5726202acd4b9d89386bd0d1abe7607a168ade9141ad168dfb0"
+  },
+  "capture": {
+    "epoch": "7deccfbe-7fe5-46ce-94f9-d23862e1aeec",
+    "running_revision": 2,
+    "desired_revision": 3,
+    "running_configuration": {
+      "object": "/target/t15-ebpf/bpfel-unknown-none/release/hps-ebpf",
+      "local_cgroup": "/tmp/hps-test-cgroup/hps-console-clients",
+      "lan_interfaces": [],
+      "ipv4": true,
+      "ipv6": true,
+      "tcp": true,
+      "udp": true,
+      "bypass_cidrs": [
+        "0.0.0.0/8",
+        "127.0.0.0/8",
+        "169.254.0.0/16",
+        "224.0.0.0/4",
+        "240.0.0.0/4",
+        "::/128",
+        "::1/128",
+        "fe80::/10",
+        "ff00::/8"
+      ],
+      "bypass_ports": [],
+      "capture_mark": 1213202432,
+      "bypass_mark": 1213202433,
+      "routing_table": 10530,
+      "rule_priority": 31530,
+      "tcp_port": 0,
+      "udp_port": 0,
+      "max_flows": 64,
+      "max_pending": 16,
+      "max_udp_sessions": 16,
+      "udp_idle_secs": 60,
+      "max_datagram_bytes": 65507,
+      "max_queued_datagrams": 256,
+      "max_queued_bytes": 4194304
+    },
+    "desired_configuration": null,
+    "status": {
+      "platform": "linux",
+      "configured": true,
+      "state": "running",
+      "ready": true,
+      "reason": null,
+      "scope": {
+        "local_cgroup": "/tmp/hps-test-cgroup/hps-console-clients",
+        "lan_interfaces": [],
+        "ipv4": true,
+        "ipv6": true,
+        "tcp": true,
+        "udp": true
+      },
+      "object_path": "/target/t15-ebpf/bpfel-unknown-none/release/hps-ebpf",
+      "object_fingerprint": "fa5449609f86a6b50300a83a6e10d2f2150aa42eaa6676c8e64dd1581bbd5286",
+      "userspace_revision": 2,
+      "kernel_revision": 2,
+      "suspended": false,
+      "links_present": true,
+      "interfaces_ready": true,
+      "routes_present": true,
+      "listeners": [
+        {
+          "transport": "tcp",
+          "address": "0.0.0.0:37799"
+        },
+        {
+          "transport": "tcp",
+          "address": "[::]:41795"
+        },
+        {
+          "transport": "udp",
+          "address": "0.0.0.0:49137"
+        },
+        {
+          "transport": "udp",
+          "address": "[::]:51251"
+        }
+      ],
+      "program_ids": [
+        2897,
+        2901,
+        2899,
+        2903,
+        2900,
+        2904,
+        2898,
+        2902
+      ],
+      "map_ids": [
+        4749,
+        4750,
+        4751,
+        4752,
+        4753,
+        4754,
+        4756,
+        4757,
+        4759,
+        4762,
+        4766,
+        4767
+      ],
+      "generations": [
+        2
+      ],
+      "flow_entries": 0,
+      "active_owners": 0,
+      "resources": {
+        "pending": 0,
+        "max_pending": 16,
+        "udp_sessions": 0,
+        "max_udp_sessions": 16,
+        "queued_datagrams": 0,
+        "max_queued_datagrams": 256,
+        "queued_bytes": 0,
+        "max_queued_bytes": 4194304,
+        "dropped_datagrams": 0,
+        "invalid_replies": 0,
+        "closed_udp_sessions": 0
+      },
+      "rejected_ingress": 0,
+      "hooks": [
+        {
+          "hook": "cgroup",
+          "observed_sockets": 0,
+          "marked_sockets": 0,
+          "captured_packets": 0,
+          "bypassed_packets": 0,
+          "rejected_packets": 0,
+          "unsupported_packets": 0,
+          "missing_process": 0,
+          "errors": 0,
+          "last_error": 0,
+          "error_phase": 0
+        },
+        {
+          "hook": "egress",
+          "observed_sockets": 0,
+          "marked_sockets": 0,
+          "captured_packets": 0,
+          "bypassed_packets": 0,
+          "rejected_packets": 0,
+          "unsupported_packets": 0,
+          "missing_process": 0,
+          "errors": 0,
+          "last_error": 0,
+          "error_phase": 0
+        },
+        {
+          "hook": "ingress",
+          "observed_sockets": 0,
+          "marked_sockets": 0,
+          "captured_packets": 0,
+          "bypassed_packets": 0,
+          "rejected_packets": 0,
+          "unsupported_packets": 0,
+          "missing_process": 0,
+          "errors": 0,
+          "last_error": 0,
+          "error_phase": 0
+        }
+      ],
+      "checked_at_unix_ms": 1793598588648,
+      "retry_attempts": 0,
+      "max_retry_attempts": 3
+    }
+  },
+  "capabilities": {
+    "management_api": true,
+    "requires_authentication": false,
+    "http_proxy": {
+      "available": true,
+      "reason": null
+    },
+    "https_proxy": {
+      "available": true,
+      "reason": null
+    },
+    "socks5_proxy": {
+      "available": true,
+      "reason": null
+    },
+    "linux_ebpf": {
+      "platform_supported": true,
+      "compiled": false,
+      "configured": true,
+      "attached": true,
+      "ready": true,
+      "reason": "\u6240\u9009\u900f\u660e\u6355\u83b7\u8303\u56f4\u7684\u76d1\u542c\u3001\u94fe\u63a5\u3001\u8def\u7531\u53ca\u5185\u6838\u4ee3\u9645\u5747\u5df2\u6838\u9a8c\uff1b\u5bf9\u8c61\u7531\u914d\u7f6e\u8def\u5f84\u52a0\u8f7d"
+    }
+  }
+}

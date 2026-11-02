@@ -21,12 +21,18 @@ const states: Record<string, string> = {
 };
 const fact = (value: boolean | null) =>
   value === null ? "未核验" : value ? "已核验" : "缺失";
-export default function CapturePanel() {
+export default function CapturePanel({
+  refreshService,
+}: {
+  refreshService: () => Promise<void>;
+}) {
   const [view, setView] = useState<CaptureOverview | null>(null);
   const [editor, setEditor] = useState<LinuxCaptureConfig | null>(null);
+  const [editorRevision, setEditorRevision] = useState<number | null>(null);
   const [enabled, setEnabled] = useState(false);
   const [saved, setSaved] = useState<ConfigRevision | null>(null);
   const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState("");
   const [pending, setPending] = useState("");
   const [attempt, setAttempt] = useState(0);
   const mounted = useRef(true);
@@ -38,15 +44,16 @@ export default function CapturePanel() {
       .then((value) => {
         if (abort.signal.aborted) return;
         setView(value);
-        setError("");
+        setLoadError("");
         if (!initialized.current) {
           setEditor(value.desired_configuration ?? defaultCapture());
+          setEditorRevision(value.desired_revision);
           setEnabled(value.desired_configuration !== null);
           initialized.current = true;
         }
       })
       .catch((e) => {
-        if (!abort.signal.aborted) setError(message(e));
+        if (!abort.signal.aborted) setLoadError(message(e));
       });
     return () => {
       mounted.current = false;
@@ -78,12 +85,16 @@ export default function CapturePanel() {
         },
       );
       if (mounted.current) setView((v) => (v ? { ...v, status } : v));
+      if (mounted.current) await refreshService();
     });
   }
   const status = view?.status;
   const supported = status?.platform === "linux";
   const editable =
-    !!view && supported && view.running_revision === view.desired_revision;
+    !!view &&
+    supported &&
+    view.running_revision === view.desired_revision &&
+    editorRevision === view.desired_revision;
   return (
     <section className="panel overflow-hidden" aria-label="透明代理运行控制">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-5 dark:border-slate-800">
@@ -102,9 +113,9 @@ export default function CapturePanel() {
           刷新运行状态
         </button>
       </div>
-      {error && (
+      {(error || loadError) && (
         <p role="alert" className="break-words p-5 text-sm text-red-600">
-          {error}
+          {error || loadError}
         </p>
       )}
       {status ? (
@@ -139,6 +150,14 @@ export default function CapturePanel() {
               [
                 "捕获链接 / 自有路由",
                 `${fact(status.links_present)} / ${fact(status.routes_present)}`,
+              ],
+              [
+                "捕获网卡启用与链路状态",
+                status.interfaces_ready === true
+                  ? "可用"
+                  : status.interfaces_ready === false
+                    ? "不可用"
+                    : "未核验",
               ],
               ["本机 cgroup", status.scope?.local_cgroup ?? "未选择本机范围"],
               [
@@ -235,7 +254,7 @@ export default function CapturePanel() {
                 "api/v1/linux/capture/save",
                 {
                   expected_epoch: view!.epoch,
-                  expected_revision: view!.running_revision,
+                  expected_revision: editorRevision,
                   configuration: enabled ? editor : null,
                 },
               );
@@ -376,6 +395,27 @@ export default function CapturePanel() {
               {pending === "save" ? "正在保存…" : "保存捕获配置候选"}
             </button>
           </fieldset>
+          {supported && view && editorRevision !== view.desired_revision && (
+            <p
+              role="status"
+              className="text-sm text-amber-700 dark:text-amber-300"
+            >
+              配置已变化，当前编辑内容未覆盖。请载入最新捕获配置后编辑。
+            </p>
+          )}
+          <button
+            className="btn"
+            type="button"
+            disabled={!!pending || !supported}
+            onClick={() => {
+              initialized.current = false;
+              setError("");
+              setSaved(null);
+              setAttempt((a) => a + 1);
+            }}
+          >
+            载入最新捕获配置
+          </button>
           {!supported && (
             <p className="muted text-xs">
               当前服务平台不支持 eBPF。可连接 Linux Daemon 后管理。

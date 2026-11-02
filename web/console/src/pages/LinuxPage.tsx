@@ -11,7 +11,13 @@ const statuses = {
   unknown: "需要确认",
   unsupported: "不支持",
 };
-export default function LinuxPage({ data }: { data: ServiceData }) {
+export default function LinuxPage({
+  data,
+  refreshService,
+}: {
+  data: ServiceData;
+  refreshService: () => Promise<void>;
+}) {
   const [preflight, setPreflight] = useState<LinuxPreflight | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -38,7 +44,10 @@ export default function LinuxPage({ data }: { data: ServiceData }) {
   }, [attempt]);
   return (
     <div className="space-y-6">
-      <CapturePanel key={`${data.endpoint}:${data.status.instance_id}`} />
+      <CapturePanel
+        key={`${data.endpoint}:${data.status.instance_id}`}
+        refreshService={refreshService}
+      />
       <section className="panel overflow-hidden" aria-label="Linux 环境预检">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-5 dark:border-slate-800">
           <div>

@@ -305,7 +305,7 @@ export default function App() {
             ) : current.id === "settings" ? (
               <SettingsPage data={service.data} />
             ) : current.id === "linux" ? (
-              <LinuxPage data={service.data} />
+              <LinuxPage data={service.data} refreshService={service.refresh} />
             ) : current.id === "inbounds" ? (
               <InboundsPage data={service.data} refresh={service.refresh} />
             ) : (

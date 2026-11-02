@@ -245,3 +245,11 @@ Linux MPA 展示实际监听、链接/路由、内核与用户态代际、原位
 矩阵首轮发现两类客体夹具问题，均未算通过：stable ARM 的 RTC 驱动未自动加载使时钟停在 1970、HTTPS 证书按预期拒绝；补齐客体真实 epoch 后保持正常 TLS 校验。完整 stable x86 模块占满 initramfs；改为 ipv6/af_packet/veth 及依赖闭包后恢复正常。随后四组合从头实际复验通过。编译、镜像拉取或零匹配都不计为数据面验证。
 
 矩阵构建与执行见 [可复现说明](../../tests/linux/ebpf/MATRIX.md)。源码快照使用新 mtime，双架构独立 Cargo/Rustup 卷，headless hpsd 冻结为独立测试输入，避免构建控制台时替换测试执行文件。仍继续核对最终共用控制台产物和收尾文档。
+
+## 第 26 批：最终共用控制台、CLI 与编辑版本保护
+
+真实 Linux 7.0.14/aarch64 Daemon，宿主隔离端口 17997、容器内 17996，独立 cgroup 和数据库。CLI stop/start、浏览器 stop/start 改变真实 link/map/listener，停止时 readyz=503，恢复后 8 个程序重新核验；错误 ELF 路径被拒绝，状态刷新不清除失败提示。
+
+在编辑过程中由另一个请求实际发布实例设置 r2，界面保留未保存文本、禁用过期编辑保存，用户明确载入最新配置才重新编辑；保存绑定编辑基线，不能借状态刷新自动采用新 revision。随后保存持久禁用候选 r3 时，运行和期望仍为 r2；跳转真实配置工作区显式激活后，期望 r3、运行 r2，明确提示 linux_capture 需要重启，原捕获继续运行。窄屏布局、配置关联与实际接口状态均验证。
+
+最终共享 Web build ID `228c6cbfff44c5726202acd4b9d89386bd0d1abe7607a168ade9141ad168dfb0`。完整实际 Linux Playwright 1 passed（2.9s），Mac Linux MPA 读取回归 1 passed，生产构建/类型/格式检查通过，native bridge 7 项通过；Mac engine/application/API 普通回归 99 项、Clippy 通过。当前服务快照见 `linux-transparent-console-2026-11-02.json`。浏览器与 Desktop 源页共用，系统服务/窗口生命周期的独立产品验收继续归 T16。

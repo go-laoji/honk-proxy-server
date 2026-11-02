@@ -42,6 +42,7 @@ export interface CaptureStatus {
   kernel_revision: number | null;
   suspended: boolean;
   links_present: boolean | null;
+  interfaces_ready: boolean | null;
   routes_present: boolean | null;
   listeners: { transport: string; address: string }[];
   program_ids: number[];
