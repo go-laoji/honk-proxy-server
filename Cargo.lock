@@ -1010,12 +1010,15 @@ dependencies = [
  "hps-dns",
  "hps-domain",
  "hps-ebpf-abi",
+ "hps-engine",
  "hps-net",
  "ipnet",
  "libc",
+ "rcgen",
  "serde",
  "serde_json",
  "sha2",
+ "tempfile",
  "tokio",
 ]
 

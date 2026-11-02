@@ -1,0 +1,18 @@
+{
+  "business_bytes_down": 114,
+  "business_bytes_up": 102,
+  "client_pid": 300,
+  "forwarding_verified": true,
+  "full_transparent_datapath_ready": false,
+  "http_upstream": true,
+  "https_upstream": true,
+  "ipv4": true,
+  "ipv6": true,
+  "kernel": "7.0.14-linuxkit",
+  "object_sha256": "466a946dd961ca1aff226bfb2e37484bf7fd7cce4f357b7acb55a7cce16e985d",
+  "process_rules_and_fixed_groups": true,
+  "revision": 7,
+  "scope": "local_tcp_shared_engine_only",
+  "socks5_upstream": true,
+  "verified_flows": 6
+}

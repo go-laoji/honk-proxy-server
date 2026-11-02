@@ -1,6 +1,9 @@
 //! Owns only this daemon's cgroup/TCX links and maps. Listeners and policy routes
 //! must be ready before activate; object loading alone never means forwarding.
+mod metadata;
 mod routes;
+#[cfg(test)]
+mod tcp_tests;
 use aya::{
     Ebpf, EbpfLoader,
     maps::{Array, HashMap, LpmTrie, PerCpuArray, SockMap, lpm_trie::Key},

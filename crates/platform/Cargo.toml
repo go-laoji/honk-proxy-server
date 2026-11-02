@@ -8,6 +8,9 @@ rust-version.workspace = true
 hps-domain.workspace = true
 
 [dev-dependencies]
+hps-engine.workspace = true
+rcgen = "0.14"
+tempfile = "3"
 serde_json.workspace = true
 hps-dns.workspace = true
 hps-net.workspace = true

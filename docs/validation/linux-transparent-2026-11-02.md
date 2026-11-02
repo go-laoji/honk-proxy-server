@@ -55,3 +55,11 @@ CIDR/UDP 端口旁路使用独占 mark 的精确 GOTO 规则与自有 NOP 恢复
 `Engine::with_capture` 仅在 Linux 提供，明确准备进程规则能力；显式入口构造仍拒绝未提供的进程能力。`spawn_captured_tcp` 检查原始 socket 两端地址、正代际与引擎代际、TCP 和来源；本机缺少可信进程拒绝，Gateway 的 process 永远清空。接入同一 Dialer/router/group/health/lease/node/observation，复用全局连接额度与带宽；独立任务登记与 shutdown 共用互斥，停止等待全部捕获任务。重复设置代际不再改变已创建引擎的拨号规则版本。
 
 普通 Linux `captured_tcp_contract_shares_process_rules_group_admission_bytes_disconnect_and_immutable_revision` 通过 HTTP、HTTPS、SOCKS5 三类真实上游路径验证：进程规则选定固定组/节点、业务字节、源端口、旧代际拒绝、端点不符拒绝、缺少本机进程拒绝、全局额度耗尽、主动断开回收、Gateway 不匹配进程规则。该项进程输入是测试构造的可信调用契约，不是内核 PID 证据；内核到共享引擎的联合验收仍待下一批。Linux/macOS 全部 engine tests 与 Clippy 均通过。
+
+## 实际内核到共享引擎 TCP（第五批）
+
+`transparent::tcp_tests::real_transparent_tcp_shared_engine` 在实际 7.0.14-linuxkit 和 QEMU 6.12.115-0-virt 均显式通过，证据为 `linux-transparent-tcp-shared-kernel{7,612}-2026-11-02.json`，对象 SHA256 与第三批相同。受控客户端在指定 cgroup 发起双栈原目标 TCP；TCX 接到透明 socket 后，`Capture::routing_context` 仅根据实际两端地址和命名空间查询自有流 map，验证 ABI、正代际、来源、cookie/PID/TID/cgroup 与 verified 标记后构造引擎上下文。本机元数据缺失拒绝，网关不返回进程。
+
+6 条真实 TCP 经过实际 Linux comm 进程规则、三个固定组，分别走 HTTP CONNECT、HTTPS 上游 CONNECT、SOCKS5 上游，再经上游引擎 Direct 到实际受控目标；TLS 上游正常校验证书。实际客户端 PID 与连接登记相符，原目标不变，规则代际 7，业务上行合计 102 B、下行 114 B；上游连接登记为 Explicit、无进程、Direct。测试地址通过 Rust route-netlink CREATE|EXCL 添加到自有隔离 netns，退出仅删除本次 ACK 所属地址；没有在后端调用 ip/iptables。测试也核对捕获 map 无错误及丢失进程计数。
+
+这一项的 `forwarding_verified=true` 仅表示已验收的本机 TCP 共享引擎路径。UDP 共享引擎、LAN、完整代际发布/回滚、Daemon 控制面和异常恢复尚未完成，因此 `full_transparent_datapath_ready=false`，T11/T13/T15 不关闭。第四批引擎回归最终统计 Linux 39 / macOS 38 通过，均无失败或忽略；第五批平台相关两端 Clippy 通过。
