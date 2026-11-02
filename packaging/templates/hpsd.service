@@ -1,0 +1,18 @@
+# Example for an explicitly administrator-managed Linux system service.
+# The hps service --local installer can generate an owned unit instead.
+[Unit]
+Description=Honk Proxy Daemon
+After=network.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=exec
+ExecStart=/opt/hps/bin/hpsd --config /etc/hps/hps.toml --data-dir /var/lib/hps
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

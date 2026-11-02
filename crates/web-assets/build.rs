@@ -4,9 +4,11 @@ use std::{env, fs, path::PathBuf};
 mod verify;
 
 fn main() {
-    let root = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("../../dist");
+    let repository=PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("../..");
+    println!("cargo:rerun-if-env-changed=HPS_WEB_ASSETS_DIR");
+    let root = env::var_os("HPS_WEB_ASSETS_DIR").map(PathBuf::from).unwrap_or_else(||repository.join("dist"));
     println!("cargo:rerun-if-changed={}", root.display());
-    let source_manifest = root.join("../web/console/pages.manifest.json");
+    let source_manifest = repository.join("web/console/pages.manifest.json");
     println!("cargo:rerun-if-changed={}", source_manifest.display());
     let source: serde_json::Value =
         serde_json::from_slice(&fs::read(source_manifest).expect("authoritative page manifest"))

@@ -1,0 +1,19 @@
+# All reachable clients can use every function. There are no project accounts.
+instance_name = "honk-proxy-server"
+management_listen = "127.0.0.1:17900"
+log_filter = "info"
+
+# Configure providers/nodes and activate them before proxying. Do not silently
+# send traffic directly when the pool is empty.
+[proxy.routing]
+default_action = { kind = "default" }
+
+[[proxy.inbounds]]
+id = "browser-http"
+protocol = "http"
+listen = "127.0.0.1:17901"
+
+[[proxy.inbounds]]
+id = "browser-socks5"
+protocol = "socks5"
+listen = "127.0.0.1:17902"

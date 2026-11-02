@@ -1,0 +1,9 @@
+{
+  "rust": "1.98.1",
+  "ebpf_rust": "nightly-2026-09-01",
+  "node": "24.15.0",
+  "pnpm": "12.10.1",
+  "transparent_ebpf_abi": 4,
+  "minimum_verified_linux_kernel": "6.12.115",
+  "web_pages": 18
+}
