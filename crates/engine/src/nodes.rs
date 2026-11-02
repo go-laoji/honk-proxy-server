@@ -1,14 +1,9 @@
 //! One operational gate and live dial/socket count, shared by all engine generations.
-use crate::BoxIo;
 use hps_domain::{NodeControl, NodeOperationState};
 use std::{
     collections::HashMap,
-    io,
-    pin::Pin,
     sync::{Arc, Mutex},
-    task::{Context, Poll},
 };
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 #[derive(Default)]
 struct State {
@@ -16,8 +11,11 @@ struct State {
     active: HashMap<String, usize>,
 }
 #[derive(Default)]
-pub struct NodeRegistry(Mutex<State>);
+pub struct NodeRegistry(Mutex<State>, crate::connections::ObservationRuntime);
 impl NodeRegistry {
+    pub(crate) fn observations(&self) -> &crate::connections::ObservationRuntime {
+        &self.1
+    }
     /// Install an authoritative storage snapshot while retaining existing socket ownership.
     /// The caller serializes this with writes; it is also used to release pruned lease controls.
     pub fn reconcile(&self, controls: Vec<NodeControl>) {
@@ -96,53 +94,6 @@ impl Drop for NodeGuard {
         }
     }
 }
-impl NodeGuard {
-    pub fn wrap(self, inner: BoxIo) -> BoxIo {
-        Box::new(NodeIo {
-            inner,
-            _guard: self,
-        })
-    }
-}
-struct NodeIo {
-    inner: BoxIo,
-    _guard: NodeGuard,
-}
-impl AsyncRead for NodeIo {
-    fn poll_read(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut ReadBuf<'_>,
-    ) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.inner).poll_read(cx, buf)
-    }
-}
-impl AsyncWrite for NodeIo {
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<io::Result<usize>> {
-        Pin::new(&mut self.inner).poll_write(cx, buf)
-    }
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.inner).poll_flush(cx)
-    }
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.inner).poll_shutdown(cx)
-    }
-    fn is_write_vectored(&self) -> bool {
-        self.inner.is_write_vectored()
-    }
-    fn poll_write_vectored(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        bufs: &[io::IoSlice<'_>],
-    ) -> Poll<io::Result<usize>> {
-        Pin::new(&mut self.inner).poll_write_vectored(cx, bufs)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

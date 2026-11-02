@@ -1,6 +1,6 @@
 # T12 节点管理验收
 
-Issue：[#17](https://github.com/go-laoji/honk-proxy-server/issues/17)。后端、CLI 和共享页面已实现；**独立桌面窗口，以及与 T13 逐连接列表的关联仍待验收，Issue 保持开放**。
+Issue：[#17](https://github.com/go-laoji/honk-proxy-server/issues/17)。后端、CLI 和共享页面已实现；T13 已用真实隧道验证逐连接关联。**独立桌面窗口仍待验收，Issue 保持开放**。
 
 ## 实现与真实用例
 
@@ -29,6 +29,8 @@ Linux 忽略项为需要特权内核环境的 DNS 核心/应用验收及子进�
 
 浏览器此前 15 项完整集全部通过（`/tmp/hps-t12-browser-all.log`）。新增来源水位夹具时遗漏通用提取必需的 `count_parameter`，该轮 14 通过、1 失败；补齐后节点用例通过（`/tmp/hps-t12-release-node-browser.log`）。最终针对实际详情 MPA 导航重跑 console+nodes 6 项全通过，覆盖独立文档、嵌入字节一致、真实代理 200→禁用 503→恢复 200、过期 CAS、URL 恢复、来源水位与健康跳转。390px 截图 `/tmp/hps-t12-nodes-mobile.png` 已实际检查，无横向溢出。未将夹具失败隐藏为产品成功。
 
+后续 T13 的完整 `pnpm typecheck` 发现节点浏览器测试跨 composite 项目导入 Web 类型，触发 TS6307；已将测试需要的消费契约保留在 Node 测试项目内，不改变产品 DTO 或页面。Web 与 Node 两个 TypeScript 项目检查重新通过，日志 `/tmp/hps-t13-platform-typecheck.log`。
+
 CLI 可复现：先构建 `hps-cli`/`hps-daemon`，运行 `python3 tests/cli/nodes.py`。使用随机端口、唯一实例名和临时内存库，清理自身子进程和目录；不启动桌面、不调用供应商。
 
 ## 桌面及未关闭门槛
@@ -37,4 +39,4 @@ CLI 可复现：先构建 `hps-cli`/`hps-daemon`，运行 `python3 tests/cli/nod
 
 用户回复已解锁后，计算机工具仍返回 `Mac is locked and automatic unlock could not unlock it`；未操作窗口，打包和原生桥测试不能代替窗口验收。已异步报告，并继续不依赖桌面的工作。
 
-逐连接记录、流量、主动断开和详情列表跳转由 T13 在同一登记表上接续。当前计数来自真实拨号/套接字，无演示连接。Linux 本机进程及内核/用户态代际一致性继续与 T15 联合验收。
+T13 已在同一登记表上接入逐连接记录、流量、主动断开和详情跳转。浏览器真实隧道在节点详情显示 1 条活动业务，进入筛选后的连接列表，并可返回该节点的独立详情文档；见 [连接验收](connections-2026-11-02.md)。计数覆盖拨号、业务交换和实际隧道生命周期，无演示连接。Linux 本机进程及内核/用户态代际一致性继续与 T15 联合验收。

@@ -45,6 +45,10 @@ fn error(status: StatusCode, message: &'static str) -> Response<Body> {
 }
 fn gateway(error_kind: ProxyError) -> Response<Body> {
     match error_kind {
+        ProxyError::Disconnected => error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Business connection disconnected\n",
+        ),
         ProxyError::Rejected => error(
             StatusCode::FORBIDDEN,
             "Connection rejected by routing policy\n",
@@ -82,6 +86,9 @@ async fn handle(mut request: Request<Incoming>, session: Session) -> Response<Bo
             }
         };
         let upgrade = hyper::upgrade::on(&mut request);
+        if let Some(observation) = connected.observation.as_ref() {
+            observation.bind_inbound_cancel(session.cancel.clone());
+        }
         let child = session.clone();
         session.spawn_io(async move {
             if let Ok(upgraded) = upgrade.await {
@@ -154,6 +161,10 @@ async fn handle(mut request: Request<Incoming>, session: Session) -> Response<Bo
         }
     };
     strip_hop(request.headers_mut());
+    let observation = connected.observation.clone();
+    if let Some(observation) = &observation {
+        observation.bind_inbound_cancel(session.cancel.clone());
+    }
     request.headers_mut().insert(
         header::HOST,
         HeaderValue::from_str(&target.authority()).expect("validated authority"),
@@ -189,6 +200,9 @@ async fn handle(mut request: Request<Incoming>, session: Session) -> Response<Bo
     {
         Ok(connection) => connection,
         Err(_) => {
+            if let Some(observation) = &observation {
+                observation.fail("http_exchange", "upstream_http_handshake_failed", false);
+            }
             session.failed();
             return gateway(ProxyError::Upstream);
         }
@@ -204,10 +218,15 @@ async fn handle(mut request: Request<Incoming>, session: Session) -> Response<Bo
             session.budget.clone(),
             session.limits.buffer_bytes,
             None,
+            observation.clone(),
+            "request_body_failed",
         )
     });
     let response = sender.send_request(request).await;
     if response.is_err() {
+        if let Some(observation) = &observation {
+            observation.fail("target_http", "upstream_response_failed", false);
+        }
         session.dialer.traffic_feedback(
             &upstream_id,
             &identity,
@@ -218,6 +237,9 @@ async fn handle(mut request: Request<Incoming>, session: Session) -> Response<Bo
     }
     if let Ok(response) = &response {
         let auth = absolute_form && response.status() == StatusCode::PROXY_AUTHENTICATION_REQUIRED;
+        if let Some(observation) = &observation {
+            observation.http_status(response.status().as_u16(), auth);
+        }
         session.dialer.traffic_feedback(
             &upstream_id,
             &identity,
@@ -256,6 +278,8 @@ async fn handle(mut request: Request<Incoming>, session: Session) -> Response<Bo
             session.budget,
             session.limits.buffer_bytes,
             Some(exchange.drop_guard()),
+            observation,
+            "response_body_failed",
         )
     })
 }
@@ -290,11 +314,14 @@ fn limited(
     budget: Budget,
     chunk_size: usize,
     guard: Option<tokio_util::sync::DropGuard>,
+    observation: Option<crate::connections::ConnectionGuard>,
+    error_code: &'static str,
 ) -> Body {
     let stream = async_stream::try_stream! {
         let _guard=guard;
+        let observation=observation;
         while let Some(frame)=body.frame().await {
-            let frame=frame.map_err(|error|Box::new(error) as BoxError)?;
+            let frame=frame.map_err(|error|{if let Some(observation)=&observation{observation.fail("http_body",error_code,false);}Box::new(error) as BoxError})?;
             match frame.into_data() {
                 Ok(mut bytes)=>{
                     while !bytes.is_empty() {

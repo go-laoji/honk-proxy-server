@@ -32,7 +32,7 @@ export function NodeStats({ value }: { value: Summary }) {
       <Stat
         title="关联拨号与连接"
         value={String(value.active_connections)}
-        detail={`真实在途与套接字 · 来源不可用 ${value.source_unavailable}`}
+        detail={`真实业务交换与隧道 · 来源不可用 ${value.source_unavailable}`}
         icon={Activity}
       />
     </div>

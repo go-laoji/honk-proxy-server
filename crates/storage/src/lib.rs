@@ -220,6 +220,9 @@ impl Store {
             Ok(Workspace{desired:read_document(connection,desired)?,last_applied,draft:Draft{version:draft.0,base_revision:draft.1,config:serde_json::from_str(&draft.2).map_err(|_|StorageError::Invalid)?,updated_at:draft.3},revisions,activations})
         }).await
     }
+    pub async fn latest_activation(&self) -> Result<Option<Activation>, StorageError> {
+        self.call(|c|Ok(c.query_row("SELECT id,revision,previous_revision,state,created_at,error_code FROM config_activations ORDER BY id DESC LIMIT 1",[],|row|Ok(Activation {id:row.get(0)?,revision:row.get(1)?,previous_revision:row.get(2)?,state:row.get(3)?,created_at:row.get(4)?,error_code:row.get(5)?})).optional()?)).await
+    }
     pub async fn revision(&self, id: i64) -> Result<Document, StorageError> {
         self.call(move |connection| read_document(connection, id))
             .await

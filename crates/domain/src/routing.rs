@@ -39,6 +39,8 @@ pub struct RoutingContext {
     #[serde(default)]
     pub transport: SelectionTransport,
     pub source_ip: Option<IpAddr>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_port: Option<u16>,
     pub inbound: Option<String>,
     pub inbound_protocol: Option<String>,
     #[serde(default)]

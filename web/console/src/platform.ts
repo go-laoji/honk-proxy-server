@@ -1,11 +1,32 @@
 export const isDesktop = "__TAURI_INTERNALS__" in window;
+export class ApiRequestError extends Error {
+  constructor(
+    message: string,
+    readonly code?: string,
+    readonly status?: number,
+  ) {
+    super(message);
+    this.name = "ApiRequestError";
+  }
+}
 
 async function native<T>(
   command: string,
   args?: Record<string, unknown>,
 ): Promise<T> {
   const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<T>(command, args);
+  try {
+    return await invoke<T>(command, args);
+  } catch (cause) {
+    if (cause && typeof cause === "object" && "message" in cause) {
+      throw new ApiRequestError(
+        String(cause.message),
+        "code" in cause ? String(cause.code) : undefined,
+        "status" in cause ? Number(cause.status) : undefined,
+      );
+    }
+    throw cause instanceof Error ? cause : new ApiRequestError(String(cause));
+  }
 }
 
 export async function endpoint(): Promise<string> {
@@ -58,7 +79,13 @@ export async function getJson<T>(
       data && typeof data === "object" && "message" in data
         ? String(data.message)
         : `请求失败（${response.status}）`;
-    throw new Error(message);
+    throw new ApiRequestError(
+      message,
+      data && typeof data === "object" && "code" in data
+        ? String(data.code)
+        : undefined,
+      response.status,
+    );
   }
   return response.json() as Promise<T>;
 }
@@ -74,10 +101,14 @@ export async function postJson<T>(path: string, body?: unknown): Promise<T> {
   });
   if (!response.ok) {
     const error: unknown = await response.json().catch(() => null);
-    throw new Error(
+    throw new ApiRequestError(
       error && typeof error === "object" && "message" in error
         ? String(error.message)
         : `操作失败（${response.status}）`,
+      error && typeof error === "object" && "code" in error
+        ? String(error.code)
+        : undefined,
+      response.status,
     );
   }
   return response.json() as Promise<T>;

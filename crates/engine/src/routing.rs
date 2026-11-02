@@ -268,6 +268,7 @@ mod tests {
             destination_port: 443,
             transport: SelectionTransport::Tcp,
             source_ip: Some("::ffff:192.0.2.8".parse().unwrap()),
+            source_port: None,
             inbound: Some("browser".into()),
             inbound_protocol: Some("http".into()),
             observed_domains: vec![],

@@ -95,16 +95,14 @@ test("rules MPA separates candidates and runtime, orders by keyboard/buttons and
     });
     async function add(id: string, kind: string) {
       await page.getByRole("button", { name: "新增规则", exact: true }).click();
-      await page
-        .getByRole("textbox", { name: "规则 JSON", exact: true })
-        .fill(
-          JSON.stringify({
-            id,
-            enabled: true,
-            conditions: { destination_ports: [{ start: port, end: port }] },
-            action: { kind },
-          }),
-        );
+      await page.getByRole("textbox", { name: "规则 JSON", exact: true }).fill(
+        JSON.stringify({
+          id,
+          enabled: true,
+          conditions: { destination_ports: [{ start: port, end: port }] },
+          action: { kind },
+        }),
+      );
       await page
         .getByRole("button", { name: "保存为候选", exact: true })
         .click();
@@ -208,16 +206,14 @@ test("rules MPA separates candidates and runtime, orders by keyboard/buttons and
       .getByRole("combobox", { name: "查看版本", exact: true })
       .selectOption(String(concurrent.id));
     await page.getByRole("button", { name: "新增规则", exact: true }).click();
-    await page
-      .getByRole("textbox", { name: "规则 JSON", exact: true })
-      .fill(
-        JSON.stringify({
-          id: "process-future",
-          enabled: false,
-          conditions: { process: { command: "browser" } },
-          action: { kind: "reject" },
-        }),
-      );
+    await page.getByRole("textbox", { name: "规则 JSON", exact: true }).fill(
+      JSON.stringify({
+        id: "process-future",
+        enabled: false,
+        conditions: { process: { command: "browser" } },
+        action: { kind: "reject" },
+      }),
+    );
     await page.getByRole("button", { name: "保存为候选", exact: true }).click();
     await expect(
       page.getByRole("button", { name: "启用 process-future", exact: true }),

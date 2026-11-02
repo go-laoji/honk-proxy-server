@@ -5,6 +5,8 @@ use std::time::Duration;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ClientError {
+    #[error("invalid connection observation ID")]
+    InvalidConnectionId,
     #[error("endpoint must be an HTTP(S) URL without credentials, query or fragment")]
     InvalidEndpoint,
     #[error("CA certificate bundle is empty or invalid")]
@@ -212,6 +214,61 @@ impl HpsClient {
             }
         }
         Self::decode(self.http.get(url).send().await?).await
+    }
+    pub async fn connections(
+        &self,
+        query: &hps_domain::ConnectionQuery,
+    ) -> Result<hps_domain::ConnectionsOverview, ClientError> {
+        let mut url = self
+            .endpoint
+            .join("api/v1/connections")
+            .map_err(|_| ClientError::InvalidEndpoint)?;
+        if let serde_json::Value::Object(fields) =
+            serde_json::to_value(query).expect("connection query")
+        {
+            let mut pairs = url.query_pairs_mut();
+            for (key, value) in fields {
+                if !value.is_null() {
+                    pairs.append_pair(
+                        &key,
+                        &match value {
+                            serde_json::Value::String(s) => s,
+                            other => other.to_string(),
+                        },
+                    );
+                }
+            }
+        }
+        Self::decode(self.http.get(url).send().await?).await
+    }
+    pub async fn connection_summary(&self) -> Result<hps_domain::ConnectionSummary, ClientError> {
+        self.get_json("api/v1/connections/summary").await
+    }
+    pub async fn connection(&self, id: &str) -> Result<hps_domain::ConnectionInfo, ClientError> {
+        if !hps_domain::valid_connection_id(id) {
+            return Err(ClientError::InvalidConnectionId);
+        }
+        self.get_json(&format!("api/v1/connections/{id}")).await
+    }
+    pub async fn disconnect_connection(
+        &self,
+        input: &hps_domain::ConnectionDisconnectInput,
+    ) -> Result<hps_domain::ConnectionDisconnectResult, ClientError> {
+        self.post_body("api/v1/connections/disconnect", input).await
+    }
+    pub async fn preview_disconnect_connections(
+        &self,
+        input: &hps_domain::ConnectionDisconnectPreviewInput,
+    ) -> Result<hps_domain::ConnectionDisconnectPreview, ClientError> {
+        self.post_body("api/v1/connections/disconnect/preview", input)
+            .await
+    }
+    pub async fn confirm_disconnect_connections(
+        &self,
+        input: &hps_domain::ConnectionDisconnectConfirm,
+    ) -> Result<hps_domain::ConnectionDisconnectResult, ClientError> {
+        self.post_body("api/v1/connections/disconnect/confirm", input)
+            .await
     }
     pub async fn node(&self, id: &str) -> Result<hps_domain::NodesOverview, ClientError> {
         if !hps_config::valid_node_id(id) {

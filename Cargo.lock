@@ -804,6 +804,7 @@ dependencies = [
  "hyper",
  "hyper-util",
  "if-addrs",
+ "ipnet",
  "rcgen",
  "reqwest",
  "rusqlite",
@@ -958,6 +959,7 @@ dependencies = [
  "tokio-rustls",
  "tokio-util",
  "tracing",
+ "uuid",
  "webpki-roots",
  "x509-parser",
 ]
