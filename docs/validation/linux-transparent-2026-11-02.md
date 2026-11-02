@@ -203,3 +203,11 @@ ABI v4 加入显式 suspended 策略：保留已配置范围与 bypass，对受�
 Linux MPA 展示实际监听、链接/路由、内核与用户态代际、原位恢复次数、范围、对象/资源证据；可启停/复查、保存候选后跳转原配置工作区审阅激活，并跳转持久任务。非 Linux 明确禁用捕获操作；预检仍为只读。Desktop 使用同页，新增精确 native API 传输路径，不新增账号或权限。Capabilities 从实际状态读取 configured/attached/ready；compiled 继续表示内置对象，外部 ELF 不冒充内置。
 
 验证：Mac API 普通回归 14 项通过；真实未配置/错误 revision 的 API 客户端测试验证失败操作写入持久任务，候选不会自动启动。相同客户端测试在 Linux 7.0 通过；Mac 与 Linux 的 API/CLI Clippy 均通过，Linux 另包含 application/platform；native 7 项测试通过。TypeScript 检查、18 页生产构建及真实 Daemon 的 Linux MPA Playwright（含窄屏不溢出）通过。Web build ID `0f9a72014b3f4e19ccfb49a4fe987f6c9e0c4c4f838a9ac361b6c823e1cbc662`。这次尚未做实际 Linux 的浏览器启停或 Desktop 窗口验收，亦未完成 LAN/x86_64/SIGKILL 门槛。
+
+## 第 21 批：实际 LAN 双栈与上游选路
+
+实际 Linux 7.0.14/aarch64 与 6.12.115/aarch64，Rust RTNL 创建自有 veth，将 peer 通过真实 network namespace FD 移入独立客户端，配置双栈地址和默认路由。测试不将客户端的 test harness 主线程 PID 误当成工作线程的 namespace；实际 FD 来自该线程的 `/proc/.../task/.../ns/net`。RTNL 链接语义依据 [Linux 官方 rt-link 规范](https://docs.kernel.org/next/networking/netlink_spec/rt-link.html)。所有对象限定在自有容器/QEMU 命名空间，并按准确 ifindex 清理。
+
+双栈 TCP 各 256 KiB 双向字节，经来源网段规则、固定组和受控 HTTP 上游；双栈 UDP 各 1200 字节，经来源规则、固定组和实际 SOCKS5 UDP association，核对中继建立数及真实收发数各 2。两条旁路端口连接直接到达目标，目标核对实际 LAN 源地址，业务引擎总记录仅 4 条，旁路不登记透明 owner。每条透明连接均为 Gateway、原始目标与源地址正确、process=None、revision=1，并具有实际规则和出口节点证据。
+
+受控 UDP 目标与透明回复 socket 同处测试服务器 namespace，目标需允许复用该测试端口；首轮排查并修正此夹具占用，未把超时算作通过。QEMU initrd 显式加载自有 veth 模块。本机既有 UDP Direct/SOCKS5 16 条实际流回归也通过。未因此声称 x86_64、异常退出恢复或整个 T15 验收完成。证据为 `linux-transparent-gateway-kernel7-2026-11-02.json` 与 `linux-transparent-gateway-kernel612-2026-11-02.json`。

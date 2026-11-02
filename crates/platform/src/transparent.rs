@@ -10,6 +10,8 @@ mod routes;
 #[cfg(test)]
 mod tcp_tests;
 #[cfg(test)]
+mod test_proxy;
+#[cfg(test)]
 mod test_support;
 #[cfg(test)]
 mod udp_tests;
