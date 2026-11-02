@@ -113,33 +113,56 @@
       "issues": [
         15
       ]
-    }
-  ],
-  "retained": [
+    },
     {
+      "order": 12,
       "branch": "feature/routing-rules",
-      "issue": 16,
-      "reason": "open Linux process and atomic publication acceptance"
+      "feature_head": "4c4216fd87a322e4816b4910c1fd51822642c542",
+      "merge_commit": "7f749d555f5078705d591149ff207b2486d57774",
+      "tree_unchanged_from_feature": true,
+      "issues": [
+        16
+      ]
     },
     {
+      "order": 13,
       "branch": "feature/node-management",
-      "issue": 17,
-      "reason": "issue closed; preserve order behind unfinished routing-rules ancestor"
+      "feature_head": "acec18a9bf380eb43e0b24db91682b4263e9c2ce",
+      "merge_commit": "4b01ceec9a3346be2fe7a403cf50f2d9d618e95c",
+      "tree_unchanged_from_feature": true,
+      "issues": [
+        17
+      ]
     },
     {
+      "order": 14,
       "branch": "feature/connection-observation",
-      "issue": 18,
-      "reason": "open joint Linux and rules dependency acceptance"
+      "feature_head": "26d59169d960cbe500a5dc443a7134e9543de0a2",
+      "merge_commit": "d2add0d8d5f6761a2ac799dff1240e9b5f5bc2c1",
+      "tree_unchanged_from_feature": true,
+      "issues": [
+        18
+      ]
     },
     {
+      "order": 15,
       "branch": "feature/tasks-events",
-      "issue": 19,
-      "reason": "issue closed; preserve order behind unfinished connection-observation ancestor"
+      "feature_head": "1b6540b7b9d8fb2ad450ece5026f34ab0ed72680",
+      "merge_commit": "67fa524a665118650643adf0455a61425ef95942",
+      "tree_unchanged_from_feature": true,
+      "issues": [
+        19
+      ]
     },
     {
+      "order": 16,
       "branch": "feature/linux-transparent",
-      "issue": 20,
-      "reason": "active implementation and real kernel acceptance"
+      "feature_head": "4680e2c1829278743ab06e31877ee37b9ff037bd",
+      "merge_commit": "a197cbe2dae460cbd4d091ca73923b4d5bac1fce",
+      "tree_unchanged_from_feature": true,
+      "issues": [
+        20
+      ]
     }
   ],
   "issue_states": [
@@ -215,10 +238,10 @@
     },
     {
       "number": 16,
-      "state": "open",
+      "state": "closed",
       "title": "P0 T11: \u89c4\u5219 CRUD\u3001\u6a21\u62df\u4e0e\u4e00\u81f4\u6027\u53d1\u5e03",
       "url": "https://github.com/go-laoji/honk-proxy-server/issues/16",
-      "closed_at": null
+      "closed_at": "2026-11-02T06:22:01Z"
     },
     {
       "number": 17,
@@ -229,10 +252,10 @@
     },
     {
       "number": 18,
-      "state": "open",
+      "state": "closed",
       "title": "P0 T13: \u6d3b\u8dc3\u8fde\u63a5\u3001\u6d41\u91cf\u7edf\u8ba1\u4e0e\u8def\u7531\u89e3\u91ca",
       "url": "https://github.com/go-laoji/honk-proxy-server/issues/18",
-      "closed_at": null
+      "closed_at": "2026-11-02T06:22:05Z"
     },
     {
       "number": 19,
@@ -243,18 +266,48 @@
     },
     {
       "number": 20,
-      "state": "open",
+      "state": "closed",
       "title": "P0 T15: Linux \u900f\u660e\u6570\u636e\u9762\u4ea7\u54c1\u5316\u4e0e\u6062\u590d",
       "url": "https://github.com/go-laoji/honk-proxy-server/issues/20",
-      "closed_at": null
+      "closed_at": "2026-11-02T06:22:07Z"
     }
   ],
-  "develop_head": "efdfa54bd539a3732c2c46b0b19306f3d5efe902",
+  "develop_head": "a197cbe2dae460cbd4d091ca73923b4d5bac1fce",
   "active_sync_commit": "8464c564997f47be65166afca06f1c100d3acf93",
   "active_source_tree_unchanged": true,
   "restored_work_files": 6,
   "preserved_original_untracked_files": 21,
   "main_unchanged": true,
   "pushed": false,
-  "manual_branch_deletions": false
+  "manual_branch_deletions": false,
+  "retained_at_first_batch": [
+    {
+      "branch": "feature/routing-rules",
+      "issue": 16,
+      "reason": "open Linux process and atomic publication acceptance"
+    },
+    {
+      "branch": "feature/node-management",
+      "issue": 17,
+      "reason": "issue closed; preserve order behind unfinished routing-rules ancestor"
+    },
+    {
+      "branch": "feature/connection-observation",
+      "issue": 18,
+      "reason": "open joint Linux and rules dependency acceptance"
+    },
+    {
+      "branch": "feature/tasks-events",
+      "issue": 19,
+      "reason": "issue closed; preserve order behind unfinished connection-observation ancestor"
+    },
+    {
+      "branch": "feature/linux-transparent",
+      "issue": 20,
+      "reason": "active implementation and real kernel acceptance"
+    }
+  ],
+  "retained": [],
+  "second_batch_joint_acceptance_commit": "4680e2c1829278743ab06e31877ee37b9ff037bd",
+  "active_feature": "feature/desktop-service"
 }
