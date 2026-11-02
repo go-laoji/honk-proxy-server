@@ -140,6 +140,20 @@ export default function ObservationPanel({
                   { key: "active" as const, label: "采样时活跃连接数" },
                 ].map(({ key, label }) => {
                   const max = Math.max(1, ...series.map((p) => p[key]));
+                  const duration = Math.max(
+                    1,
+                    series[series.length - 1]?.elapsed ?? 1,
+                  );
+                  const points = series
+                    .map(
+                      (p) =>
+                        `${5 + (p.elapsed / duration) * 310},${75 - (p[key] / max) * 70}`,
+                    )
+                    .join(" ");
+                  const lastX =
+                    5 +
+                    ((series[series.length - 1]?.elapsed ?? 0) / duration) *
+                      310;
                   return (
                     <figure className="chart-card" data-series={key} key={key}>
                       <figcaption className="flex items-center gap-2 text-xs">
@@ -152,16 +166,19 @@ export default function ObservationPanel({
                         role="img"
                         aria-label={label}
                       >
+                        {(key === "up" || key === "down") &&
+                          series.length > 1 && (
+                            <polygon
+                              className="chart-area"
+                              points={`5,75 ${points} ${lastX},75`}
+                              aria-hidden="true"
+                            />
+                          )}
                         <polyline
                           fill="none"
                           stroke="currentColor"
                           strokeWidth="2"
-                          points={series
-                            .map(
-                              (p) =>
-                                `${5 + (p.elapsed / Math.max(1, series[series.length - 1]?.elapsed ?? 1)) * 310},${75 - (p[key] / max) * 70}`,
-                            )
-                            .join(" ")}
+                          points={points}
                         />
                         {series.length === 1 && (
                           <circle

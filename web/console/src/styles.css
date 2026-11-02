@@ -43,8 +43,14 @@
   --page: #f4f7fc;
   --surface: #ffffff;
   --surface-soft: #f5f8ff;
-  --sidebar: #eaf0fb;
-  --sidebar-line: #d5e0f2;
+  --sidebar: #fcfdff;
+  --sidebar-line: #dbe5f7;
+  --nav-active: #dbe8ff;
+  --nav-active-ink: #1d4ed8;
+  --nav-hover: #f0f5ff;
+  --metric-border: #c5d5f4;
+  --chart-surface: #f7faff;
+  --stat-icon-ink: #ffffff;
   --border: #dce5f2;
   --ink: #1d2e49;
   --muted: #536681;
@@ -66,6 +72,12 @@
   --surface-soft: #15223a;
   --sidebar: #0f192c;
   --sidebar-line: #24334d;
+  --nav-active: #203f73;
+  --nav-active-ink: #dbeafe;
+  --nav-hover: #172944;
+  --metric-border: #314b72;
+  --chart-surface: #132039;
+  --stat-icon-ink: #0b1220;
   --border: #24334d;
   --ink: #e4edff;
   --muted: #a0b1cc;
@@ -163,20 +175,20 @@
     @apply flex items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-[13px] font-medium transition-colors;
   }
   .nav-link:hover {
-    background: color-mix(in srgb, var(--surface) 65%, transparent);
+    background: var(--nav-hover);
     color: var(--ink);
   }
   .nav-link[aria-current="page"] {
-    color: var(--accent-ink);
-    background: var(--surface);
-    box-shadow: 0 2px 5px #112c5a08;
+    color: var(--nav-active-ink);
+    background: var(--nav-active);
+    font-weight: 600;
   }
   .nav-icon {
     @apply inline-flex size-8 shrink-0 items-center justify-center rounded-lg;
   }
   .nav-link[aria-current="page"] .nav-icon {
-    background: var(--accent-soft);
-    color: var(--accent);
+    background: transparent;
+    color: inherit;
   }
   .sidebar-instance {
     border: 1px solid var(--sidebar-line);
@@ -202,22 +214,23 @@
   }
   .stat-card {
     --stat-accent: var(--accent);
-    --stat-tint: var(--accent-soft);
     border-top: 2px solid
       color-mix(in srgb, var(--stat-accent) 45%, var(--border));
   }
   .stat-card[data-tone="blue"] {
     --stat-accent: var(--chart-up);
-    --stat-tint: color-mix(in srgb, var(--chart-up) 13%, var(--surface));
   }
   .stat-card[data-tone="neutral"] {
     --stat-accent: var(--muted);
-    --stat-tint: var(--surface-soft);
   }
   .stat-icon {
-    color: var(--stat-accent);
-    background: var(--stat-tint);
+    color: var(--stat-icon-ink);
+    background: var(--stat-accent);
     @apply inline-flex size-9 shrink-0 items-center justify-center rounded-xl;
+  }
+  .stat-card[data-tone="neutral"] .stat-icon {
+    color: var(--muted);
+    background: var(--surface-soft);
   }
   .status-badge {
     @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium;
@@ -235,8 +248,8 @@
     background: currentColor;
   }
   .chart-card {
-    background: var(--surface-soft);
-    border: 1px solid var(--border);
+    background: var(--chart-surface);
+    border: 1px solid var(--metric-border);
     color: var(--ink);
     @apply min-w-0 rounded-xl p-3;
   }
@@ -258,6 +271,10 @@
   }
   .chart-line {
     color: var(--series-color);
+  }
+  .chart-area {
+    fill: currentColor;
+    opacity: 0.1;
   }
 }
 
