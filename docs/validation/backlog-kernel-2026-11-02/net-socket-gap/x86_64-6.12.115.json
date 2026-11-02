@@ -1,0 +1,15 @@
+{
+  "source_revision": "862ddad624403e6f81bc994a7fe262ac04b7fb01",
+  "architecture": "x86_64",
+  "actual_kernel": "6.12.115-0-virt",
+  "case": "transparent::tests::udp_recovers_actual_dual_stack_addresses_and_ports_and_rejects_partial_payload",
+  "passed": 1,
+  "same_failed_userland_test_binary_sha256": "91721bd9c012b3f495ed2f80ac74677ef6479543592ea7cf07cdf6902b5fb857",
+  "actual_guest_test_binary_sha256": "91721bd9c012b3f495ed2f80ac74677ef6479543592ea7cf07cdf6902b5fb857",
+  "ordinary_test_selection": "--include-ignored --exact",
+  "driver_modified_only_test_selection": true,
+  "standard_52_case_driver_unchanged": true,
+  "driver_sha256": "4a402bb1e1bb2e41d322a191ee17a2f8be8664f2ee9ff3b0ee601ad89e8e7af4",
+  "serial_log": "x86_64-6.12.115.log",
+  "not_counted_in_core52": true
+}

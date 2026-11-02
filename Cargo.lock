@@ -794,6 +794,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
  "uuid",
 ]
@@ -851,6 +852,7 @@ dependencies = [
  "hps-domain",
  "hps-net",
  "hps-platform",
+ "hps-storage",
  "hps-system",
  "serde",
  "serde_json",
@@ -869,6 +871,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror",
  "url",
 ]

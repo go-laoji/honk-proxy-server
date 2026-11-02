@@ -2,6 +2,8 @@ use hps_client::HpsClient;
 use std::{sync::Mutex, time::Duration};
 use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
+mod backup;
+mod desktop;
 mod events;
 mod local;
 
@@ -135,6 +137,7 @@ fn supported_api(path: &str) -> bool {
             | "api/v1/capabilities"
             | "api/v1/config"
             | "api/v1/linux/preflight"
+            | "api/v1/linux/diagnostics"
             | "api/v1/linux/capture"
             | "api/v1/inbounds"
             | "api/v1/config/workspace"
@@ -743,6 +746,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             if hps_system::service::desktop_is_root() {
                 return Err("Desktop must run as an ordinary user; use the administrator CLI for system services".into());
@@ -762,6 +766,7 @@ pub fn run() {
             };
             app.manage(Connection(Mutex::new(target)));
             app.manage(events::NativeEvents::default());
+            desktop::setup(app)?;
             Ok(())
         })
         .on_page_load(|webview, payload| {
@@ -772,6 +777,10 @@ pub fn run() {
             }
         })
         .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested {api,..}=event
+                && let Some(state)=window.app_handle().try_state::<desktop::Desktop>()
+                && state.close_to_tray() {api.prevent_close();let _=window.hide();}
+
             if matches!(event, tauri::WindowEvent::Destroyed)
                 && let Some(state) = window.app_handle().try_state::<events::NativeEvents>()
             {
@@ -784,6 +793,9 @@ pub fn run() {
             api_get,
             api_post,
             save_config_export,
+            backup::save_database_backup,
+            desktop::desktop_preferences_get,
+            desktop::desktop_preferences_set,
             save_rules_export,
             save_diagnostic_export,
             get_web_build_id,

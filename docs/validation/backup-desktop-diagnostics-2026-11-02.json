@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "issue": 25,
+  "task": "T20",
+  "date": "2026-11-02",
+  "status": "candidate_pending_fifo_integration_and_native_os_acceptance",
+  "tested_source": "515c1e4",
+  "merged_develop": "ec69bc3",
+  "features": [
+    "CFG-07",
+    "SYS-06",
+    "LINUX-07"
+  ],
+  "checks": {
+    "storage_backup_tests": 4,
+    "api_backup_tests": 2,
+    "native_library_tests": 11,
+    "ignored_in_listed_tests": 0,
+    "domain_counter_tests": 1,
+    "platform_route_parser_tests": 1,
+    "browser_persistent_tests": 3,
+    "typescript_both_configs": true,
+    "shared_mpa_documents": 18,
+    "desktop_clippy_all_targets_deny_warnings": true,
+    "changed_backend_packages_clippy_all_targets_deny_warnings": true,
+    "fmt_prettier_diff": true
+  },
+  "reports": {
+    "cli": "sqlite-backup-2026-11-02.json",
+    "linux_collector": "linux-topology-2026-11-02.json"
+  },
+  "native_candidate": {
+    "identifier": "io.bitdata.hps.issue25.acceptance",
+    "product_name": "HPS Issue25 Acceptance",
+    "profile": "debug",
+    "adhoc_signed": true,
+    "gui_launched": false,
+    "original_bundle_overwritten": false,
+    "compiled_metadata": {
+      "format_version": 1,
+      "binary": "hps-desktop",
+      "architecture": "aarch64",
+      "platform": "macos",
+      "source_revision": "515c1e4f5bda96963cb6c1344308371400ec6703",
+      "source_dirty": false,
+      "version": {
+        "service": "honk-proxy-server",
+        "version": "0.1.0",
+        "api_version": "v1",
+        "web_build_id": "86817aff238be959ef424a09b7e162f1d557339de17eb5b96dd29b32aa4a3fa7"
+      }
+    },
+    "binary_sha256": "5c2490602956a1c7d9dc3a688ef51b2aaed03c4859460b0ee437ce904e36b0f1",
+    "same_web_bytes_as_test_daemon": true,
+    "codesign_verify": true,
+    "notarized": false
+  },
+  "not_verified": [
+    "macos_native_window_and_tray_clicks",
+    "actual_os_notification_display",
+    "actual_desktop_login_autostart",
+    "linux_full_daemon_api_with_loaded_maps_and_programs_after_final_integration"
+  ],
+  "host_network_configuration_writes": false,
+  "user_services_touched": false,
+  "os_login_items_enabled": false,
+  "new_datapath_control_added": false
+}

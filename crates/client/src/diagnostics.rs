@@ -9,6 +9,9 @@ fn path(id: i64, action: &str, epoch: Option<&str>) -> Result<String, ClientErro
     ))
 }
 impl HpsClient {
+    pub async fn linux_diagnostics(&self) -> Result<hps_domain::LinuxDiagnostics, ClientError> {
+        self.get_json("api/v1/linux/diagnostics").await
+    }
     pub async fn alerts(
         &self,
         after: Option<u64>,

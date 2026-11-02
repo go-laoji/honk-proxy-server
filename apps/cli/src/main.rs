@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use hps_client::{ClientError, HpsClient};
 use hps_config::DaemonConfig;
 use std::{io::Write, path::PathBuf, process::ExitCode, time::Duration};
+mod backup;
 mod diagnostics;
 mod local;
 mod subscriptions;
@@ -36,6 +37,11 @@ enum Output {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Full credential-bearing SQLite snapshots; restore is explicitly offline.
+    Backup {
+        #[command(subcommand)]
+        command: backup::BackupCommand,
+    },
     /// Print this CLI build metadata without connecting to a daemon.
     BuildInfo,
     /// Explicitly manage an OS service on this computer; never sent to a remote daemon.
@@ -560,6 +566,11 @@ enum ConfigCommand {
 #[derive(Subcommand)]
 enum LinuxCommand {
     Preflight,
+    /// Read topology and owned programs/maps. Compare counters against a prior JSON snapshot.
+    Diagnostics {
+        #[arg(long)]
+        baseline: Option<PathBuf>,
+    },
     Capture {
         #[command(subcommand)]
         command: CaptureCommand,
@@ -727,7 +738,7 @@ fn client_error(error: ClientError) -> (u8, String) {
         | ClientError::InvalidConnectionId
         | ClientError::InvalidTaskId
         | ClientError::InvalidEventCursor => 2,
-        ClientError::EventProtocol => 5,
+        ClientError::EventProtocol | ClientError::BackupProtocol => 5,
         ClientError::Transport(e) if e.is_timeout() => 6,
         ClientError::Transport(_) => 3,
         ClientError::Api { status: 409, .. } => 7,
@@ -749,6 +760,12 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
             },
         ))
         .map_err(|e| (5, e.to_string()));
+    }
+    if let Command::Backup { command } = &args.command
+        && let Some(result) =
+            backup::local(command, args.endpoint.is_some() || args.profile.is_some())
+    {
+        return result;
     }
     match &args.command {
         Command::Profile { command } => return local::profiles(command),
@@ -1533,6 +1550,35 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
                     .map_err(client_error)?,
             ),
         },
+        Command::Backup {
+            command: backup::BackupCommand::Create { path },
+        } => {
+            let (metadata, bytes) = client.database_backup().await.map_err(client_error)?;
+            hps_storage::backup::save_new(path, &bytes).map_err(|e| (5, e.to_string()))?;
+            serde_json::to_value(metadata)
+        }
+        Command::Backup { .. } => unreachable!("offline backup handled before connecting"),
+        Command::Linux {
+            command: LinuxCommand::Diagnostics { baseline },
+        } => {
+            let current = client.linux_diagnostics().await.map_err(client_error)?;
+            let previous = if let Some(path) = baseline {
+                let raw = read_policy_file(path)?;
+                Some(
+                    serde_json::from_str::<hps_domain::LinuxDiagnostics>(&raw)
+                        .map_err(|e| (2, e.to_string()))?,
+                )
+            } else {
+                None
+            };
+            let delta = previous.as_ref().and_then(|v| current.counter_delta(v));
+            let changed = previous.as_ref().and_then(|v| current.topology_changed(v));
+            let mut value = serde_json::to_value(&current).map_err(|e| (5, e.to_string()))?;
+            value["topology_changed"] =
+                serde_json::to_value(changed).map_err(|e| (5, e.to_string()))?;
+            value["counter_delta"] = serde_json::to_value(delta).map_err(|e| (5, e.to_string()))?;
+            Ok(value)
+        }
         Command::Linux {
             command: LinuxCommand::Preflight,
         } => serde_json::to_value(client.linux_preflight().await.map_err(client_error)?),

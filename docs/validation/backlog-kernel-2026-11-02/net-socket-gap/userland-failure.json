@@ -1,0 +1,26 @@
+{
+  "source_revision": "862ddad624403e6f81bc994a7fe262ac04b7fb01",
+  "environment": "linux_amd64_emulated_userland_container",
+  "case": "transparent::tests::udp_recovers_actual_dual_stack_addresses_and_ports_and_rejects_partial_payload",
+  "observed_userland_result": "failed",
+  "observed_errno": 92,
+  "observed_message": "Protocol not available",
+  "source_file_changed_for_workaround": false,
+  "test_ignored_or_marked_passed_in_userland": false,
+  "runtime_skip_for_remaining_workspace_only": true,
+  "native_guest_passes": [
+    "x86_64-6.12.115.json",
+    "x86_64-7.2.14.json"
+  ],
+  "same_binary_sha256": "91721bd9c012b3f495ed2f80ac74677ef6479543592ea7cf07cdf6902b5fb857",
+  "failure_log": "userland-failure.txt",
+  "failure_log_sha256": "79d1be66721a93412c57677f16ec798f561a31bb1067ab7610a18371f48a1cd9",
+  "preceding_successful_groups_passed": 169,
+  "preceding_successful_groups_ignored": 14,
+  "failed_group": {
+    "passed": 1,
+    "failed": 1,
+    "ignored": 1
+  },
+  "interpretation": "Environment-specific socket-option difference inferred from unchanged identical ELF passing on both full x86 kernels; not a product source patch or a qemu-user pass."
+}

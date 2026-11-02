@@ -2,6 +2,7 @@ use super::*;
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/api/v1/linux/capture", get(overview))
+        .route("/api/v1/linux/diagnostics", get(diagnostics))
         .route("/api/v1/linux/capture/control", post(control))
         .route("/api/v1/linux/capture/save", post(save))
 }
@@ -36,6 +37,16 @@ async fn control(
 ) -> ApiResult<hps_domain::LinuxCaptureStatus> {
     application(&state)?
         .control_linux_capture(input)
+        .await
+        .map(Json)
+        .map_err(application_error)
+}
+
+async fn diagnostics(
+    State(state): State<Arc<AppState>>,
+) -> ApiResult<hps_domain::LinuxDiagnostics> {
+    application(&state)?
+        .linux_diagnostics()
         .await
         .map(Json)
         .map_err(application_error)

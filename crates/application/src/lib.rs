@@ -178,6 +178,24 @@ pub struct Supervisor {
     alerts: alerts::Runtime,
 }
 impl Supervisor {
+    pub async fn linux_diagnostics(
+        &self,
+    ) -> Result<hps_domain::LinuxDiagnostics, ApplicationError> {
+        let topology = tokio::task::spawn_blocking(hps_platform::topology::topology)
+            .await
+            .map_err(|_| ApplicationError::Worker)?;
+        Ok(hps_domain::LinuxDiagnostics {
+            epoch: self.event_epoch().into(),
+            scope: "read_only_current_namespace_and_owned_capture".into(),
+            topology,
+            capture: self.linux_capture_status().await,
+        })
+    }
+    pub async fn database_backup(
+        &self,
+    ) -> Result<hps_storage::backup::Snapshot, hps_storage::backup::BackupError> {
+        self.store.backup().await
+    }
     pub async fn boot(
         store: Store,
         overrides: StartupOverrides,

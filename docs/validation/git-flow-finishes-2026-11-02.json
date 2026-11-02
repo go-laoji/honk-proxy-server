@@ -193,6 +193,16 @@
       "issues": [
         23
       ]
+    },
+    {
+      "order": 20,
+      "branch": "feature/protocol-subscriptions",
+      "feature_head": "9639b697804ae992cb10a169b8e24b1ea3adf41e",
+      "merge_commit": "d3123be909189d11807a0fecd2ebd72ff9eac12e",
+      "tree_unchanged_from_feature": true,
+      "issues": [
+        24
+      ]
     }
   ],
   "issue_states": [
@@ -302,7 +312,7 @@
       "closed_at": "2026-11-02T06:22:07Z"
     }
   ],
-  "develop_head": "ec69bc30de89d03b9e92d2ef4c86f84247654e1c",
+  "develop_head": "d3123be909189d11807a0fecd2ebd72ff9eac12e",
   "active_sync_commit": "0fb0fcf65aa6e3c1606a31d358b16e05ea4af2dc",
   "active_source_tree_unchanged": true,
   "restored_work_files": 6,
@@ -339,11 +349,6 @@
   ],
   "retained": [
     {
-      "branch": "feature/protocol-subscriptions",
-      "issue": 24,
-      "reason": "parallel implementation; FIFO acceptance and finish pending"
-    },
-    {
       "branch": "feature/backup-desktop-diagnostics",
       "issue": 25,
       "reason": "parallel implementation; FIFO acceptance and finish pending"
@@ -355,5 +360,5 @@
     }
   ],
   "second_batch_joint_acceptance_commit": "4680e2c1829278743ab06e31877ee37b9ff037bd",
-  "active_feature": "feature/protocol-subscriptions"
+  "active_feature": "feature/backup-desktop-diagnostics"
 }

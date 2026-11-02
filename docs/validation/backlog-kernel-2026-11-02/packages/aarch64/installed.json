@@ -1,0 +1,27 @@
+{
+  "scope": "owned_loopback_installed_runtime",
+  "daemon_sha256": "d6d6d7bec8e0224cb6c8ab642a08cfaf2a05403acc808cf21936c63e0931f728",
+  "previous_daemon_sha256": "d6d6d7bec8e0224cb6c8ab642a08cfaf2a05403acc808cf21936c63e0931f728",
+  "separate_previous_binary": false,
+  "host_network_configuration_written": false,
+  "upgrade_persisted_revision": 2,
+  "actual_html_pages": 18,
+  "installed_cli_without_credentials": true,
+  "duplicate_instance_rejected": true,
+  "bounded_load": {
+    "requests": 256,
+    "workers": 16,
+    "failures": 0,
+    "seconds": 0.7567,
+    "requests_per_second": 338.32,
+    "response_bytes": 3442432,
+    "latency_ms_p50": 46.29,
+    "latency_ms_p95": 53.11,
+    "environment": "local owned fixture, not public network capacity"
+  },
+  "active_connections_after_load": 0,
+  "newer_schema_refused": true,
+  "stopped_snapshot_binary_rollback": true,
+  "task_history_survives_upgrade_and_rollback": true,
+  "passed": true
+}

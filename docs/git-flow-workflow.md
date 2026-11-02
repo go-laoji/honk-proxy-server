@@ -62,3 +62,5 @@
 第四批：#22 回复发行候选的实际证据和平台限制后，`release-packaging` 原 tip `27b0060` 独立 finish 为双父合并 `82f6f5b`，内容树完全一致；本地候选标签 `v0.1.0-rc.1` 指向原 tip。随后通过 start 创建 `observability-history` 处理 #23。main 未改动、未 push；没有批量删分支。
 
 第五批：#23 历史观测、诊断、告警与受限任务控制完成并关闭后，`observability-history` 原 tip `c6f0755` 独立 finish 为 `ec69bc3`，双父与内容树一致。用户授权余下 #24/#25/#26 使用独立 managed worktree 并行开发和交叉审查；只有各项集成验收完成后按该顺序逐项 finish，不批量删除分支。
+
+第六批：#24 在协议、订阅代际和来源寿命修复与组合验收后关闭，`protocol-subscriptions` 原 tip `9639b69` 独立 finish 为双父合并 `d3123be`，内容树一致，已归档对应 managed worktree，原 tip 由第二父保留。#25/#26 继续按该顺序收尾；用户随后明确允许编译没有报错时先合并代码，仍在进行的 x86 静态 release 额外发行验收单独记录为 pending，不提前计为通过。

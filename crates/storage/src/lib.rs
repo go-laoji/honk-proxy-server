@@ -1,4 +1,5 @@
 //! Bounded asynchronous facade over one SQLite owner thread.
+pub mod backup;
 pub mod controller;
 pub mod health;
 pub mod nodes;
@@ -97,6 +98,7 @@ pub struct Store {
     tx: mpsc::Sender<Message>,
     pub database_path: Option<PathBuf>,
     pub epoch: String,
+    backup_slots: std::sync::Arc<tokio::sync::Semaphore>,
 }
 
 pub fn unix_now() -> i64 {
@@ -196,6 +198,7 @@ impl Store {
             tx,
             database_path,
             epoch,
+            backup_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(1)),
         })
     }
     async fn call<T: Send + 'static>(
@@ -391,14 +394,15 @@ fn check_head(connection: &Connection, expected: i64) -> Result<(), StorageError
         Err(StorageError::Conflict)
     }
 }
+const SCHEMA_MIGRATIONS_SQL: &str = "CREATE TABLE IF NOT EXISTS schema_migrations(version INTEGER PRIMARY KEY,applied_at INTEGER NOT NULL)";
 fn migrate(connection: &mut Connection, bootstrap: &str, epoch: &str) -> Result<(), StorageError> {
-    connection.execute_batch("CREATE TABLE IF NOT EXISTS schema_migrations(version INTEGER PRIMARY KEY,applied_at INTEGER NOT NULL)")?;
+    connection.execute_batch(SCHEMA_MIGRATIONS_SQL)?;
     let version: i64 = connection.query_row(
         "SELECT coalesce(max(version),0) FROM schema_migrations",
         [],
         |row| row.get(0),
     )?;
-    if version > 8 {
+    if version > backup::SCHEMA_VERSION {
         return Err(StorageError::SchemaTooNew);
     }
     let transaction =

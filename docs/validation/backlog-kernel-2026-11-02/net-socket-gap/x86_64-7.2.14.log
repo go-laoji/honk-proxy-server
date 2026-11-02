@@ -1,0 +1,17 @@
+HPS_GUEST_ARTIFACT=test-cases:52ebf666de0d9ebed538011644f56680d6fef2d40c7a1a14894c2d0846bb15b0
+HPS_GUEST_ARTIFACT=test-hps_net-1d9ed2bd7bf4d8e2:91721bd9c012b3f495ed2f80ac74677ef6479543592ea7cf07cdf6902b5fb857
+HPS_GUEST_ARTIFACT=hps-ebpf:fa5449609f86a6b50300a83a6e10d2f2150aa42eaa6676c8e64dd1581bbd5286
+HPS_KERNEL_APK_SHA256=e8213dee682105c1507b4742f365bfc3c2ccd91cdba9aa3e036b73b13a1879ae
+HPS_GUEST_EPOCH=1793628500
+modprobe: module ipv6 not found in modules.dep
+7.2.14-0-stable
+HPS_CASE_START=transparent::tests::udp_recovers_actual_dual_stack_addresses_and_ports_and_rejects_partial_payload
+
+running 1 test
+test transparent::tests::udp_recovers_actual_dual_stack_addresses_and_ports_and_rejects_partial_payload ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.06s
+
+HPS_CASE_EXIT=transparent::tests::udp_recovers_actual_dual_stack_addresses_and_ports_and_rejects_partial_payload:0
+HPS_SELF_TEST_EXIT=0
+[    1.923727] reboot: Power down

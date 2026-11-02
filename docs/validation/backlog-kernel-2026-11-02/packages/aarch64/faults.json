@@ -1,0 +1,12 @@
+{
+  "passed": true,
+  "daemon_sha256": "d6d6d7bec8e0224cb6c8ab642a08cfaf2a05403acc808cf21936c63e0931f728",
+  "actual_admission_limit": 4,
+  "excess_connection_rejected": true,
+  "rejection_counter": 1,
+  "management_survives_proxy_overload": true,
+  "permits_released": true,
+  "occupied_management_port_refused": true,
+  "restart_after_startup_failure": true,
+  "host_network_configuration_written": false
+}
