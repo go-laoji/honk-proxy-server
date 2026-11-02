@@ -1,0 +1,15 @@
+id = "yun-free"
+name = "云代理免费列表"
+enabled = false
+kind = "yun_free"
+endpoint = "http://www.ip3366.net/free/"
+protocol = "http"
+count = 15
+# Local cache upper bound, NOT a guarantee of vendor validity or health.
+ttl_secs = 300
+min_remaining_secs = 30
+min_interval_secs = 300
+timeout_ms = 10000
+mode = "append_leases"
+[params]
+stype = "1"

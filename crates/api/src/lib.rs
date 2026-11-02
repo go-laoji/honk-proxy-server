@@ -16,6 +16,7 @@ use std::{
 };
 
 mod configuration;
+mod providers;
 #[cfg(feature = "web-ui")]
 mod web;
 
@@ -143,6 +144,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/v1/config", get(config));
     let router = router
         .merge(configuration::router())
+        .merge(providers::router())
         .layer(axum::extract::DefaultBodyLimit::max(4 * 1024 * 1024));
     #[cfg(feature = "web-ui")]
     let router = router.fallback(web::serve);
@@ -262,6 +264,14 @@ fn application_error(error: ApplicationError) -> (StatusCode, Json<ApiError>) {
         ApplicationError::Engine(EngineError::Bind) => (StatusCode::CONFLICT, "listen_failed"),
         ApplicationError::Engine(EngineError::NotFound) => {
             (StatusCode::NOT_FOUND, "inbound_not_found")
+        }
+        ApplicationError::ProviderUnavailable => (StatusCode::NOT_FOUND, "provider_unavailable"),
+        ApplicationError::Provider(error) => (StatusCode::BAD_GATEWAY, error.code),
+        ApplicationError::Storage(StorageError::ProviderRateLimited) => {
+            (StatusCode::TOO_MANY_REQUESTS, "provider_interval_limit")
+        }
+        ApplicationError::Storage(StorageError::PoolFull) => {
+            (StatusCode::CONFLICT, "provider_pool_budget")
         }
         ApplicationError::GenerationBudget => (StatusCode::CONFLICT, "draining_generation_limit"),
         _ => (StatusCode::SERVICE_UNAVAILABLE, "configuration_unavailable"),

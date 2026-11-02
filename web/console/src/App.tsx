@@ -33,6 +33,7 @@ import ConnectPage from "./pages/ConnectPage";
 import SettingsPage from "./pages/SettingsPage";
 import LinuxPage from "./pages/LinuxPage";
 import InboundsPage from "./pages/InboundsPage";
+const ProvidersPage = lazy(() => import("./pages/ProvidersPage"));
 const ConfigPage = lazy(() => import("./pages/ConfigPage"));
 
 const icons: Record<
@@ -240,6 +241,14 @@ export default function App() {
             ) : current.id === "config" ? (
               <Suspense fallback={<p className="muted">正在打开配置工作台…</p>}>
                 <ConfigPage refreshService={service.refresh} />
+              </Suspense>
+            ) : ["providers", "provider-detail"].includes(current.id) ? (
+              <Suspense fallback={<p className="muted">正在读取供应商…</p>}>
+                <ProvidersPage
+                  detailPage={current.id === "provider-detail"}
+                  serviceEndpoint={service.data.endpoint}
+                  refreshService={service.refresh}
+                />
               </Suspense>
             ) : current.id === "settings" ? (
               <SettingsPage data={service.data} />

@@ -18,12 +18,33 @@ use tokio_rustls::{
     rustls::{ClientConfig, pki_types::ServerName},
 };
 
-struct Upstream {
-    config: UpstreamConfig,
+pub(crate) struct Upstream {
+    pub(crate) config: UpstreamConfig,
     tls: Option<Arc<ClientConfig>>,
+    pub(crate) source: Option<(String, String)>,
+    pub(crate) deadline: Option<std::time::Instant>,
+    pub(crate) minimum_lifetime: u64,
+}
+impl Upstream {
+    pub(crate) fn prepare(config: UpstreamConfig) -> Result<Self, ProxyError> {
+        let tls = if config.protocol == ProxyProtocol::Https {
+            Some(tls::client(&config)?)
+        } else {
+            None
+        };
+        Ok(Self {
+            config,
+            tls,
+            source: None,
+            deadline: None,
+            minimum_lifetime: 0,
+        })
+    }
 }
 pub struct Dialer {
-    upstreams: Vec<Upstream>,
+    upstreams: Vec<Arc<Upstream>>,
+    pub(crate) pool: Arc<crate::pool::DynamicPool>,
+    sources: std::sync::RwLock<std::collections::HashMap<String, String>>,
     cursor: AtomicUsize,
     timeout: Duration,
     min_lifetime: u64,
@@ -40,27 +61,34 @@ impl Dialer {
         let upstreams = config
             .upstreams
             .iter()
-            .map(|config| {
-                let tls = if config.protocol == ProxyProtocol::Https {
-                    Some(tls::client(config)?)
-                } else {
-                    None
-                };
-                Ok(Upstream {
-                    config: config.clone(),
-                    tls,
-                })
-            })
+            .map(|config| Upstream::prepare(config.clone()).map(Arc::new))
             .collect::<Result<_, ProxyError>>()?;
         Ok(Self {
             upstreams,
+            pool: Arc::new(crate::pool::DynamicPool::default()),
+            sources: std::sync::RwLock::new(std::collections::HashMap::new()),
             cursor: AtomicUsize::new(0),
             timeout: Duration::from_millis(config.limits.connect_timeout_ms),
             min_lifetime: config.limits.min_remaining_lifetime_secs,
             max_header: config.limits.max_header_bytes,
         })
     }
-    fn eligible(&self, config: &UpstreamConfig) -> bool {
+    pub fn set_sources(&self, sources: std::collections::HashMap<String, String>) {
+        *self.sources.write().unwrap() = sources;
+    }
+    fn eligible(&self, upstream: &Upstream) -> bool {
+        let config = &upstream.config;
+        let minimum = self.min_lifetime.max(upstream.minimum_lifetime);
+        if upstream
+            .source
+            .as_ref()
+            .is_some_and(|(id, fp)| self.sources.read().unwrap().get(id) != Some(fp))
+            || upstream.deadline.is_some_and(|deadline| {
+                deadline <= std::time::Instant::now() + Duration::from_secs(minimum)
+            })
+        {
+            return false;
+        }
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -68,12 +96,14 @@ impl Dialer {
         config.enabled
             && config
                 .expires_at_unix
-                .is_none_or(|expires| expires > now.saturating_add(self.min_lifetime))
+                .is_none_or(|expires| expires > now.saturating_add(minimum))
     }
     pub fn eligible_count(&self) -> usize {
+        let dynamic = self.pool.snapshot();
         self.upstreams
             .iter()
-            .filter(|s| self.eligible(&s.config))
+            .chain(dynamic.iter())
+            .filter(|s| self.eligible(s))
             .count()
     }
     /// Select exactly once. Neither failed handshakes nor business data are retried.
@@ -82,13 +112,22 @@ impl Dialer {
         target: &Target,
         http_forward: bool,
     ) -> Result<Connected, ProxyError> {
-        if self.upstreams.is_empty() {
+        let dynamic = self.pool.snapshot();
+        let total = self.upstreams.len() + dynamic.len();
+        if total == 0 {
             return Err(ProxyError::NoUpstream);
         }
-        let start = self.cursor.fetch_add(1, Ordering::Relaxed) % self.upstreams.len();
-        let upstream = (0..self.upstreams.len())
-            .map(|n| &self.upstreams[(start + n) % self.upstreams.len()])
-            .find(|s| self.eligible(&s.config))
+        let start = self.cursor.fetch_add(1, Ordering::Relaxed) % total;
+        let upstream = (0..total)
+            .map(|n| {
+                let index = (start + n) % total;
+                if index < self.upstreams.len() {
+                    &self.upstreams[index]
+                } else {
+                    &dynamic[index - self.upstreams.len()]
+                }
+            })
+            .find(|s| self.eligible(s))
             .ok_or(ProxyError::NoUpstream)?;
         tokio::time::timeout(
             self.timeout,

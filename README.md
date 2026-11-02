@@ -1,6 +1,6 @@
 # honk-proxy-server
 
-自主实现的 Rust 代理池服务，提供独立 CLI、无桌面 Daemon 和共享 React/Tailwind 多页面控制台。当前已交付 HTTP/CONNECT、HTTPS 代理与 SOCKS5 TCP 核心及入口管理；短效供应商自动提取、分组路由和真实 Linux eBPF 仍在开发。
+自主实现的 Rust 代理池服务，提供独立 CLI、无桌面 Daemon 和共享 React/Tailwind 多页面控制台。当前已交付 HTTP/CONNECT、HTTPS 代理与 SOCKS5 TCP、配置版本、短效供应商手动提取和批次租约；自动补池、健康、分组路由和真实 Linux eBPF 仍在开发。
 
 honk 仅作为能力参考；项目不集成其 crate、二进制或 fork。
 
@@ -50,6 +50,8 @@ curl --proxy http://127.0.0.1:17901 https://example.com/
 Daemon 默认把配置保存在 `.hps/hps.sqlite3`，可通过 `--data-dir` 指定独立目录。TOML 只初始化新目录，已有目录启动时读取数据库期望版本。测试使用 `--ephemeral` 保存在内存中。CLI/Daemon 不需要启动桌面程序。
 
 ## 共享 Web 与 Desktop
+
+短效来源支持快代理文档契约、通用 JSON/文本 API 与云代理免费页面，提取结果可直接发布到运行池；提供 CLI 和共享页面。详见 [供应商配置与提取](docs/providers-usage.md)，示例位于 `configs/providers/`，默认停用。快代理未采购，付费真实调用未验证；免费来源抓取成功不等于代理健康。提取请求不自动重放，空结果不清池，重复 IP 不延长旧租约。
 
 前端在 `web/console`，包含 18 个实际 HTML 入口。原始未使用的演示素材未纳入版本管理。连接、运行概览、代理入口、启动设置与 eBPF 状态读取真实 Daemon API；尚未实现的业务模块明确显示不可用，不使用演示节点填充。
 

@@ -9,6 +9,7 @@ hps-domain.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 toml.workspace = true
+url = "2"
 
 [dev-dependencies]
 serde_json.workspace = true

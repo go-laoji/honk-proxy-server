@@ -141,3 +141,64 @@ export interface ProxyStatus {
   limits: ResourceLimits;
   shutting_down: boolean;
 }
+
+export interface ExtractionTask {
+  id: number;
+  provider_id: string;
+  request_id: string;
+  config_fingerprint: string;
+  state:
+    | "accepted"
+    | "requesting"
+    | "succeeded"
+    | "failed"
+    | "outcome_unknown"
+    | "discarded";
+  requested_count: number;
+  started_at: number;
+  finished_at: number | null;
+  added: number;
+  rejected: number;
+  removed: number;
+  quota: number | null;
+  error_code: string | null;
+  retry_after_secs: number | null;
+}
+export interface ProviderConfig {
+  id: string;
+  name: string;
+  enabled: boolean;
+  kind: "kuaidaili" | "yun_free" | "json" | "text";
+  endpoint: string;
+  protocol: "http" | "https" | "socks5";
+  count: number;
+  ttl_secs: number | null;
+  min_interval_secs: number;
+  query_valid_time: boolean;
+  [field: string]: unknown;
+}
+export interface ProviderView {
+  configuration: ProviderConfig;
+  active_leases: number;
+  latest_task: ExtractionTask | null;
+  health_state: string;
+}
+export interface LeaseInfo {
+  id: number;
+  batch_id: number;
+  provider_id: string;
+  upstream_id: string;
+  protocol: string;
+  host: string;
+  port: number;
+  received_at: number;
+  expires_at: number;
+  expiry_basis: string;
+  state: string;
+  region: string | null;
+}
+export interface ProviderDetail {
+  provider: ProviderView;
+  tasks: ExtractionTask[];
+  leases: LeaseInfo[];
+}

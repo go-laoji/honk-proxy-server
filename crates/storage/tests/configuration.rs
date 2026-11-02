@@ -77,6 +77,18 @@ fn reversible_empty_schema_and_newer_schema_rejection() {
         .execute_batch(include_str!("../migrations/0002_known_good.up.sql"))
         .unwrap();
     connection
+        .execute_batch(include_str!("../migrations/0003_provider_leases.up.sql"))
+        .unwrap();
+    connection
+        .execute_batch(include_str!("../migrations/0004_lease_clock.up.sql"))
+        .unwrap();
+    connection
+        .execute_batch(include_str!("../migrations/0004_lease_clock.down.sql"))
+        .unwrap();
+    connection
+        .execute_batch(include_str!("../migrations/0003_provider_leases.down.sql"))
+        .unwrap();
+    connection
         .execute_batch(include_str!("../migrations/0002_known_good.down.sql"))
         .unwrap();
     connection

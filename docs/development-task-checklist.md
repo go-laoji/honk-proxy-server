@@ -19,7 +19,7 @@
 
 T05 配置基础后推进 T06/T07 短效 API 与补池。T08–T14 逐步闭合健康、DNS、选点、规则、节点、连接及任务链；T15/T16 完成 Linux 与桌面生命周期，T17 统一验收。T18–T21 为增强或储备。
 
-当前主机为 macOS，已有 Docker Linux 可供环境预检；容器内核/BTF/权限与真实数据面需实际检查，不能预先视为满足条件。供应商真实验收需要其 API 文档与有效测试配置；在取得前可做本地契约测试，不能替代真实供应商验收。
+当前主机为 macOS，已有 Docker Linux 可供环境预检；容器内核/BTF/权限与真实数据面需实际检查，不能预先视为满足条件。用户已提供快代理官方文档与云代理免费源，并说明没有采购，可按文档实现。供应商验收采用文档契约、故障服务与免费源实测；付费账号调用明确标为未验证，不要求采购。Linux 真实 eBPF 门槛保持不变。
 
 | 任务 | 优先级 | Issue 与工作项 | 依赖 | 状态 |
 | --- | --- | --- | --- | --- |
@@ -28,7 +28,7 @@ T05 配置基础后推进 T06/T07 短效 API 与补池。T08–T14 逐步闭合�
 | T03 | P0 | [#8](https://github.com/go-laoji/honk-proxy-server/issues/8) 自研 Rust 核心与 Linux eBPF 前置验证 | T01 | 只读预检已验收，真实 eBPF 待实现 |
 | T04 | P0 | [#9](https://github.com/go-laoji/honk-proxy-server/issues/9) HTTP HTTPS SOCKS5 核心代理与资源控制 | T01 | 已完成显式代理验收 |
 | T05 | P0 | [#10](https://github.com/go-laoji/honk-proxy-server/issues/10) SQLite 配置版本、校验、激活与回滚 | T01 | 已完成持久化与三端验收 |
-| T06 | P0 | [#11](https://github.com/go-laoji/honk-proxy-server/issues/11) 短效提取 API、批次租约与安全重试 | T05 | 待开发 |
+| T06 | P0 | [#11](https://github.com/go-laoji/honk-proxy-server/issues/11) 短效提取 API、批次租约与安全重试 | T05 | 已完成契约、租约和三端验收 |
 | T07 | P0 | [#12](https://github.com/go-laoji/honk-proxy-server/issues/12) 到期预测、水位与预算驱动补池 | T06 | 待开发 |
 | T08 | P0 | [#13](https://github.com/go-laoji/honk-proxy-server/issues/13) 统一健康检测与真实流量反馈 | T04, T06 | 待开发 |
 | T09 | P0 | [#14](https://github.com/go-laoji/honk-proxy-server/issues/14) DNS 上游、路由、缓存与诊断 | T03, T05, T04 | 待开发 |
@@ -87,7 +87,7 @@ T05 配置基础后推进 T06/T07 短效 API 与补池。T08–T14 逐步闭合�
 - Issue：[#11](https://github.com/go-laoji/honk-proxy-server/issues/11)。
 - 功能：PROV-01、PROV-02、PROV-04、PROV-05、PROV-06、PROV-07、PROV-08、PROV-10、PROV-11、PROV-12。
 - 工作：适配真实供应商与可复现测试服务；配置提取参数/签名、TTL起算、增量批次/快照、凭据/白名单/配额；持久记录结果不确定，提供API/CLI/页面。
-- 验收：新批次不误删有效旧节点；到期不延长；损坏/空结果不清池；响应丢失不盲目重复消耗额度；真实供应商验收需其API契约。
+- 验收：新批次不误删有效旧节点；到期不延长；损坏/空结果不清池；响应丢失不盲目重复消耗额度；按用户提供的快代理契约验收，免费源实测；付费调用未验证且不要求采购。
 
 ### T07 到期预测、水位与预算驱动补池
 
@@ -164,7 +164,7 @@ T05 配置基础后推进 T06/T07 短效 API 与补池。T08–T14 逐步闭合�
 - Issue：[#22](https://github.com/go-laoji/honk-proxy-server/issues/22)。
 - 功能：工程基础或发行验收，无重复功能归属。
 - 工作：独立headless/desktop流水线、嵌入相同web产物、文档/安装包/锁定依赖；端到端、故障注入、压测和升级回退。
-- 验收：80个适用P0验收证据，真实Linux eBPF和真实供应商必需；无桌面安装与18页一致；不把mock或骨架称为正式功能版本。
+- 验收：80个适用P0验收证据，真实Linux eBPF必需；供应商按用户授权的快代理契约与免费源实测，明确未验证付费账号调用；无桌面安装与18页一致；不把mock或骨架称为正式功能版本。
 
 ### T18 历史观测、诊断导出与任务增强
 
@@ -215,3 +215,5 @@ T02 随后接管现有模板：共享页面清单、Tailwind 布局与 API trans
 - 2026-11-01：T04 自研显式代理、资源限制及 API/CLI/共享 MPA 入口管理完成。3×3 协议矩阵、macOS/Linux 真实测试、Chromium 经过供应商出口、Desktop 实际启停均通过。按四个实现切片提交；完整证据及后续边界见 [显式代理验收](validation/explicit-proxy-2026-11-01.md)。T03/T15 的真实 eBPF 仍未完成。
 
 - 2026-11-01：T05 配置版本、SQLite、共享草稿、热切换/排空、CLI、管理 HTTPS、离线恢复与原生导出完成。macOS/Linux 各 33 项 Rust 测试、7 项浏览器 E2E 及 Desktop 实际保存/激活/导出/回滚通过；见 [配置验收](validation/configuration-2026-11-01.md)。
+
+- 2026-11-01：T06 来源管理、快代理签名/提取/只读诊断、通用接口、云代理 GBK 免费源、独立批次租约、动态池和安全提取完成。macOS/Linux 各 49 项 Rust 测试、8 项浏览器 E2E、Desktop 实际提取 15 条与 CLI 同任务幂等查询通过；见 [供应商验收](validation/provider-leases-2026-11-01.md)。T07 接续自动补池。

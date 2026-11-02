@@ -9,6 +9,8 @@ hps-config.workspace = true
 hps-domain.workspace = true
 hps-engine.workspace = true
 hps-storage.workspace = true
+hps-provider.workspace = true
+tokio-util = { version = "0.7", features = ["rt"] }
 tokio.workspace = true
 serde_json.workspace = true
 toml.workspace = true

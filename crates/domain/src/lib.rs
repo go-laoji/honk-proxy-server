@@ -279,3 +279,58 @@ pub struct ConfigActivationResult {
     pub state: String,
     pub restart_required: Vec<String>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExtractionTask {
+    pub id: i64,
+    pub provider_id: String,
+    pub request_id: String,
+    pub config_fingerprint: String,
+    pub state: String,
+    pub requested_count: u32,
+    pub started_at: i64,
+    pub finished_at: Option<i64>,
+    pub added: usize,
+    pub rejected: usize,
+    pub removed: usize,
+    pub quota: Option<u64>,
+    pub error_code: Option<String>,
+    pub retry_after_secs: Option<u64>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LeaseInfo {
+    pub id: i64,
+    pub batch_id: i64,
+    pub provider_id: String,
+    pub config_fingerprint: String,
+    pub upstream_id: String,
+    pub protocol: String,
+    pub host: String,
+    pub port: u16,
+    pub received_at: i64,
+    pub expires_at: i64,
+    pub expiry_basis: String,
+    pub state: String,
+    pub region: Option<String>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExtractionInput {
+    pub request_id: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderView<T> {
+    pub configuration: T,
+    pub active_leases: usize,
+    pub latest_task: Option<ExtractionTask>,
+    pub health_state: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderDetail<T> {
+    pub provider: ProviderView<T>,
+    pub tasks: Vec<ExtractionTask>,
+    pub leases: Vec<LeaseInfo>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExpectedRevision {
+    pub expected_revision: i64,
+}

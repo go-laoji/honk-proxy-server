@@ -47,9 +47,45 @@ fn supported_api(path: &str) -> bool {
             | "api/v1/inbounds"
             | "api/v1/config/workspace"
             | "api/v1/config/export"
-    ) || path
-        .strip_prefix("api/v1/config/revisions/")
-        .is_some_and(|id| id.parse::<i64>().is_ok_and(|id| id > 0))
+            | "api/v1/providers"
+    ) || supported_provider_get(path)
+        || path
+            .strip_prefix("api/v1/config/revisions/")
+            .is_some_and(|id| id.parse::<i64>().is_ok_and(|id| id > 0))
+}
+
+fn valid_resource_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 64
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"_-".contains(&b))
+}
+fn supported_provider_get(path: &str) -> bool {
+    let (base, query) = path
+        .split_once('?')
+        .map_or((path, None), |(base, query)| (base, Some(query)));
+    let parts: Vec<_> = base.split('/').collect();
+    match parts.as_slice() {
+        ["api", "v1", "provider-tasks", id] => {
+            query.is_none() && id.parse::<i64>().is_ok_and(|n| n > 0)
+        }
+        ["api", "v1", "providers", id] => query.is_none() && valid_resource_id(id),
+        ["api", "v1", "providers", id, "leases"] => {
+            valid_resource_id(id)
+                && query.is_none_or(|q| {
+                    !q.is_empty()
+                        && q.split('&').all(|pair| {
+                            pair.split_once('=').is_some_and(|(k, v)| {
+                                matches!(k, "before" | "limit")
+                                    && v.parse::<i64>()
+                                        .is_ok_and(|n| n > 0 && (k != "limit" || n <= 200))
+                            })
+                        })
+                })
+        }
+        _ => false,
+    }
 }
 
 fn supported_action(path: &str) -> bool {
@@ -64,6 +100,11 @@ fn supported_action(path: &str) -> bool {
         return true;
     }
     let parts: Vec<_> = path.split('/').collect();
+    if matches!(parts.as_slice(),["api","v1","providers",id,"save"|"delete"|"extract"] if valid_resource_id(id))
+        || matches!(parts.as_slice(),["api","v1","providers",id,"diagnose","quota"|"whitelist"] if valid_resource_id(id))
+    {
+        return true;
+    }
     matches!(parts.as_slice(),["api","v1","inbounds",id,"start"|"stop"] if !id.is_empty() && id.len()<=64 && id.bytes().all(|c|c.is_ascii_alphanumeric() || c==b'_' || c==b'-'))
 }
 
@@ -187,6 +228,21 @@ mod tests {
     #[test]
     fn transport_accepts_implemented_api_only() {
         assert!(supported_api("api/v1/status"));
+        assert!(supported_api(
+            "api/v1/providers/source/leases?before=200&limit=50"
+        ));
+        assert!(supported_api("api/v1/provider-tasks/1"));
+        assert!(!supported_api(
+            "api/v1/providers/source/leases?before=1&url=http://external"
+        ));
+        assert!(!supported_api("api/v1/providers/../config"));
+        assert!(supported_action("api/v1/providers/source/extract"));
+        assert!(supported_action(
+            "api/v1/providers/source/diagnose/whitelist"
+        ));
+        assert!(!supported_action(
+            "api/v1/providers/source/diagnose/purchase"
+        ));
         assert!(!supported_api("https://example.com/api/v1/status"));
         assert!(!supported_api("api/v1/../../private"));
         assert!(supported_action("api/v1/inbounds/browser-http/start"));

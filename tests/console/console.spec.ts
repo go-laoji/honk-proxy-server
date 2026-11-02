@@ -71,7 +71,7 @@ test("overview uses real API state and navigation creates a new document", async
   await expect(page).toHaveURL(/providers\.html$/);
   expect(await page.evaluate(() => "navigationProbe" in window)).toBe(false);
   await expect(
-    page.getByRole("heading", { name: "上游供应商当前不可用" }),
+    page.getByRole("heading", { name: "供应商来源", exact: true }),
   ).toBeVisible();
   await page.reload();
   await expect(

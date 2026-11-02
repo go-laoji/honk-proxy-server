@@ -46,6 +46,7 @@ impl HpsClient {
         let mut http = Client::builder()
             .timeout(timeout)
             .redirect(reqwest::redirect::Policy::none())
+            .retry(reqwest::retry::never())
             .no_proxy();
         if let Some(certificate) = certificate {
             let certificates = reqwest::Certificate::from_pem_bundle(certificate)
@@ -97,6 +98,83 @@ impl HpsClient {
             .join(path)
             .map_err(|_| ClientError::InvalidEndpoint)?;
         Self::decode(self.http.post(url).json(body).send().await?).await
+    }
+    pub async fn providers(
+        &self,
+    ) -> Result<Vec<hps_domain::ProviderView<hps_config::ProviderConfig>>, ClientError> {
+        self.get_json("api/v1/providers").await
+    }
+    pub async fn provider(
+        &self,
+        id: &str,
+    ) -> Result<hps_domain::ProviderDetail<hps_config::ProviderConfig>, ClientError> {
+        self.get_json(&format!("api/v1/providers/{}", segment(id)?))
+            .await
+    }
+    pub async fn save_provider(
+        &self,
+        configuration: hps_config::ProviderConfig,
+        expected_revision: i64,
+    ) -> Result<hps_domain::ConfigActivationResult, ClientError> {
+        self.post_body(
+            &format!("api/v1/providers/{}/save", segment(&configuration.id)?),
+            &hps_config::ProviderSave {
+                configuration,
+                expected_revision,
+            },
+        )
+        .await
+    }
+    pub async fn delete_provider(
+        &self,
+        id: &str,
+        expected_revision: i64,
+    ) -> Result<hps_domain::ConfigActivationResult, ClientError> {
+        self.post_body(
+            &format!("api/v1/providers/{}/delete", segment(id)?),
+            &hps_domain::ExpectedRevision { expected_revision },
+        )
+        .await
+    }
+    pub async fn extract_provider(
+        &self,
+        id: &str,
+        request_id: String,
+    ) -> Result<hps_domain::ExtractionTask, ClientError> {
+        self.post_body(
+            &format!("api/v1/providers/{}/extract", segment(id)?),
+            &hps_domain::ExtractionInput { request_id },
+        )
+        .await
+    }
+    pub async fn provider_task(&self, id: i64) -> Result<hps_domain::ExtractionTask, ClientError> {
+        self.get_json(&format!("api/v1/provider-tasks/{id}")).await
+    }
+    pub async fn provider_leases(
+        &self,
+        id: &str,
+        before: Option<i64>,
+    ) -> Result<Vec<hps_domain::LeaseInfo>, ClientError> {
+        self.get_json(&format!(
+            "api/v1/providers/{}/leases{}",
+            segment(id)?,
+            before.map_or_else(String::new, |id| format!("?before={id}"))
+        ))
+        .await
+    }
+    pub async fn provider_diagnostic(
+        &self,
+        id: &str,
+        kind: &str,
+    ) -> Result<serde_json::Value, ClientError> {
+        if !["quota", "whitelist"].contains(&kind) {
+            return Err(ClientError::InvalidEndpoint);
+        }
+        self.post_json(&format!(
+            "api/v1/providers/{}/diagnose/{kind}",
+            segment(id)?
+        ))
+        .await
     }
     pub async fn config_workspace(&self) -> Result<hps_domain::ConfigWorkspace, ClientError> {
         self.get_json("api/v1/config/workspace").await
@@ -201,6 +279,19 @@ impl HpsClient {
         }
         self.post_json(&format!("api/v1/inbounds/{id}/{action}"))
             .await
+    }
+}
+
+fn segment(id: &str) -> Result<&str, ClientError> {
+    if id.is_empty()
+        || id.len() > 64
+        || !id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"_-".contains(&b))
+    {
+        Err(ClientError::InvalidEndpoint)
+    } else {
+        Ok(id)
     }
 }
 

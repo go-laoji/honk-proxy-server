@@ -115,7 +115,11 @@ impl Engine {
         previous: Option<&Arc<Self>>,
     ) -> Result<Arc<Self>, EngineError> {
         config.validate().map_err(|_| EngineError::Configuration)?;
-        let dialer = Arc::new(Dialer::new(&config).map_err(|_| EngineError::Tls)?);
+        let mut dialer = Dialer::new(&config).map_err(|_| EngineError::Tls)?;
+        if let Some(old) = previous {
+            dialer.pool = old.dialer.pool.clone();
+        }
+        let dialer = Arc::new(dialer);
         let mut entries = BTreeMap::new();
         for config in config.inbounds {
             let old = previous.and_then(|engine| engine.entries.get(&config.id));
@@ -174,6 +178,12 @@ impl Engine {
             cancel: CancellationToken::new(),
             generation: std::sync::atomic::AtomicI64::new(0),
         }))
+    }
+    pub fn dynamic_pool(&self) -> Arc<crate::pool::DynamicPool> {
+        self.dialer.pool.clone()
+    }
+    pub fn set_provider_sources(&self, sources: std::collections::HashMap<String, String>) {
+        self.dialer.set_sources(sources);
     }
     pub async fn start_enabled(self: &Arc<Self>) -> Result<(), EngineError> {
         for entry in self.entries.values().filter(|entry| entry.config.enabled) {

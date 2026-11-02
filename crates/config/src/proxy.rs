@@ -166,7 +166,7 @@ pub fn valid_host(host: &str) -> bool {
                     && part.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'-')
             }))
 }
-fn valid_id(id: &str) -> bool {
+pub(crate) fn valid_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 64
         && id

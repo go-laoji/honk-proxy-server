@@ -42,6 +42,10 @@ enum Command {
         #[command(subcommand)]
         command: InboundCommand,
     },
+    Provider {
+        #[command(subcommand)]
+        command: ProviderCommand,
+    },
     Linux {
         #[command(subcommand)]
         command: LinuxCommand,
@@ -129,6 +133,44 @@ enum InboundCommand {
     Stop { id: String },
 }
 
+#[derive(Subcommand)]
+enum ProviderCommand {
+    List,
+    Show {
+        id: String,
+    },
+    Save {
+        path: PathBuf,
+        #[arg(long)]
+        expected_revision: i64,
+    },
+    Delete {
+        id: String,
+        #[arg(long)]
+        expected_revision: i64,
+    },
+    Extract {
+        id: String,
+        #[arg(long)]
+        request_id: Option<String>,
+        #[arg(long)]
+        wait: bool,
+    },
+    Task {
+        id: i64,
+    },
+    Leases {
+        id: String,
+        #[arg(long)]
+        before: Option<i64>,
+    },
+    Diagnose {
+        id: String,
+        #[arg(value_parser=["quota","whitelist"])]
+        kind: String,
+    },
+}
+
 #[tokio::main]
 async fn main() -> ExitCode {
     let args = Args::parse();
@@ -151,7 +193,12 @@ async fn main() -> ExitCode {
                     serde_json::to_string_pretty(&value).expect("JSON value")
                 ),
             }
-            if value.get("valid").and_then(serde_json::Value::as_bool) == Some(false) {
+            if value
+                .get("state")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|s| ["failed", "outcome_unknown", "discarded"].contains(&s))
+                || value.get("valid").and_then(serde_json::Value::as_bool) == Some(false)
+            {
                 ExitCode::from(5)
             } else {
                 ExitCode::SUCCESS
@@ -232,6 +279,88 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
             InboundCommand::Stop { id } => {
                 serde_json::to_value(client.stop_inbound(id).await.map_err(client_error)?)
             }
+        },
+        Command::Provider { command } => match command {
+            ProviderCommand::List => {
+                serde_json::to_value(client.providers().await.map_err(client_error)?)
+            }
+            ProviderCommand::Show { id } => {
+                serde_json::to_value(client.provider(id).await.map_err(client_error)?)
+            }
+            ProviderCommand::Save {
+                path,
+                expected_revision,
+            } => {
+                let metadata = std::fs::metadata(path).map_err(|e| (2, e.to_string()))?;
+                if !metadata.is_file() || metadata.len() > 512 * 1024 {
+                    return Err((
+                        2,
+                        "provider TOML must be a regular file no larger than 512 KiB".into(),
+                    ));
+                }
+                let body = std::fs::read_to_string(path).map_err(|e| (2, e.to_string()))?;
+                let configuration: hps_config::ProviderConfig = toml::from_str(&body)
+                    .map_err(|_| (2, "invalid provider TOML; check syntax and fields".into()))?;
+                serde_json::to_value(
+                    client
+                        .save_provider(configuration, *expected_revision)
+                        .await
+                        .map_err(client_error)?,
+                )
+            }
+            ProviderCommand::Delete {
+                id,
+                expected_revision,
+            } => serde_json::to_value(
+                client
+                    .delete_provider(id, *expected_revision)
+                    .await
+                    .map_err(client_error)?,
+            ),
+            ProviderCommand::Extract {
+                id,
+                request_id,
+                wait,
+            } => {
+                let key = request_id
+                    .clone()
+                    .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+                eprintln!("extraction request_id={key}; reuse this ID if acknowledgment is lost");
+                let mut task = client
+                    .extract_provider(id, key)
+                    .await
+                    .map_err(client_error)?;
+                if *wait {
+                    let until = tokio::time::Instant::now() + Duration::from_secs(args.timeout);
+                    while ["accepted", "requesting"].contains(&task.state.as_str()) {
+                        if tokio::time::Instant::now() >= until {
+                            eprintln!(
+                                "extraction task {} continues in daemon; inspect it with provider task",
+                                task.id
+                            );
+                            break;
+                        }
+                        tokio::time::sleep(Duration::from_millis(250)).await;
+                        task = client.provider_task(task.id).await.map_err(client_error)?;
+                    }
+                }
+                serde_json::to_value(task)
+            }
+            ProviderCommand::Task { id } => {
+                serde_json::to_value(client.provider_task(*id).await.map_err(client_error)?)
+            }
+            ProviderCommand::Leases { id, before } => serde_json::to_value(
+                client
+                    .provider_leases(id, *before)
+                    .await
+                    .map_err(client_error)?,
+            ),
+            ProviderCommand::Diagnose { id, kind } => serde_json::to_value(
+                client
+                    .provider_diagnostic(id, kind)
+                    .await
+                    .map_err(client_error)?,
+            ),
         },
         Command::Linux {
             command: LinuxCommand::Preflight,

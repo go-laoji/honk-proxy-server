@@ -1,4 +1,5 @@
 //! Bounded asynchronous facade over one SQLite owner thread.
+pub mod provider;
 use fs2::FileExt;
 use hps_config::DaemonConfig;
 use rusqlite::{Connection, OptionalExtension, params};
@@ -27,6 +28,10 @@ pub enum StorageError {
     Io(#[from] std::io::Error),
     #[error("database schema is newer than this daemon")]
     SchemaTooNew,
+    #[error("provider request interval has not elapsed")]
+    ProviderRateLimited,
+    #[error("provider pool storage budget exceeded")]
+    PoolFull,
     #[error("storage worker is unavailable")]
     Closed,
 }
@@ -73,7 +78,7 @@ pub struct Workspace {
 type Job = Box<dyn FnOnce(&mut Connection) + Send>;
 enum Message {
     Job(Job),
-    Stop(oneshot::Sender<()>),
+    Stop(oneshot::Sender<Result<(), StorageError>>),
 }
 #[derive(Clone)]
 pub struct Store {
@@ -162,9 +167,10 @@ impl Store {
                     match message {
                         Message::Job(job) => job(&mut connection),
                         Message::Stop(done) => {
+                            let result=connection.execute("UPDATE provider_clock SET clean_shutdown=1,observed_at=max(observed_at,?1) WHERE singleton=1",[unix_now()]).map(|_|()).map_err(StorageError::from);
                             drop(connection);
                             drop(lock);
-                            let _ = done.send(());
+                            let _ = done.send(result);
                             return;
                         }
                     }
@@ -192,7 +198,7 @@ impl Store {
             .send(Message::Stop(tx))
             .await
             .map_err(|_| StorageError::Closed)?;
-        rx.await.map_err(|_| StorageError::Closed)
+        rx.await.map_err(|_| StorageError::Closed)?
     }
     pub async fn workspace(&self) -> Result<Workspace, StorageError> {
         self.call(|connection|{
@@ -348,7 +354,7 @@ fn migrate(connection: &mut Connection, bootstrap: &str) -> Result<(), StorageEr
         [],
         |row| row.get(0),
     )?;
-    if version > 2 {
+    if version > 4 {
         return Err(StorageError::SchemaTooNew);
     }
     let transaction =
@@ -367,6 +373,41 @@ fn migrate(connection: &mut Connection, bootstrap: &str) -> Result<(), StorageEr
             [unix_now()],
         )?;
     }
+    if version < 3 {
+        transaction.execute_batch(include_str!("../migrations/0003_provider_leases.up.sql"))?;
+        transaction.execute(
+            "INSERT INTO schema_migrations(version,applied_at) VALUES(3,?1)",
+            [unix_now()],
+        )?;
+    }
+    transaction.execute("UPDATE provider_tasks SET state=CASE WHEN state='accepted' THEN 'failed' ELSE 'outcome_unknown' END,finished_at=?1,error_code='process_interrupted' WHERE state IN ('accepted','requesting')",[unix_now()])?;
+    if version < 4 {
+        transaction.execute_batch(include_str!("../migrations/0004_lease_clock.up.sql"))?;
+        transaction.execute(
+            "INSERT INTO schema_migrations(version,applied_at) VALUES(4,?1)",
+            [unix_now()],
+        )?;
+    }
+    let observed: Option<(i64, bool)> = transaction
+        .query_row(
+            "SELECT observed_at,clean_shutdown FROM provider_clock WHERE singleton=1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()?;
+    if observed.is_some_and(|(time, _)| unix_now() < time) {
+        transaction.execute(
+            "UPDATE provider_leases SET state='clock_rollback' WHERE state='active'",
+            [],
+        )?;
+    } else if observed.is_some_and(|(_, clean)| !clean) {
+        // A crashed process cannot prove elapsed monotonic time. Retire instead of extending paid leases.
+        transaction.execute(
+            "UPDATE provider_leases SET state='revoked' WHERE state='active'",
+            [],
+        )?;
+    }
+    transaction.execute("INSERT INTO provider_clock(singleton,observed_at,clean_shutdown) VALUES(1,?1,0) ON CONFLICT(singleton) DO UPDATE SET observed_at=max(observed_at,excluded.observed_at),clean_shutdown=0",[unix_now()])?;
     let count: i64 =
         transaction.query_row("SELECT count(*) FROM config_head", [], |row| row.get(0))?;
     if count == 0 {

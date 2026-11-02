@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, path::Path};
 
+mod provider;
+pub use provider::*;
 mod proxy;
 pub use proxy::*;
 
@@ -13,6 +15,7 @@ pub struct DaemonConfig {
     pub management_tls: Option<ServerTls>,
     pub retention: RetentionConfig,
     pub proxy: ProxyConfig,
+    pub providers: Vec<ProviderConfig>,
 }
 
 impl Default for DaemonConfig {
@@ -24,6 +27,7 @@ impl Default for DaemonConfig {
             management_tls: None,
             retention: RetentionConfig::default(),
             proxy: ProxyConfig::default(),
+            providers: vec![],
         }
     }
 }
@@ -86,6 +90,10 @@ impl DaemonConfig {
     }
 
     pub fn restore_redacted(&mut self, original: &Self) -> Result<(), ConfigError> {
+        for provider in &mut self.providers {
+            provider
+                .restore_redacted(original.providers.iter().find(|old| old.id == provider.id))?;
+        }
         for upstream in &mut self.proxy.upstreams {
             if let Some(credentials) = &mut upstream.credentials {
                 let old = original
@@ -136,12 +144,27 @@ impl DaemonConfig {
         if self.log_filter.trim().is_empty() {
             return Err(ConfigError::Invalid("log_filter cannot be empty".into()));
         }
+        if self.providers.len() > 64 {
+            return Err(ConfigError::Invalid("provider count exceeds 64".into()));
+        }
+        let mut ids = std::collections::HashSet::new();
+        for provider in &self.providers {
+            provider.validate()?;
+            if !ids.insert(&provider.id) {
+                return Err(ConfigError::Invalid("duplicate provider ID".into()));
+            }
+        }
         self.proxy.validate()?;
         Ok(())
     }
 
     pub fn redacted(&self) -> Self {
         let mut config = self.clone();
+        config.providers = self
+            .providers
+            .iter()
+            .map(ProviderConfig::redacted)
+            .collect();
         for upstream in &mut config.proxy.upstreams {
             if let Some(credentials) = &mut upstream.credentials {
                 credentials.username = "[REDACTED]".into();
