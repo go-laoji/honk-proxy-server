@@ -400,8 +400,9 @@ pub(super) async fn events_subscribe(
         .lock()
         .map_err(|_| error("native_event_state", "connection state unavailable"))?
         .clone();
-    let client =
-        HpsClient::new(&endpoint, Duration::from_secs(10)).map_err(NativeApiError::from)?;
+    let client = endpoint
+        .client(Duration::from_secs(10))
+        .map_err(NativeApiError::from)?;
     state.start(window.label().into(), request, channel, client)
 }
 #[tauri::command]

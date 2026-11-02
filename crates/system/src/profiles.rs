@@ -82,6 +82,7 @@ impl Profiles {
 #[derive(Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Change {
+    Unselect,
     Upsert { profile: Profile },
     Remove { id: String },
     Select { id: String },
@@ -129,6 +130,7 @@ impl Store {
             return Err("profile revision conflict; reload current profiles".into());
         }
         match change {
+            Change::Unselect => state.selected = None,
             Change::Upsert { mut profile } => {
                 profile.validate()?;
                 if let Some(existing) = state.profiles.iter_mut().find(|p| p.id == profile.id) {

@@ -71,6 +71,16 @@ fn uid() -> u32 {
         0
     }
 }
+pub fn desktop_is_root() -> bool {
+    #[cfg(unix)]
+    {
+        uid() == 0
+    }
+    #[cfg(not(unix))]
+    {
+        false
+    }
+}
 fn home() -> Result<PathBuf> {
     std::env::var_os("HOME")
         .map(PathBuf::from)

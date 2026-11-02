@@ -2,6 +2,7 @@
 mod files;
 mod process;
 pub mod profiles;
+pub mod proxy;
 pub mod service;
 
 pub type Result<T> = std::result::Result<T, String>;

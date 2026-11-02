@@ -3,8 +3,45 @@ use std::{sync::Mutex, time::Duration};
 use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
 mod events;
+mod local;
 
-struct Connection(Mutex<String>);
+#[derive(Clone)]
+struct Target {
+    endpoint: String,
+    ca_certificate: Option<Vec<u8>>,
+    profile_id: Option<String>,
+    local: bool,
+}
+impl Target {
+    fn client(&self, timeout: Duration) -> Result<HpsClient, hps_client::ClientError> {
+        HpsClient::with_ca(&self.endpoint, timeout, self.ca_certificate.as_deref())
+    }
+    fn address(endpoint: String) -> Self {
+        Self {
+            endpoint,
+            ca_certificate: None,
+            profile_id: None,
+            local: false,
+        }
+    }
+    fn profile(profile: &hps_system::profiles::Profile) -> Result<Self, String> {
+        let mut profile = profile.clone();
+        profile.validate()?;
+        let ca_certificate = profile
+            .ca_certificate
+            .as_ref()
+            .map(std::fs::read)
+            .transpose()
+            .map_err(|e| e.to_string())?;
+        Ok(Self {
+            endpoint: profile.endpoint,
+            ca_certificate,
+            profile_id: Some(profile.id),
+            local: profile.kind == hps_system::profiles::Kind::Local,
+        })
+    }
+}
+struct Connection(Mutex<Target>);
 #[derive(Debug, serde::Serialize)]
 struct NativeApiError {
     message: String,
@@ -46,7 +83,7 @@ fn get_endpoint(state: tauri::State<'_, Connection>) -> Result<String, String> {
     state
         .0
         .lock()
-        .map(|s| s.clone())
+        .map(|s| s.endpoint.clone())
         .map_err(|_| "connection state unavailable".into())
 }
 
@@ -72,8 +109,13 @@ fn set_endpoint(
     )
     .map_err(|e| e.to_string())?;
     std::fs::rename(temporary, directory.join("connection.json")).map_err(|e| e.to_string())?;
+    let store = hps_system::profiles::Store::new(&hps_system::state_dir()?);
+    let profiles = store.load()?;
+    if profiles.selected.is_some() {
+        store.change(profiles.revision, hps_system::profiles::Change::Unselect)?;
+    }
     subscriptions.change_target().map_err(|e| e.message)?;
-    *current = endpoint;
+    *current = Target::address(endpoint);
     Ok(())
 }
 
@@ -410,8 +452,9 @@ async fn api_post(
         .map_err(|_| "connection state unavailable")?
         .clone();
     let timeout = if path == "api/v1/dns/resolve" { 65 } else { 10 };
-    let client =
-        HpsClient::new(&endpoint, Duration::from_secs(timeout)).map_err(NativeApiError::from)?;
+    let client = endpoint
+        .client(Duration::from_secs(timeout))
+        .map_err(NativeApiError::from)?;
     match body {
         Some(body) => client.post_body(&path, &body).await,
         None => client.post_json(&path).await,
@@ -430,7 +473,8 @@ async fn save_config_export(
         .lock()
         .map_err(|_| "connection state unavailable")?
         .clone();
-    let export = HpsClient::new(&endpoint, Duration::from_secs(10))
+    let export = endpoint
+        .client(Duration::from_secs(10))
         .map_err(|error| error.to_string())?
         .export_config(Some(revision))
         .await
@@ -469,7 +513,8 @@ async fn api_get(
         .lock()
         .map_err(|_| "connection state unavailable")?
         .clone();
-    HpsClient::new(&endpoint, Duration::from_secs(10))
+    endpoint
+        .client(Duration::from_secs(10))
         .map_err(NativeApiError::from)?
         .get_json(&path)
         .await
@@ -487,6 +532,9 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+            if hps_system::service::desktop_is_root() {
+                return Err("Desktop must run as an ordinary user; use the administrator CLI for system services".into());
+            }
             let saved = app
                 .path()
                 .app_config_dir()
@@ -494,9 +542,13 @@ pub fn run() {
                 .and_then(|p| std::fs::read(p.join("connection.json")).ok())
                 .and_then(|bytes| serde_json::from_slice::<String>(&bytes).ok())
                 .filter(|endpoint| HpsClient::new(endpoint, Duration::from_secs(10)).is_ok());
-            app.manage(Connection(Mutex::new(
-                saved.unwrap_or_else(|| "http://127.0.0.1:17900/".into()),
-            )));
+            let store=hps_system::profiles::Store::new(&hps_system::state_dir()?);
+            let profiles=store.load()?;
+            let target=match profiles.active() {
+                Some(profile) => Target::profile(profile)?,
+                None => Target::address(saved.unwrap_or_else(|| "http://127.0.0.1:17900/".into())),
+            };
+            app.manage(Connection(Mutex::new(target)));
             app.manage(events::NativeEvents::default());
             Ok(())
         })
@@ -521,6 +573,13 @@ pub fn run() {
             api_post,
             save_config_export,
             get_web_build_id,
+            local::profiles_get,
+            local::profiles_change,
+            local::local_context,
+            local::local_service_install,
+            local::local_service_control,
+            local::local_proxy_apply,
+            local::local_proxy_restore,
             events::events_context,
             events::events_subscribe,
             events::events_cancel,
