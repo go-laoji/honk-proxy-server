@@ -66,3 +66,5 @@
 第六批：#24 在协议、订阅代际和来源寿命修复与组合验收后关闭，`protocol-subscriptions` 原 tip `9639b69` 独立 finish 为双父合并 `d3123be`，内容树一致，已归档对应 managed worktree，原 tip 由第二父保留。#25/#26 继续按该顺序收尾；用户随后明确允许编译没有报错时先合并代码，仍在进行的 x86 静态 release 额外发行验收单独记录为 pending，不提前计为通过。
 
 第七批：按用户“编译没有问题可以先合并”的最新指示，#25 在核心组合验收完成、x86 额外静态发行验证明确 pending 的边界下回复并关闭。`backup-desktop-diagnostics` 原 tip `fedc475` finish 为 `92e95a6`，双父与内容树一致；完成后 detach，保留该 checkout 供正在运行的冻结发行构建使用。随后在 #26 分支 merge develop，按顺序处理最后的储备契约分支；不因收尾而中断构建或提前归档其目录。
+
+第八批：#26 储备范围与兼容契约复核后回复并关闭，`future-platform-contracts` 原 tip `5d8377a` finish 为 `4a45a58`。已回到主工作区 develop；累计 22 次 finish 的双父、第二父原 tip、内容树一致及 develop 可达性逐条复核通过，所有原提交记录保留，当前无 feature 引用。`main` 仍为 `18d5899`，未 push/删除远端/发布。x86 额外静态发行验收按用户授权继续在冻结输入上运行，与已完成的代码合并分开记录；构建结束前保留其 detached worktree。此后只做有范围的文档与验收维护提交，不为记录最终 merge SHA 再制造空功能分支。

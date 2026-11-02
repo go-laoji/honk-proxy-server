@@ -213,6 +213,16 @@
       "issues": [
         25
       ]
+    },
+    {
+      "order": 22,
+      "branch": "feature/future-platform-contracts",
+      "feature_head": "5d8377a5b50101454fb55b516198573a65c572b4",
+      "merge_commit": "4a45a58448de9d5d78b2f8afbdaebe31b4a79211",
+      "tree_unchanged_from_feature": true,
+      "issues": [
+        26
+      ]
     }
   ],
   "issue_states": [
@@ -320,9 +330,51 @@
       "title": "P0 T15: Linux 透明数据面产品化与恢复",
       "url": "https://github.com/go-laoji/honk-proxy-server/issues/20",
       "closed_at": "2026-11-02T06:22:07Z"
+    },
+    {
+      "number": 21,
+      "state": "closed",
+      "title": "P0 T16: Desktop 本地远程档案与系统服务集成",
+      "url": "https://github.com/go-laoji/honk-proxy-server/issues/21",
+      "closed_at": "2026-11-02T09:30:51Z"
+    },
+    {
+      "number": 22,
+      "state": "closed",
+      "title": "P0 T17: 分包发行、端到端与发布门槛",
+      "url": "https://github.com/go-laoji/honk-proxy-server/issues/22",
+      "closed_at": "2026-11-02T10:40:00Z"
+    },
+    {
+      "number": 23,
+      "state": "closed",
+      "title": "P1 T18: 历史观测、诊断导出与任务增强",
+      "url": "https://github.com/go-laoji/honk-proxy-server/issues/23",
+      "closed_at": "2026-11-02T12:28:47Z"
+    },
+    {
+      "number": 24,
+      "state": "closed",
+      "title": "P1 T19: SOCKS5 UDP、订阅与高级分组扩展",
+      "url": "https://github.com/go-laoji/honk-proxy-server/issues/24",
+      "closed_at": "2026-11-02T12:54:09Z"
+    },
+    {
+      "number": 25,
+      "state": "closed",
+      "title": "P1 T20: 备份恢复、系统体验与高级 Linux 诊断",
+      "url": "https://github.com/go-laoji/honk-proxy-server/issues/25",
+      "closed_at": "2026-11-02T15:15:25Z"
+    },
+    {
+      "number": 26,
+      "state": "closed",
+      "title": "P2 T21: 多实例与其他平台等储备范围",
+      "url": "https://github.com/go-laoji/honk-proxy-server/issues/26",
+      "closed_at": "2026-11-02T15:16:41Z"
     }
   ],
-  "develop_head": "92e95a63a941aa4e52141ec9423f4929196ef68e",
+  "develop_head": "4a45a58448de9d5d78b2f8afbdaebe31b4a79211",
   "active_sync_commit": "0fb0fcf65aa6e3c1606a31d358b16e05ea4af2dc",
   "active_source_tree_unchanged": true,
   "restored_work_files": 6,
@@ -357,13 +409,12 @@
       "reason": "active implementation and real kernel acceptance"
     }
   ],
-  "retained": [
-    {
-      "branch": "feature/future-platform-contracts",
-      "issue": 26,
-      "reason": "parallel implementation; FIFO acceptance and finish pending"
-    }
-  ],
+  "retained": [],
   "second_batch_joint_acceptance_commit": "4680e2c1829278743ab06e31877ee37b9ff037bd",
-  "active_feature": "feature/future-platform-contracts"
+  "active_feature": null,
+  "develop_head_kind": "last_feature_finish_before_followup_documentation",
+  "total_independent_feature_finishes": 22,
+  "source_revision": "862ddad624403e6f81bc994a7fe262ac04b7fb01",
+  "x86_extra_static_release_validation": "pending; compiler active without errors; not counted as passed",
+  "latest_user_merge_authorization": "编译没有问题就可以先来做代码的合并了"
 }
