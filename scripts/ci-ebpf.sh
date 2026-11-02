@@ -18,7 +18,7 @@ cp /tmp/hps-bpf/bpfel-unknown-none/release/hps-ebpf /out/hps-ebpf.elf
 # This immutable project revision really used ABI 3. Keep it only as a rejection
 # fixture; never ship it as a working capture object.
 mkdir -p /tmp/hps-legacy
-git -c safe.directory=/work archive 225fbed3d9810fc6d71048b49b4cefbedfad32a4 ebpf crates/ebpf-abi | tar -xf - -C /tmp/hps-legacy
+git -c safe.directory=/work archive 225fbed3d9810fc6d71048b49b4cefbedfad32a4 | tar -xf - -C /tmp/hps-legacy
 cd /tmp/hps-legacy/ebpf
 CARGO_TARGET_DIR=/tmp/hps-legacy-target cargo build --locked --target bpfel-unknown-none -Z build-std=core --release
 cp /tmp/hps-legacy-target/bpfel-unknown-none/release/hps-ebpf /out/hps-ebpf-abi3.elf
