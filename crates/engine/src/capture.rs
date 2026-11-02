@@ -9,6 +9,33 @@ use std::sync::{
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc};
 use tokio_util::sync::CancellationToken;
 
+/// Per-flow completion is distinct from requesting cancellation. A capture
+/// runtime must await this before retiring/reusing the kernel tuple identity.
+pub struct CapturedTcpSession {
+    cancel: CancellationToken,
+    complete: CancellationToken,
+}
+impl CapturedTcpSession {
+    pub(crate) fn new(cancel: CancellationToken) -> Self {
+        Self {
+            cancel,
+            complete: CancellationToken::new(),
+        }
+    }
+    pub(crate) fn completion_guard(&self) -> tokio_util::sync::DropGuard {
+        self.complete.clone().drop_guard()
+    }
+    pub fn cancel(&self) {
+        self.cancel.cancel();
+    }
+    pub fn is_finished(&self) -> bool {
+        self.complete.is_cancelled()
+    }
+    pub async fn finished(&self) {
+        self.complete.cancelled().await;
+    }
+}
+
 pub struct CaptureBudget {
     pub(crate) config: LinuxCaptureConfig,
     pending: Arc<Semaphore>,
@@ -130,6 +157,7 @@ pub struct CapturedUdpSession {
     sender: mpsc::Sender<QueuedDatagram>,
     budget: Arc<CaptureBudget>,
     pub(crate) gate: Arc<ReplyGate>,
+    complete: CancellationToken,
 }
 impl CapturedUdpSession {
     pub(crate) fn channel(admission: &UdpAdmission) -> (Self, mpsc::Receiver<QueuedDatagram>) {
@@ -143,6 +171,7 @@ impl CapturedUdpSession {
                     lock: Mutex::new(()),
                     cancel: admission.admission.cancel.clone(),
                 }),
+                complete: CancellationToken::new(),
             },
             receiver,
         )
@@ -175,5 +204,16 @@ impl CapturedUdpSession {
     }
     pub fn is_closed(&self) -> bool {
         self.gate.cancel.is_cancelled() || self.sender.is_closed()
+    }
+    pub(crate) fn completion_guard(&self) -> tokio_util::sync::DropGuard {
+        self.complete.clone().drop_guard()
+    }
+    /// Unlike is_closed (which also reports requested cancellation), this is
+    /// signalled after the tracked task has dropped every owned flow resource.
+    pub fn is_finished(&self) -> bool {
+        self.complete.is_cancelled()
+    }
+    pub async fn finished(&self) {
+        self.complete.cancelled().await;
     }
 }

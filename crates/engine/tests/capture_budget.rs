@@ -304,10 +304,11 @@ async fn udp_owner_bounds_pending_sessions_inflight_bytes_and_cancels_without_st
         .await
         .unwrap();
     session.cancel();
-    scope.cancel();
-    tokio::time::timeout(Duration::from_secs(1), engine.wait_captured_idle())
+    tokio::time::timeout(Duration::from_secs(1), session.finished())
         .await
         .unwrap();
+    assert!(session.is_finished());
+    scope.cancel();
     let usage = budget.usage();
     assert_eq!(
         (
@@ -352,6 +353,7 @@ async fn udp_owner_bounds_pending_sessions_inflight_bytes_and_cancels_without_st
         .await
         .unwrap();
     assert!(idle.is_closed());
+    assert!(idle.is_finished());
     assert_eq!(budget.usage().udp_sessions, 0);
     assert_eq!(budget.usage().closed_udp_sessions, 2);
     assert_eq!(relay.datagrams.load(Ordering::Relaxed), 4);

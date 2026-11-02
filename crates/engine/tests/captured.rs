@@ -139,7 +139,7 @@ async fn captured_tcp_contract_shares_process_rules_group_admission_bytes_discon
 
         let mut client = TcpStream::connect(destination).await.unwrap();
         let (stream, source) = target.accept().await.unwrap();
-        engine
+        let captured = engine
             .spawn_captured_tcp_scoped(
                 stream,
                 context(source, destination),
@@ -175,6 +175,7 @@ async fn captured_tcp_contract_shares_process_rules_group_admission_bytes_discon
         assert_eq!(flow.bytes_down, 23);
         assert_eq!(budget.usage().pending, 0);
         assert_eq!(registry.active("selected"), 1);
+        assert!(!captured.is_finished());
         assert!(!engine.is_idle());
 
         let capacity_client = TcpStream::connect(destination).await.unwrap();
@@ -191,13 +192,12 @@ async fn captured_tcp_contract_shares_process_rules_group_admission_bytes_discon
                 .unwrap()
                 .is_err()
         );
-        tokio::time::timeout(Duration::from_secs(2), async {
-            while !engine.is_idle() {
-                tokio::task::yield_now().await;
-            }
-        })
-        .await
-        .unwrap();
+        tokio::time::timeout(Duration::from_secs(2), captured.finished())
+            .await
+            .unwrap();
+        assert!(captured.is_finished());
+        assert!(engine.is_idle());
+        assert_eq!(budget.usage().pending, 0);
         assert_eq!(registry.active("selected"), 0);
         assert_eq!(proxy.requests.lock().unwrap().len(), 1);
 

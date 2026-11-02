@@ -2,7 +2,7 @@
 //! connection observations, global capacity and bandwidth budget as explicit
 //! ingress. Only the capture owner may provide independently verified metadata.
 use super::*;
-use crate::capture::CaptureAdmission;
+use crate::capture::{CaptureAdmission, CapturedTcpSession};
 use crate::{ProxyError, target::Target, traffic::relay};
 use hps_domain::{FlowOrigin, RoutingContext, SelectionTransport};
 use tokio::net::TcpStream;
@@ -32,6 +32,7 @@ impl Engine {
             revision,
             CaptureAdmission::standalone(self.cancel.child_token()),
         )
+        .map(|_| ())
     }
     pub fn spawn_captured_tcp_scoped(
         self: &Arc<Self>,
@@ -39,7 +40,7 @@ impl Engine {
         mut context: RoutingContext,
         revision: i64,
         admission: CaptureAdmission,
-    ) -> Result<(), ProxyError> {
+    ) -> Result<CapturedTcpSession, ProxyError> {
         let _registration = self.capture_registration.lock().unwrap();
         if self.cancel.is_cancelled()
             || self.capture_tracker.is_closed()
@@ -59,12 +60,15 @@ impl Engine {
             .acquire(self.limits.max_connections)
             .ok_or(ProxyError::LocalResource)?;
         let engine = self.clone();
+        let session = CapturedTcpSession::new(admission.cancel.clone());
+        let complete = session.completion_guard();
         self.capture_tracker.spawn(async move {
+            let _complete = complete;
             engine
                 .run_captured_tcp(stream, context, target, permit, admission)
                 .await;
         });
-        Ok(())
+        Ok(session)
     }
     pub(super) fn capture_target(
         &self,

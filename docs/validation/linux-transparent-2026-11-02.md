@@ -117,3 +117,11 @@ ABI v3 要求进程和流使用 NO_PREALLOC 普通 HashMap，加载器拒绝旧 
 实际 aarch64 7.0.14 与 QEMU 6.12.115 都通过 73 条数据报的内核身份验收：双栈旧流在策略 7→8 后保持 7；精确退休后同 socket 的新 association 进入 8；旧代际退休请求拒绝且新流仍保留；comm 改名后仍是首次受选发送快照；两个独立 cookie 争用被丢弃；64 条元数据满容量时第 65 条丢弃，全部原身份仍在；回收一条后由客户端主动重试才接纳新流。69 次精确退休后 map 为空，路由/链接正常回收。对应 `linux-transparent-identity-kernel{7,612}-2026-11-02.json`。
 
 新对象 SHA256 `ae2c694f313abbc61c7c7a36dee119bb06dadaff3336d6ccf73ddac0a59143e3` 同时重新通过两个内核的完整策略快照压力项、TCP 三类上游与 Direct/SOCKS5 UDP 回归；ABI 普通 5 项、Linux/macOS 相关 Clippy、格式与 diff 检查通过。本批为内核身份/代际基础，不代表持久配置和完整 Daemon 热更已经联合通过。完整 ready 仍为 false，T11/T13/T15 保持开放。
+
+## 每条业务 owner 的结束通知（第十二批）
+
+TCP scoped 入口返回独立 CapturedTcpSession；UDP owner 也增加 finished/is_finished。取消请求与结束事实分开：结束通知的 guard 由实际受跟踪任务持有，在内层流任务返回、socket/节点占用/全局额度/pending/session/队列资源全部释放后才触发；任务未轮询即被丢弃也不会遗留一个永远等待的通知。丢弃句柄不隐式取消业务，原 TCP 便捷入口仍保持原调用语义。
+
+共享 TCP 的 HTTP/HTTPS/SOCKS5 用例验证活动期间未结束，管理断开后仅等待该流通知即可看到额度释放。UDP 用例仅取消并等待自身 owner，无需关闭整个捕获 tracker 或普通显式入口；延迟回包仍被阻断，空闲回收也产生完成通知。运行时可据此先等待对应流结束，再按第十一批的精确身份退休，避免为单流 GC 暂停所有 TCP/UDP 接纳。
+
+完整 engine 回归 Linux 50、macOS 45 项通过，零失败/忽略，相关 Clippy 通过。实际 7.0 内核再次执行 TCP/UDP 两项，六条 TCP 三类上游及 Direct/SOCKS5 各八条 UDP 全部通过，证据为 `linux-transparent-completion-kernel7-2026-11-02.json`。完整 Daemon、控制面、LAN 与最终矩阵仍待接入，full ready 保持 false。

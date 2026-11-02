@@ -57,7 +57,9 @@ impl Engine {
         let (session, receiver) = CapturedUdpSession::channel(&admission);
         let gate = session.gate.clone();
         let engine = self.clone();
+        let complete = session.completion_guard();
         self.capture_tracker.spawn(async move {
+            let _complete = complete;
             engine
                 .run_captured_udp(UdpRun {
                     reply,
