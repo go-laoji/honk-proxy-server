@@ -1,7 +1,7 @@
 {
   "date": "2026-11-02",
   "issue": 21,
-  "state": "pending_safe_window_recheck",
+  "state": "completed_with_explicit_os_write_validation_boundary",
   "implementation_commit": "5a73458",
   "macos_network_guard_commits": [
     "6e4515f",
@@ -44,7 +44,7 @@
     "forwarded_remote_cannot_modify_local_os": true,
     "window_exit_service_survives": true
   },
-  "current_safe_bundle_window": "locked; independent build passed; awaiting read-only visual recheck",
+  "current_safe_bundle_window": "actual settings/navigation/JSON read verified; development network-change guard visible and both write buttons disabled",
   "host_network_changes_disabled": true,
   "macos_actual_persistent_proxy_change_verified": false,
   "invalidated_evidence": [
@@ -56,5 +56,15 @@
     "SDK private-session staging: disk bytes, other service, DNS and IPv4 preserved",
     "test builds and development processes reject persistent writes"
   ],
-  "no_project_authentication": true
+  "no_project_authentication": true,
+  "current_safe_bundle_web_build_id": "dce029a9c028c30145f3d8938c6982c8a646bb60b820dffc75cf9c1929496b77",
+  "safe_application_exit": {
+    "owned_application_exit_signal": "SIGTERM",
+    "service_pid_unchanged": true,
+    "management_ready": true,
+    "proxy_ready": true,
+    "actual_proxy_payload_after_application_exit": true,
+    "host_network_changes_disabled": true
+  },
+  "local_visual_evidence": "target/validation/t16-proof/safe-settings.png"
 }
