@@ -7,7 +7,7 @@ use aya_ebpf::{
         bpf_map_lookup_elem, bpf_setsockopt, bpf_sk_assign, bpf_sk_release, bpf_skc_lookup_tcp,
     },
     macros::{cgroup_sock, cgroup_sock_addr, classifier, map},
-    maps::{HashMap, LpmTrie, LruHashMap, PerCpuArray, SockMap, lpm_trie::Key},
+    maps::{HashMap, LpmTrie, PerCpuArray, SockMap, lpm_trie::Key},
     programs::{SockAddrContext, SockContext, TcContext},
 };
 use hps_ebpf_abi::{
@@ -31,13 +31,15 @@ static HPS_TP_POLICY: HashMap<u32, CapturePolicy> = HashMap::with_max_entries(1,
 #[map]
 static HPS_TP_STATS: PerCpuArray<CaptureStats> = PerCpuArray::with_max_entries(3, 0);
 #[map]
-static HPS_TP_PROCESS: LruHashMap<u64, SocketProcess> =
-    LruHashMap::with_max_entries(TP_FLOW_CAPACITY, 0);
+static HPS_TP_PROCESS: HashMap<u64, SocketProcess> =
+    HashMap::with_max_entries(TP_FLOW_CAPACITY, 1);
 #[map]
 static HPS_TP_MODES: HashMap<u64, u32> = HashMap::with_max_entries(TP_FLOW_CAPACITY, 0);
 #[map]
-static HPS_TP_FLOWS: LruHashMap<FlowKey, CapturedFlow> =
-    LruHashMap::with_max_entries(TP_FLOW_CAPACITY, 0);
+// Identity and generation are insert-only. Only the owning user-space runtime
+// retires exact identities; capacity exhaustion drops rather than evicts a flow.
+static HPS_TP_FLOWS: HashMap<FlowKey, CapturedFlow> =
+    HashMap::with_max_entries(TP_FLOW_CAPACITY, 1);
 #[map]
 static HPS_TP_LAN: HashMap<u32, u8> = HashMap::with_max_entries(TP_MAX_INTERFACES, 0);
 #[map]
@@ -281,11 +283,15 @@ fn mark_socket(ctx: SockAddrContext, family: u32, sendmsg: bool) -> i32 {
         thread_id: identity.pid,
         command: bpf_get_current_comm().unwrap_or([0; 16]),
     };
-    if let Err(error) = HPS_TP_PROCESS.insert(&cookie, &process, 0) {
-        stats.errors = stats.errors.wrapping_add(1);
-        stats.last_error = i64::from(error);
-        stats.error_phase = 4;
-        return 0;
+    if let Err(error) = HPS_TP_PROCESS.insert(&cookie, &process, 1) {
+        let same_owner = unsafe { HPS_TP_PROCESS.get(&cookie) }
+            .is_some_and(|old| old.socket_cookie == cookie && old.pid == identity.tgid);
+        if !same_owner {
+            stats.errors = stats.errors.wrapping_add(1);
+            stats.last_error = i64::from(error);
+            stats.error_phase = 4;
+            return 0;
+        }
     }
     stats.observed_sockets = stats.observed_sockets.wrapping_add(1);
     mark = policy.capture_mark;
@@ -330,6 +336,19 @@ fn key(packet: &PacketHeader, policy: &CapturePolicy) -> FlowKey {
         netns_cookie: policy.netns_cookie,
     }
 }
+#[inline(always)]
+fn matches_packet(flow: &CapturedFlow, packet: &PacketHeader) -> bool {
+    packet.protocol != 6
+        || packet.tcp_flags & 2 == 0
+        || flow.initial_sequence == packet.tcp_sequence
+}
+#[inline(always)]
+fn touch(pointer: *mut CapturedFlow, now: u64) {
+    // The NO_PREALLOC hash keeps this node alive under the current BPF RCU
+    // read section. Never reinsert an old whole-value copy after another CPU's
+    // retirement. This timestamp is an approximate activity hint, not identity.
+    unsafe { core::ptr::write_volatile(core::ptr::addr_of_mut!((*pointer).last_seen_ns), now) };
+}
 #[classifier]
 pub fn hps_tp_egress(ctx: TcContext) -> i32 {
     // TCX links are created in the loader's network namespace. Linux 6.12 does
@@ -352,20 +371,20 @@ pub fn hps_tp_egress(ctx: TcContext) -> i32 {
         return NEXT;
     };
     let key = key(&packet, &policy);
-    let existing = unsafe { HPS_TP_FLOWS.get(&key) }.copied();
     let now = unsafe { bpf_ktime_get_ns() };
-    if let Some(mut flow) = existing
-        && flow.process.socket_cookie == cookie
-        && (packet.protocol != 6
-            || packet.tcp_flags & 2 == 0
-            || flow.initial_sequence == packet.tcp_sequence)
-    {
-        flow.last_seen_ns = now;
-        let _ = HPS_TP_FLOWS.insert(&key, &flow, 2);
-        return NEXT;
+    if let Some(pointer) = HPS_TP_FLOWS.get_ptr_mut(&key) {
+        let flow = unsafe { &*pointer };
+        if flow.origin == TP_LOCAL
+            && flow.process.socket_cookie == cookie
+            && matches_packet(flow, &packet)
+        {
+            touch(pointer, now);
+            return NEXT;
+        }
+        return reject_egress(-17, 10);
     }
     if packet.protocol == 6 && packet.tcp_flags & 0x12 != 2 {
-        return NEXT;
+        return reject_egress(-2, 11);
     }
     let flow = CapturedFlow {
         revision: policy.revision,
@@ -377,8 +396,32 @@ pub fn hps_tp_egress(ctx: TcContext) -> i32 {
         initial_sequence: packet.tcp_sequence,
         reserved: 0,
     };
-    let _ = HPS_TP_FLOWS.insert(&key, &flow, 0);
+    if let Err(error) = HPS_TP_FLOWS.insert(&key, &flow, 1) {
+        // Concurrent first packets may choose either complete policy, but only
+        // the first successful insertion owns this tuple until exact retirement.
+        if let Some(pointer) = HPS_TP_FLOWS.get_ptr_mut(&key) {
+            let old = unsafe { &*pointer };
+            if old.origin == TP_LOCAL
+                && old.process.socket_cookie == cookie
+                && matches_packet(old, &packet)
+            {
+                touch(pointer, now);
+                return NEXT;
+            }
+        }
+        return reject_egress(i64::from(error), 12);
+    }
     NEXT
+}
+#[inline(always)]
+fn reject_egress(error: i64, phase: u64) -> i32 {
+    if let Some(pointer) = HPS_TP_STATS.get_ptr_mut(1) {
+        let stats = unsafe { &mut *pointer };
+        stats.rejected_packets = stats.rejected_packets.wrapping_add(1);
+        stats.last_error = error;
+        stats.error_phase = phase;
+    }
+    DROP
 }
 
 #[classifier]
@@ -426,6 +469,14 @@ pub fn hps_tp_ingress(ctx: TcContext) -> i32 {
     }
     let key = key(&packet, &policy);
     let existing = unsafe { HPS_TP_FLOWS.get(&key) }.copied();
+    if existing.is_some_and(|flow| {
+        flow.origin != if local { TP_LOCAL } else { TP_GATEWAY }
+            || !matches_packet(&flow, &packet)
+    }) {
+        stats.rejected_packets = stats.rejected_packets.wrapping_add(1);
+        stats.error_phase = 13;
+        return DROP;
+    }
     if local
         && policy.flags & TP_REQUIRE_PROCESS != 0
         && !existing
@@ -453,13 +504,18 @@ pub fn hps_tp_ingress(ctx: TcContext) -> i32 {
         };
         if let Err(error) = HPS_TP_FLOWS.insert(&key, &flow, 1) {
             // A concurrent first packet may have won the same key.
-            if unsafe { HPS_TP_FLOWS.get(&key) }.is_none() {
+            if !unsafe { HPS_TP_FLOWS.get(&key) }.is_some_and(|old| {
+                old.origin == flow.origin && matches_packet(old, &packet)
+            }) {
                 stats.errors = stats.errors.wrapping_add(1);
                 stats.last_error = i64::from(error);
                 stats.error_phase = 6;
                 return DROP;
             }
         }
+    }
+    if let Some(pointer) = HPS_TP_FLOWS.get_ptr_mut(&key) {
+        touch(pointer, unsafe { bpf_ktime_get_ns() });
     }
     ctx.set_mark(policy.capture_mark);
     let result = if packet.protocol == 6 {

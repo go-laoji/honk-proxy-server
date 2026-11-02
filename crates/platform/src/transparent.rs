@@ -3,6 +3,7 @@
 #[cfg(test)]
 mod generation_tests;
 mod metadata;
+pub use metadata::CapturedMetadata;
 mod routes;
 #[cfg(test)]
 mod tcp_tests;
@@ -124,7 +125,22 @@ impl PreparedCapture {
                     return Err("capture policy requires a single-entry NO_PREALLOC hash".into());
                 }
             }
-            _ => return Err("capture policy ABI v2 requires a NO_PREALLOC hash".into()),
+            _ => return Err("capture policy ABI requires a NO_PREALLOC hash".into()),
+        }
+        for name in ["HPS_TP_PROCESS", "HPS_TP_FLOWS"] {
+            match bpf.map(name) {
+                Some(aya::maps::Map::HashMap(map)) => {
+                    if map
+                        .info()
+                        .map_err(|e| error("identity map info", e))?
+                        .map_flags()
+                        != 1
+                    {
+                        return Err("capture identities require NO_PREALLOC hashes".into());
+                    }
+                }
+                _ => return Err("capture identity ABI requires insert-only hashes".into()),
+            }
         }
         let pidns =
             std::fs::metadata("/proc/self/ns/pid").map_err(|e| error("PID namespace", e))?;
@@ -488,6 +504,49 @@ impl Capture {
         match map.get(&key, 0) {
             Ok(value) => Ok(Some(value)),
             Err(aya::maps::MapError::KeyNotFound) => Ok(None),
+            Err(e) => Err(error("flow lookup", e)),
+        }
+    }
+    /// Bounded metadata used for generation retention and owner garbage
+    /// collection. This is not an unbounded packet history.
+    pub fn flows(&self) -> Result<Vec<(FlowKey, CapturedFlow)>, String> {
+        let guard = self.state.lock().unwrap();
+        let state = guard.as_ref().ok_or("transparent capture is shut down")?;
+        let map = HashMap::<_, FlowKey, CapturedFlow>::try_from(
+            state
+                .bpf
+                .map("HPS_TP_FLOWS")
+                .ok_or("capture flow map missing")?,
+        )
+        .map_err(|e| error("flow ABI", e))?;
+        map.iter()
+            .take(self.specification.max_flows as usize)
+            .map(|entry| entry.map_err(|e| error("flow scan", e)))
+            .collect()
+    }
+    /// The kernel only inserts absent keys and never replaces an identity.
+    /// All user-space removals use this same mutex. Thus a matching claim cannot
+    /// change between lookup and remove; timestamp refreshes do not change it.
+    /// Cancel and drain the corresponding owner before calling this method.
+    pub fn retire_flow(&self, key: FlowKey, expected: CapturedFlow) -> Result<bool, String> {
+        let mut guard = self.state.lock().unwrap();
+        let state = guard.as_mut().ok_or("transparent capture is shut down")?;
+        if key.netns_cookie != state.policy.netns_cookie {
+            return Err("capture flow belongs to another network namespace".into());
+        }
+        let mut map = HashMap::<_, FlowKey, CapturedFlow>::try_from(
+            state
+                .bpf
+                .map_mut("HPS_TP_FLOWS")
+                .ok_or("capture flow map missing")?,
+        )
+        .map_err(|e| error("flow ABI", e))?;
+        match map.get(&key, 0) {
+            Ok(value) if value.same_identity(&expected) => {
+                map.remove(&key).map_err(|e| error("retire flow", e))?;
+                Ok(true)
+            }
+            Ok(_) | Err(aya::maps::MapError::KeyNotFound) => Ok(false),
             Err(e) => Err(error("flow lookup", e)),
         }
     }

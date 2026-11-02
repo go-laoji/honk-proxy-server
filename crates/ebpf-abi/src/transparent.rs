@@ -1,7 +1,7 @@
 //! Shared, fixed-width transparent capture boundary. Addresses are network-order
 //! words; ports are host-order. Neither kernel pointers nor payload bytes cross it.
-// v2 requires a non-preallocated HASH policy map for whole-value publication.
-pub const TP_ABI_VERSION: u32 = 2;
+// v3 also requires insert-only, non-preallocated HASH process/flow identities.
+pub const TP_ABI_VERSION: u32 = 3;
 pub const TP_ENABLED: u32 = 1;
 pub const TP_TCP: u32 = 2;
 pub const TP_UDP: u32 = 4;
@@ -46,7 +46,7 @@ pub struct FlowKey {
     pub netns_cookie: u64,
 }
 #[repr(C)]
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
 pub struct SocketProcess {
     pub socket_cookie: u64,
     pub cgroup_id: u64,
@@ -56,7 +56,7 @@ pub struct SocketProcess {
     pub command: [u8; 16],
 }
 #[repr(C)]
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
 pub struct CapturedFlow {
     pub revision: u64,
     pub first_seen_ns: u64,
@@ -66,6 +66,19 @@ pub struct CapturedFlow {
     pub flags: u32,
     pub initial_sequence: u32,
     pub reserved: u32,
+}
+impl CapturedFlow {
+    /// Activity may advance concurrently; every other field belongs to the
+    /// immutable tuple claim and must match before its owner can retire it.
+    pub fn same_identity(&self, other: &Self) -> bool {
+        Self {
+            last_seen_ns: 0,
+            ..*self
+        } == Self {
+            last_seen_ns: 0,
+            ..*other
+        }
+    }
 }
 #[repr(C)]
 #[derive(Clone, Copy, Default)]

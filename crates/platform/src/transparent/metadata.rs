@@ -1,6 +1,6 @@
 use super::Capture;
 use hps_domain::{FlowOrigin, ProcessIdentity, RoutingContext, SelectionTransport};
-use hps_ebpf_abi::{FlowKey, TP_GATEWAY, TP_LOCAL, TP_PROCESS_VERIFIED};
+use hps_ebpf_abi::{CapturedFlow, FlowKey, TP_GATEWAY, TP_LOCAL, TP_PROCESS_VERIFIED};
 use std::net::{IpAddr, SocketAddr};
 
 fn words(address: IpAddr) -> [u32; 4] {
@@ -12,6 +12,11 @@ fn words(address: IpAddr) -> [u32; 4] {
         }
     }
 }
+pub struct CapturedMetadata {
+    pub key: FlowKey,
+    pub flow: CapturedFlow,
+    pub context: RoutingContext,
+}
 impl Capture {
     /// Called only with endpoints recovered from the actual accepted TCP socket
     /// or UDP ancillary data. No caller-supplied process metadata is accepted.
@@ -21,6 +26,17 @@ impl Capture {
         destination: SocketAddr,
         protocol: u32,
     ) -> Result<(i64, RoutingContext), String> {
+        let metadata = self.routing_metadata(source, destination, protocol)?;
+        Ok((metadata.flow.revision as i64, metadata.context))
+    }
+    /// Returns routing and tuple ownership from one map lookup, so callers do
+    /// not combine a context with a separately looked-up, possibly reused flow.
+    pub fn routing_metadata(
+        &self,
+        source: SocketAddr,
+        destination: SocketAddr,
+        protocol: u32,
+    ) -> Result<CapturedMetadata, String> {
         if source.is_ipv4() != destination.is_ipv4()
             || source.port() == 0
             || destination.port() == 0
@@ -75,9 +91,10 @@ impl Capture {
             TP_GATEWAY => (FlowOrigin::Gateway, None),
             _ => return Err("captured local process metadata is missing or unverified".into()),
         };
-        Ok((
-            flow.revision as i64,
-            RoutingContext {
+        Ok(CapturedMetadata {
+            key,
+            flow,
+            context: RoutingContext {
                 destination_host: destination.ip().to_string(),
                 destination_port: destination.port(),
                 transport: if protocol == 6 {
@@ -93,6 +110,6 @@ impl Capture {
                 origin,
                 process,
             },
-        ))
+        })
     }
 }

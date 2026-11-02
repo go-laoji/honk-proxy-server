@@ -8,6 +8,7 @@ rust-version.workspace = true
 hps-domain.workspace = true
 
 [dev-dependencies]
+socket2 = {version="0.6",features=["all"]}
 hps-engine.workspace = true
 rcgen = "0.14"
 tempfile = "3"
