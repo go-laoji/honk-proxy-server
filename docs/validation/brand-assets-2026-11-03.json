@@ -1,0 +1,80 @@
+{
+  "source_revision": "c79e07dc626f37fb41d78b83fa340648afe7968f",
+  "web_build_id": "0b385d0e1a38e8b057fa59dcec0b045d994224881b918d2122ecaa2fd1df96d6",
+  "web_pages": 18,
+  "app_bundle": "/private/tmp/hps-logo-tauri-target/release/bundle/macos/honk-proxy-server.app",
+  "app_identifier": "io.bitdata.honk-proxy-server",
+  "icon_file": "icon.icns",
+  "bundled_icns_sha256": "f1e0ab467b2c8982a702ef31b4caace323287eb3750331a345ff2372551b891f",
+  "bundle_icon_matches_source": true,
+  "macos_template_rgba_embedded": true,
+  "template_pixel_size": [
+    44,
+    44
+  ],
+  "bundled_web_manifest_matches": true,
+  "bundled_daemon_matches": true,
+  "desktop_metadata": {
+    "format_version": 1,
+    "binary": "hps-desktop",
+    "architecture": "aarch64",
+    "platform": "macos",
+    "source_revision": "c79e07dc626f37fb41d78b83fa340648afe7968f",
+    "source_dirty": false,
+    "version": {
+      "service": "honk-proxy-server",
+      "version": "0.1.0",
+      "api_version": "v1",
+      "web_build_id": "0b385d0e1a38e8b057fa59dcec0b045d994224881b918d2122ecaa2fd1df96d6"
+    }
+  },
+  "native_window_or_tray_visually_observed": false,
+  "installed_app_replaced": false,
+  "host_network_changes_allowed": false,
+  "date": "2026-11-03",
+  "issue": 28,
+  "branch": "feature/brand-logo-review",
+  "integrated_theme_tip": "5f17b53",
+  "merge_commit": "904640f",
+  "exports": {
+    "generated_images_and_svgs": 68,
+    "master_sha256": "134e5f5cc9275f2e8e184ca93a3fe73ea9833820aab3c441091ac374c747d067",
+    "all_hashes_verified": true,
+    "regeneration_byte_identical": true
+  },
+  "browser_validation": {
+    "passed": 9,
+    "failed": 0,
+    "files": [
+      "brand.spec.ts",
+      "console.spec.ts",
+      "theme-motion.spec.ts"
+    ],
+    "real_daemon": true,
+    "ephemeral_configuration": true,
+    "host_network_changes_forbidden": true
+  },
+  "typecheck": true,
+  "format_check": true,
+  "root_and_native_rustfmt": true,
+  "web_build": true,
+  "codesign_verify_deep_strict": true,
+  "native_packages_built": [
+    "macos-aarch64"
+  ],
+  "published": false,
+  "git_flow_finished": false,
+  "pushed": false,
+  "archive": {
+    "path": "target/brand-delivery/honk-proxy-brand-assets.zip",
+    "files": 73,
+    "bytes": 569681,
+    "sha256": "51472a195954d04f24d6e08251b51db878cb1ea6efb90bfa05c2475fa5d31519",
+    "all_export_hashes_verified_inside_archive": true
+  },
+  "screenshots": {
+    "mobile-dark-navigation.png": "67c0f01bab825b150a74ce118739bf181b48697136c1302f4d10d42dcc6a5dad",
+    "overview-dark.png": "cade87f32910f84c6331e008b8b96d3ac956f87945029a7b8bb2cb7f6d7ed464",
+    "overview-light.png": "58608dd4a6d80f7b806b3fb089d063fd1fdd9ec32d8228332a9e59bac7412005"
+  }
+}

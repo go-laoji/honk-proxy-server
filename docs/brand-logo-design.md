@@ -3,33 +3,33 @@
 - 关联任务：[#28](https://github.com/go-laoji/honk-proxy-server/issues/28)
 - 分支：`feature/brand-logo-review`，使用 `git flow feature start brand-logo-review develop` 从 `develop` 创建。
 - 独立 worktree：`/private/tmp/hps-brand-logo-review-20261102`。
-- 状态：用户于 2026-11-03 明确确认蓝色 Logo，并接受第二版组合预览的 LIGHT 配色；已授权生成全套图标与产品接入。配色任务已收到以[第二版组合预览](brand-visual-direction-v2.md)为基准调整实际页面的要求。
+- 状态：用户于 2026-11-03 明确确认蓝色 Logo，并接受第二版组合预览的 LIGHT 配色；正式资源、18 页与 Desktop 接入及 macOS 构建已完成。[实际验收与产物](validation/brand-assets-2026-11-03.md)。
 
 ## 第一版预览
 
 ![Honk Proxy Logo 第一版概念评审图](design/brand-logo-concept-v1.png)
 
-预览文件：`docs/design/brand-logo-concept-v1.png`，1536 × 1024 PNG，使用内置 imagegen 生成。保留 H 的整体轮廓，以一对相反方向的弯曲箭头表达流量进出和转发；同时展示浅色、深色、单色与蓝色圆角应用图标。用户确认后将按选定图形制作 SVG 母版，统一重复图形的精确几何，并实际检查 16/20/32 像素用途。
+预览文件：`docs/design/brand-logo-concept-v1.png`，1536 × 1024 PNG，使用内置 imagegen 生成。保留 H 的整体轮廓，以一对相反方向的弯曲箭头表达流量进出和转发；同时展示浅色、深色、单色与蓝色圆角应用图标。用户确认后已制作 SVG 母版，统一精确几何，并检查 16/24/32/48/64 像素用途。
 
-当前已检查评审图的品牌拼写、H 与双向通路意象、深浅底适配和单色呈现。图中的缩小示意不代表已通过真实 favicon 或托盘像素验收。尚未接入页面、替换现有图标、构建 Tauri 或覆盖任何已安装应用。
+初次评审检查了品牌拼写、H 与双向通路意象、深浅底适配和单色呈现。概念图的缩小示意与正式资源验收分开记录；确认后的正式 PNG、ICO、ICNS、单色模板与真实页面结果见最终验收。已安装应用始终未覆盖。
 
 ## Worktree 隔离记录
 
-初始在原 managed worktree 从 `develop` 创建了 `feature/brand-logo`。生成预览期间，同一 checkout 被另一并发会话写入控制台配色提交 `8f1fdd7`。发现后保留原 checkout、分支与所有提交，另建上述独立 worktree，再从 `develop` 创建 `feature/brand-logo-review`，只 cherry-pick 两笔 Logo 设计提交。评审分支的变更范围仅为本说明与预览图，不包含该配色提交；后续 Logo 工作应在独立 worktree 继续。
+初始在原 managed worktree 从 `develop` 创建了 `feature/brand-logo`。生成预览期间，同一 checkout 被另一并发会话写入控制台配色提交 `8f1fdd7`。发现后保留原 checkout、分支与所有提交，另建上述独立 worktree，再从 `develop` 创建 `feature/brand-logo-review`，只 cherry-pick 两笔 Logo 设计提交。确认前分支仅有设计材料；确认后在该独立 worktree 交付正式资源，并通过 `904640f` 显式合并配色任务的最终 `5f17b53`，保留双方提交与历史。
 
 ## 设计方向
 
 以 **H + 双向通路** 为核心：用两条简洁、互相咬合的路径构成 H，表达代理连接、转发与有序路由。主色 `#2563EB`，辅助色 `#38BDF8`；第一版评审图深色底 `#0F172A`，第二版统一界面方向改用午夜蓝 `#0B1220`。保持足够粗的轮廓与负空间，兼顾侧栏、浏览器标签、桌面应用及单色托盘用途。用户已否定松石青品牌主色，不向青绿色方案调整 Logo。
 
-先交付一张概念评审图，展示同一个标志的独立图形、Honk Proxy 字标、深浅背景及桌面应用图标效果。它是设计预览，不是已经完成的矢量母版或通过小尺寸验收的发行图标。确认后再制作几何一致的 SVG 母版、单色变体和各平台尺寸资源。
+概念阶段先交付评审图，确认后从同一 SVG 母版导出几何一致的单色变体与各平台尺寸资源。概念图保留作历史设计依据，产品不引用 AI 评审截图。
 
 ## 执行步骤
 
 1. [x] 检查实际 worktree、分支基点及原始未跟踪文件，创建 Issue 和功能分支。
 2. [x] 使用内置 imagegen 生成概念评审图，检查文字、图形一致性与深浅色用途，新增保存到本设计目录。
 3. [x] 提交提案材料并获得用户明确确认；确认前未修改产品图标。
-4. [ ] 用户确认后，制作确定性的 SVG 母版与单色托盘版本，统一下列产品入口。
-5. [ ] 验证所有页面、前端构建资源及 Tauri 图标打包，再将真实结果回复 Issue 并关闭。
+4. [x] 用户确认后，制作确定性的 SVG 母版与单色托盘版本，统一下列产品入口。
+5. [x] 验证所有页面、前端构建资源及 Tauri 图标打包；真实结果见最终验收，Issue 按最终证据回复关闭。
 
 ## 确认后的实施切片
 

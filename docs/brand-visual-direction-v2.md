@@ -26,9 +26,9 @@ H + 双向通路造型继续沿用第一版蓝色 Logo 的方向。取消将品�
 ## 分工与确认边界
 
 - 控制台任务在其独立工作区调整共享主题、保留已有图标动效和 `prefers-reduced-motion`，完成浅/深色检查、前端构建和相关浏览器验证，并更新 #27 的真实结果。
-- 本分支 `feature/brand-logo-review` 只新增设计材料，制作 Logo 与界面配色组合概念图；原图保存，不覆盖。
+- 本分支 `feature/brand-logo-review` 在评审阶段只新增设计材料；用户于 2026-11-03 确认后已制作正式资源并接入产品。原始概念图保留。
 - 组合概念图为 AI 生成的设计示意，不能作为真实应用截图、运行状态或构建验收证据。
-- Logo 未获得用户确认，暂不接入页面或替换 favicon、Tauri 图标、托盘及已安装 bundle；正式 SVG、图标尺寸与打包验收在确认后执行。
+- Logo 与 LIGHT 配色已获用户确认，正式 SVG、图标导出、18 页 favicon、Tauri 应用与托盘接入以及独立 macOS 包验收已完成，见[最终验收](validation/brand-assets-2026-11-03.md)。已安装 bundle 未覆盖。
 - 不跨 worktree 写入，不主动 push/finish，不修改宿主网络；如运行开发应用，继续设置 `HPS_FORBID_HOST_NETWORK_CHANGES=1`。
 
 ## 第二版组合预览生成规格
