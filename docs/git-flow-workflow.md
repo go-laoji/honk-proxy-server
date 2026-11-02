@@ -68,3 +68,22 @@
 第七批：按用户“编译没有问题可以先合并”的最新指示，#25 在核心组合验收完成、x86 额外静态发行验证明确 pending 的边界下回复并关闭。`backup-desktop-diagnostics` 原 tip `fedc475` finish 为 `92e95a6`，双父与内容树一致；完成后 detach，保留该 checkout 供正在运行的冻结发行构建使用。随后在 #26 分支 merge develop，按顺序处理最后的储备契约分支；不因收尾而中断构建或提前归档其目录。
 
 第八批：#26 储备范围与兼容契约复核后回复并关闭，`future-platform-contracts` 原 tip `5d8377a` finish 为 `4a45a58`。已回到主工作区 develop；累计 22 次 finish 的双父、第二父原 tip、内容树一致及 develop 可达性逐条复核通过，所有原提交记录保留，当前无 feature 引用。`main` 仍为 `18d5899`，未 push/删除远端/发布。x86 额外静态发行验收按用户授权继续在冻结输入上运行，与已完成的代码合并分开记录；构建结束前保留其 detached worktree。此后只做有范围的文档与验收维护提交，不为记录最终 merge SHA 再制造空功能分支。
+
+
+## 2026-11-03 配色与 Logo 收尾
+
+用户明确要求按顺序 finish 当前全部功能分支并清理 worktree。实时核对 #27/#28 已完成验收并关闭，按创建与依赖顺序执行以下三项，均保留独立双父合并与原 tip：
+
+| 顺序 | Feature | 原 tip | develop 合并提交 |
+| --- | --- | --- | --- |
+| 23 | console-color-motion | 5f17b53 | e9dedb9 |
+| 24 | brand-logo | 1719d1b | 58f9981 |
+| 25 | brand-logo-review | 8b9f4e2 | f6156c9 |
+
+旧 `brand-logo` 是并发写入后保留的早期分支。其青绿色内容与最终确认的钴蓝主题冲突，保留已验收的最终控制台源码并合入历史设计记录；最后 `brand-logo-review` 的 add/add 文档使用正式交付版本。最终 `f6156c9` 的完整内容树与已验收 `8b9f4e2` 完全相同；所有原 tip 都作为独立 merge 第二父保留且可从 develop 追溯。后续只新增本收尾记录与 JSON，没有更改运行源码。
+
+安装的 Git Flow 0.4.1 在冲突恢复路径中错误地丢弃 `rev-parse --git-dir` 的输出；为避免其错误路径写入，冲突分支先显式完成 merge 与内容审阅，再执行标准 `git flow feature finish` 清理引用。没有修改安装的工具、rebase/reset、批量删除分支、使用 `-F` 或执行远端操作。
+
+两个辅助 worktree 已删除，只保留主工作区 `/Users/jack/data/go-laoji/honk-proxy-server`，当前为 develop，无 feature 引用。用户随后明确允许放弃旧图标，11 个与正式图标同名的旧文件及其临时保存副本已清理，不纳入 Git；10 个其他原始未跟踪文件留在原处，内容哈希核对不变。其他原始文件副本、应用、资源归档及构建记录保存在 `/Users/jack/data/go-laoji/honk-proxy-server-artifacts/2026-11-03-feature-finishes/`。
+
+原始应用产物的源码版本与 Web Build ID 保持不变；移动保存后没有重新宣称其由合并提交重编译。主工作区原有 target、已安装应用、偏好与宿主网络未改动；未 push，main 与 origin/develop 不变。完整父节点、保留结果和清理路径见 [本次收尾记录](validation/git-flow-finishes-2026-11-03.json)。

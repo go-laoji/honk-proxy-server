@@ -1,0 +1,85 @@
+{
+  "date": "2026-11-03",
+  "initial_develop": "cf5486c7437b5769cdc91c99f6d27f8c603302ca",
+  "initial_main": "18d589913b37ef4caa98c2c0a89f32ebfb38a3a9",
+  "feature_heads": {
+    "console-color-motion": "5f17b53886fe41ba90a0af12cc661b9d7bbfdd26",
+    "brand-logo": "1719d1b9439204e79c2b188ec7fb848a59112a27",
+    "brand-logo-review": "8b9f4e2661b49f3837c35ccc3a083f2c2f8b51b6"
+  },
+  "order": [
+    "console-color-motion",
+    "brand-logo",
+    "brand-logo-review"
+  ],
+  "finished": [
+    {
+      "feature": "console-color-motion",
+      "feature_head": "5f17b53886fe41ba90a0af12cc661b9d7bbfdd26",
+      "merge_commit": "e9dedb97b8e108f2720d09b76da89c25c255f10d",
+      "parents": [
+        "cf5486c7437b5769cdc91c99f6d27f8c603302ca",
+        "5f17b53886fe41ba90a0af12cc661b9d7bbfdd26"
+      ],
+      "tree_matches_feature_head": true
+    },
+    {
+      "feature": "brand-logo",
+      "feature_head": "1719d1b9439204e79c2b188ec7fb848a59112a27",
+      "merge_commit": "58f9981756db15c4ecebf4f58da38755a941b095",
+      "parents": [
+        "e9dedb97b8e108f2720d09b76da89c25c255f10d",
+        "1719d1b9439204e79c2b188ec7fb848a59112a27"
+      ],
+      "tree_matches_feature_head": false,
+      "resolution": "Retained final confirmed console code; preserved legacy design commits and imported original proposal files. Explicit merge before standard Git Flow finish avoids Git Flow 0.4.1 invalid conflict-recovery path."
+    },
+    {
+      "feature": "brand-logo-review",
+      "feature_head": "8b9f4e2661b49f3837c35ccc3a083f2c2f8b51b6",
+      "merge_commit": "f6156c9c99efef3d8ca3058c5ef780064eaac30b",
+      "parents": [
+        "58f9981756db15c4ecebf4f58da38755a941b095",
+        "8b9f4e2661b49f3837c35ccc3a083f2c2f8b51b6"
+      ],
+      "tree_matches_feature_head": true,
+      "resolution": "Kept final approved delivery document for add/add conflict; complete tree matches the validated logo and theme branch."
+    }
+  ],
+  "develop_after_finishes": "f6156c9c99efef3d8ca3058c5ef780064eaac30b",
+  "final_tree_matches_validated_branch": true,
+  "preservation_directory": "/Users/jack/data/go-laoji/honk-proxy-server-artifacts/2026-11-03-feature-finishes",
+  "remaining_feature_branches": [],
+  "removed_worktrees": [
+    "/Users/jack/.codex/worktrees/hps-future-platform-contracts/honk-proxy-server",
+    "/private/tmp/hps-brand-logo-review-20261102"
+  ],
+  "remaining_worktrees": [
+    "/Users/jack/data/go-laoji/honk-proxy-server"
+  ],
+  "current_branch": "develop",
+  "main_unchanged": true,
+  "remote_tracking_refs_unchanged": true,
+  "pushed": false,
+  "original_materials": {
+    "original_file_count": 21,
+    "preserved_nonicon_files": 10,
+    "copy_directory": "/Users/jack/data/go-laoji/honk-proxy-server-artifacts/2026-11-03-feature-finishes/original-untracked",
+    "discarded_legacy_icons_per_user_request": [
+      "src-tauri/icons/Square107x107Logo.png",
+      "src-tauri/icons/Square142x142Logo.png",
+      "src-tauri/icons/Square150x150Logo.png",
+      "src-tauri/icons/Square284x284Logo.png",
+      "src-tauri/icons/Square30x30Logo.png",
+      "src-tauri/icons/Square310x310Logo.png",
+      "src-tauri/icons/Square44x44Logo.png",
+      "src-tauri/icons/Square71x71Logo.png",
+      "src-tauri/icons/Square89x89Logo.png",
+      "src-tauri/icons/StoreLogo.png",
+      "src-tauri/icons/icon.png"
+    ],
+    "legacy_icon_files_added_to_git": false
+  },
+  "preserved_deliverable_files": 75,
+  "git_flow_conflict_note": "Git Flow 0.4.1 suppresses rev-parse stdout when assigning DOT_GIT_DIR. Conflict-prone branches were explicitly merged and resolved before standard feature finish cleanup, preserving each original tip as merge second parent."
+}
