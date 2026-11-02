@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { FileCode2, Filter, Search, X } from "lucide-react";
 import { Badge, Details } from "../components/ui";
+import AlertPanel from "../components/AlertPanel";
 import DiagnosticPanel from "../components/DiagnosticPanel";
 import FeedControls from "../components/FeedControls";
 import { usePageQuery } from "../use-page-query";
@@ -137,6 +138,7 @@ export default function EventsPage() {
   return (
     <div className="space-y-6">
       <DiagnosticPanel />
+      <AlertPanel />
       <section className="panel space-y-4 p-5">
         <div>
           <h2 className="flex items-center gap-2 font-semibold">

@@ -176,6 +176,21 @@ fn supported_diagnostic_get(path: &str) -> bool {
     )
 }
 fn supported_observability_get(path: &str) -> bool {
+    if path == "api/v1/observability/alerts" {
+        return true;
+    }
+    if let Some(query) = path.strip_prefix("api/v1/observability/alerts?") {
+        let mut keys = std::collections::HashSet::new();
+        return !query.is_empty()
+            && url::form_urlencoded::parse(query.as_bytes()).all(|(k, v)| {
+                keys.insert(k.to_string())
+                    && match k.as_ref() {
+                        "after" => v.parse::<u64>().is_ok(),
+                        "limit" => v.parse::<u32>().is_ok_and(|n| (1..=100).contains(&n)),
+                        _ => false,
+                    }
+            });
+    }
     if path == "api/v1/observability" {
         return true;
     }
@@ -457,7 +472,8 @@ fn supported_action(path: &str) -> bool {
     }
     if matches!(
         path,
-        "api/v1/diagnostics"
+        "api/v1/observability/alerts/save"
+            | "api/v1/diagnostics"
             | "api/v1/health/probe"
             | "api/v1/linux/capture/control"
             | "api/v1/linux/capture/save"
@@ -829,6 +845,14 @@ mod tests {
         assert!(supported_action("api/v1/tasks/2/retry"));
         assert!(!supported_action("api/v1/tasks/0/retry"));
         assert!(supported_api("api/v1/status"));
+        assert!(supported_api(
+            "api/v1/observability/alerts?limit=100&after=42"
+        ));
+        assert!(!supported_api("api/v1/observability/alerts?limit=101"));
+        assert!(!supported_api(
+            "api/v1/observability/alerts?after=1&after=2"
+        ));
+        assert!(supported_action("api/v1/observability/alerts/save"));
         assert!(supported_api("api/v1/observability?window_secs=300"));
         assert!(!supported_api("api/v1/observability?window_secs=3601"));
         assert!(!supported_api(
