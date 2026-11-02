@@ -23,9 +23,9 @@ T05 配置基础后推进 T06/T07 短效 API 与补池。T08–T14 逐步闭合�
 
 | 任务 | 优先级 | Issue 与工作项 | 依赖 | 状态 |
 | --- | --- | --- | --- | --- |
-| T01 | P0 | [#6](https://github.com/go-laoji/honk-proxy-server/issues/6) Rust 工作区与独立 CLI/Daemon 基础 | 无 | 待开发 |
-| T02 | P0 | [#7](https://github.com/go-laoji/honk-proxy-server/issues/7) 共享 React Tailwind MPA 与 Desktop 桥骨架 | T01 | 待开发 |
-| T03 | P0 | [#8](https://github.com/go-laoji/honk-proxy-server/issues/8) honk 集成与真实 Linux eBPF 前置验证 | T01 | 待开发 |
+| T01 | P0 | [#6](https://github.com/go-laoji/honk-proxy-server/issues/6) Rust 工作区与独立 CLI/Daemon 基础 | 无 | 已完成基础交付 |
+| T02 | P0 | [#7](https://github.com/go-laoji/honk-proxy-server/issues/7) 共享 React Tailwind MPA 与 Desktop 桥骨架 | T01 | 已完成基础验收 |
+| T03 | P0 | [#8](https://github.com/go-laoji/honk-proxy-server/issues/8) honk 集成与真实 Linux eBPF 前置验证 | T01 | 环境预检与集成中 |
 | T04 | P0 | [#9](https://github.com/go-laoji/honk-proxy-server/issues/9) HTTP HTTPS SOCKS5 核心代理与资源控制 | T01, T03 | 待开发 |
 | T05 | P0 | [#10](https://github.com/go-laoji/honk-proxy-server/issues/10) SQLite 配置版本、校验、激活与回滚 | T01 | 待开发 |
 | T06 | P0 | [#11](https://github.com/go-laoji/honk-proxy-server/issues/11) 短效提取 API、批次租约与安全重试 | T05 | 待开发 |
@@ -200,9 +200,12 @@ T01 交付独立 Rust workspace、hps/hpsd、无认证管理 API、TOML 启动�
 
 T02 随后接管现有模板：共享页面清单、Tailwind 布局与 API transport、18 页静态资源、Daemon 嵌入与 Tauri 原生桥。业务模块尚未接入时清楚显示状态，不填造节点或成功数据。
 
-现有未跟踪模板中，实施需要的 package/锁文件、React 入口、Tauri 配置与 Rust 入口、忽略规则会明确纳入变更；无关编辑器配置和未使用示例素材保持原状。目录先复用当前 src/src-tauri，避免为了规划目录机械搬动模板；Cargo 的 CLI/Daemon 独立构建边界必须保持。
+现有未跟踪模板中，实施需要的 package/锁文件、React 入口、Tauri 配置与 Rust 入口、忽略规则会明确纳入变更；无关编辑器配置和未使用示例素材保持原状。前端新增 web/console，桌面复用 src-tauri，未使用的 src 演示素材保留原状；Cargo 的 CLI/Daemon 独立构建边界必须保持。
 
 ## 5. 开发记录
 
 - 2026-11-01：完成 21 个子 Issue 及全部 99 项功能的唯一映射，准备开始 T01。
 
+- 2026-11-01：T01 基础交付通过 Rust 单测、clippy、独立进程/CLI 冒烟和无 GUI 依赖检查。代理与 eBPF 尚未接入，proxy_ready=false；开始 T02。
+
+- 2026-11-01：T02 的 18 页 MPA、共享构建清单、Daemon 嵌入及 Desktop 原生桥通过编译、4 项浏览器 E2E 和实际打包窗口验收，详见 [基础验收](validation/runtime-foundation-2026-11-01.md)。开始 T03；尚未加载真实 eBPF。

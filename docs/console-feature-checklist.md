@@ -3,7 +3,7 @@
 - 日期：2026-11-01（Asia/Shanghai）。
 - 对应任务：[Issue #2](https://github.com/go-laoji/honk-proxy-server/issues/2)。
 - 技术基准：[技术规划](technical-architecture-plan.md)、[整体规划](overall-plan-and-feasibility.md)。
-- 状态：需求与验收清单，本文所有功能均为待实现项，不能据此判断已完成。
+- 状态：需求与验收基线；实现状态独立记录在[开发任务清单](development-task-checklist.md)，不能仅凭本文的功能描述判断已完成。
 - 适用端：同一 React + Tailwind CSS MPA 在浏览器和 Desktop 共用；CLI 覆盖 P0 服务运维能力，桌面专属操作除外。
 - 需求修订：[Issue #3](https://github.com/go-laoji/honk-proxy-server/issues/3) 将 HTTP/HTTPS/SOCKS5 核心接入、短效提取 API、租约与补池预算列入首版主线。
 - 访问模型修订：[Issue #4](https://github.com/go-laoji/honk-proxy-server/issues/4) 明确不做登录、账号与权限验证；所有可访问服务的使用者直接查看并使用全部功能。

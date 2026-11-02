@@ -1,0 +1,128 @@
+[
+  {
+    "id": "index",
+    "file": "index.html",
+    "title": "连接服务",
+    "description": "选择要管理的本机或远端服务",
+    "group": "工作台"
+  },
+  {
+    "id": "overview",
+    "file": "overview.html",
+    "title": "运行概览",
+    "description": "查看服务状态与实际代理能力",
+    "group": "工作台"
+  },
+  {
+    "id": "inbounds",
+    "file": "inbounds.html",
+    "title": "代理入口",
+    "description": "HTTP、HTTPS 与 SOCKS5 接入",
+    "group": "代理网络"
+  },
+  {
+    "id": "providers",
+    "file": "providers.html",
+    "title": "上游供应商",
+    "description": "管理短效代理提取 API 与补池策略",
+    "group": "代理网络"
+  },
+  {
+    "id": "provider-detail",
+    "file": "provider-detail.html",
+    "title": "供应商详情",
+    "description": "查看提取批次、租约和有效期",
+    "group": "详情"
+  },
+  {
+    "id": "nodes",
+    "file": "nodes.html",
+    "title": "代理节点",
+    "description": "查看节点能力、健康与剩余寿命",
+    "group": "代理网络"
+  },
+  {
+    "id": "node-detail",
+    "file": "node-detail.html",
+    "title": "节点详情",
+    "description": "查看节点来源、租约与连接信息",
+    "group": "详情"
+  },
+  {
+    "id": "groups",
+    "file": "groups.html",
+    "title": "节点分组",
+    "description": "配置选点策略与回退范围",
+    "group": "代理网络"
+  },
+  {
+    "id": "group-detail",
+    "file": "group-detail.html",
+    "title": "分组详情",
+    "description": "查看成员、策略和当前选择",
+    "group": "详情"
+  },
+  {
+    "id": "rules",
+    "file": "rules.html",
+    "title": "路由规则",
+    "description": "配置流量匹配、模拟与发布",
+    "group": "代理网络"
+  },
+  {
+    "id": "health",
+    "file": "health.html",
+    "title": "健康检查",
+    "description": "查看探测策略与连接反馈",
+    "group": "运行观测"
+  },
+  {
+    "id": "dns",
+    "file": "dns.html",
+    "title": "DNS 设置",
+    "description": "配置解析上游、缓存与引导解析",
+    "group": "代理网络"
+  },
+  {
+    "id": "connections",
+    "file": "connections.html",
+    "title": "活跃连接",
+    "description": "追踪连接路径与出口流量",
+    "group": "运行观测"
+  },
+  {
+    "id": "events",
+    "file": "events.html",
+    "title": "日志与事件",
+    "description": "查看服务事件与操作结果",
+    "group": "运行观测"
+  },
+  {
+    "id": "tasks",
+    "file": "tasks.html",
+    "title": "后台任务",
+    "description": "查看提取、探测与配置任务",
+    "group": "运行观测"
+  },
+  {
+    "id": "linux",
+    "file": "linux.html",
+    "title": "Linux eBPF",
+    "description": "查看环境、挂载与接管状态",
+    "group": "系统管理"
+  },
+  {
+    "id": "config",
+    "file": "config.html",
+    "title": "配置管理",
+    "description": "查看配置版本与激活状态",
+    "group": "系统管理"
+  },
+  {
+    "id": "settings",
+    "file": "settings.html",
+    "title": "系统设置",
+    "description": "查看监听、资源与版本信息",
+    "group": "系统管理"
+  }
+]

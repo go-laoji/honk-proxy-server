@@ -2,7 +2,7 @@
 
 - 日期：2026-11-01（Asia/Shanghai）。
 - 对应任务：[Issue #2](https://github.com/go-laoji/honk-proxy-server/issues/2)。
-- 文档状态：技术设计，尚未创建本文规划的 crate、命令、页面或接口。
+- 文档状态：技术设计基线，已开始实施；独立 CLI/Daemon 与共享 MPA 基础已交付，实际进展见[开发任务清单](development-task-checklist.md)和[基础验收](validation/runtime-foundation-2026-11-01.md)。
 - 关联文档：[整体规划与可行性](overall-plan-and-feasibility.md)、[控制台功能清单](console-feature-checklist.md)。
 - 决策优先级：本文落实用户新增技术约束；与整体规划中的早期备选冲突时，以本文为准。
 - 需求修订：[Issue #3](https://github.com/go-laoji/honk-proxy-server/issues/3) 明确 HTTP/HTTPS/SOCKS5 核心接入与短效代理提取 API 为首版主线，本文已同步调整。
@@ -457,7 +457,7 @@ Rust 运行格式、lint、领域/集成测试；前端运行类型、构建、�
 
 ## 16. 本次交付边界与后续决策
 
-本次交付技术文档和控制台功能清单，不修改 Cargo/前端配置、安装依赖、迁移模板或创建可运行程序。后续实现以这两份文档作为拆分 Issue 和验收的基础。
+本文记录技术规划基线；开发任务已完成拆分，实施以[任务清单](development-task-checklist.md)跟踪。工程基础的完成不代表本文全部业务能力已实现，按各 Issue 验收记录判断实际进展。
 
 已确定：全 Rust 后端、CLI/Desktop/Daemon、共享 React/Tailwind 真正 MPA、HTTP/HTTPS/SOCKS5 核心协议、短效提取 API 与租约补池、Linux eBPF 必需、无账号且全部功能直接可用、API 单一入口、运行时与数据库单一所有者。
 
