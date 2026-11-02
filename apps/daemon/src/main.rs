@@ -1,6 +1,8 @@
 use clap::Parser;
+use hps_application::{StartupOverrides, Supervisor};
 use hps_config::DaemonConfig;
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
+mod management;
 
 #[derive(Parser)]
 #[command(name = "hpsd", version, about = "Headless honk proxy service")]
@@ -11,6 +13,12 @@ struct Args {
     listen: Option<SocketAddr>,
     #[arg(long)]
     instance_name: Option<String>,
+    #[arg(long, conflicts_with = "ephemeral")]
+    data_dir: Option<PathBuf>,
+    #[arg(long)]
+    ephemeral: bool,
+    #[arg(long)]
+    recover_revision: Option<i64>,
 }
 
 #[tokio::main]
@@ -23,36 +31,72 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(listen) = args.listen {
         config.management_listen = listen;
     }
-    if let Some(name) = args.instance_name {
-        config.instance_name = name;
+    if let Some(name) = &args.instance_name {
+        config.instance_name = name.clone();
     }
     config.validate()?;
+    let directory = if args.ephemeral {
+        None
+    } else {
+        Some(args.data_dir.unwrap_or_else(|| PathBuf::from(".hps")))
+    };
+    let store =
+        tokio::task::spawn_blocking(move || hps_storage::Store::open(directory.as_deref(), config))
+            .await??;
+    if let Some(revision) = args.recover_revision {
+        let target = store.revision(revision).await?;
+        if target.revision.applied_at.is_none() {
+            return Err("recovery requires a previously applied configuration revision".into());
+        }
+        let expected = store.workspace().await?.desired.revision.id;
+        store.activate(revision, expected, true).await?;
+    }
+    let application = Supervisor::boot(
+        store,
+        StartupOverrides {
+            listen: args.listen,
+            instance_name: args.instance_name,
+        },
+    )
+    .await?;
+    let current = application.current();
     tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::try_new(&config.log_filter)?)
+        .with_env_filter(tracing_subscriber::EnvFilter::try_new(
+            &current.config.log_filter,
+        )?)
         .json()
         .with_writer(std::io::stderr)
         .init();
-    let listener = tokio::net::TcpListener::bind(config.management_listen).await?;
-    let address = listener.local_addr()?;
-    let proxy = config.proxy.clone();
-    let engine =
-        tokio::task::spawn_blocking(move || hps_engine::runtime::Engine::new(proxy)).await??;
-    engine.start_enabled().await?;
-    tracing::info!(%address,proxy_ready=engine.ready(),"management API listening; explicit proxy runtime initialized");
-    let stopping = engine.clone();
+    let listener = match management::ManagementListener::bind(
+        current.config.management_listen,
+        current.management_tls.clone(),
+    )
+    .await
+    {
+        Ok(listener) => listener,
+        Err(error) => {
+            let _ = application.shutdown().await;
+            return Err(error.into());
+        }
+    };
+    let address = listener.address()?;
+    application.confirm_startup().await?;
+    tracing::info!(%address,proxy_ready=current.engine.ready(),configuration_revision=current.revision,management_tls=current.management_tls.is_some(),"management API listening; persisted runtime initialized");
+    let stopping = application.clone();
     let result = axum::serve(
         listener,
-        hps_api::router(Arc::new(hps_api::AppState::with_engine(
-            config,
-            engine.clone(),
+        hps_api::router(Arc::new(hps_api::AppState::with_application(
+            application.clone(),
         ))),
     )
     .with_graceful_shutdown(async move {
         shutdown().await;
-        stopping.shutdown().await;
+        if let Err(error) = stopping.shutdown().await {
+            tracing::error!(%error,"shutdown storage/runtime failed");
+        }
     })
     .await;
-    engine.shutdown().await;
+    application.shutdown().await?;
     result?;
     Ok(())
 }

@@ -184,3 +184,98 @@ pub struct ProxyStatus {
     pub limits: ResourceLimits,
     pub shutting_down: bool,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigRevision {
+    pub id: i64,
+    pub parent_id: Option<i64>,
+    pub checksum: String,
+    pub created_at: i64,
+    pub note: String,
+    pub applied_at: Option<i64>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigActivation {
+    pub id: i64,
+    pub revision: i64,
+    pub previous_revision: i64,
+    pub state: String,
+    pub created_at: i64,
+    pub error_code: Option<String>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigDraft {
+    pub version: i64,
+    pub base_revision: i64,
+    pub toml: String,
+    pub updated_at: i64,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigWorkspace {
+    pub format_version: u32,
+    pub desired_revision: i64,
+    pub running_revision: i64,
+    pub current_toml: String,
+    pub desired_toml: String,
+    pub draft: ConfigDraft,
+    pub revisions: Vec<ConfigRevision>,
+    pub activations: Vec<ConfigActivation>,
+    pub pending_restart: Vec<String>,
+    pub storage_path: Option<String>,
+    pub draining_generations: usize,
+    pub startup_overrides: Vec<String>,
+    pub management_certificate: Option<CertificateStatus>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigExport {
+    pub format_version: u32,
+    pub revision: i64,
+    pub toml: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigChange {
+    pub path: String,
+    pub before: serde_json::Value,
+    pub after: serde_json::Value,
+    pub apply_mode: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigDiagnostic {
+    pub path: String,
+    pub message: String,
+    pub line: Option<usize>,
+    pub column: Option<usize>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigValidation {
+    pub valid: bool,
+    pub diagnostics: Vec<ConfigDiagnostic>,
+    pub changes: Vec<ConfigChange>,
+    pub restart_required: Vec<String>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigInput {
+    pub toml: String,
+    pub expected_revision: i64,
+    #[serde(default)]
+    pub expected_draft_version: Option<i64>,
+    #[serde(default)]
+    pub note: String,
+    #[serde(default)]
+    pub use_draft_credentials: bool,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigActivate {
+    pub revision: i64,
+    pub expected_revision: i64,
+    #[serde(default)]
+    pub defer_until_restart: bool,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigActivationResult {
+    pub activation_id: i64,
+    pub desired_revision: i64,
+    pub running_revision: i64,
+    pub state: String,
+    pub restart_required: Vec<String>,
+}

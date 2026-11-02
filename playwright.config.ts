@@ -11,7 +11,7 @@ export default defineConfig({
   },
   webServer: {
     command:
-      "cargo run --locked -p hps-daemon -- --config tests/fixtures/console.toml --listen 127.0.0.1:17991",
+      "cargo run --locked -p hps-daemon -- --ephemeral --config tests/fixtures/console.toml --listen 127.0.0.1:17991",
     url: "http://127.0.0.1:17991/healthz",
     reuseExistingServer: false,
     timeout: 120_000,

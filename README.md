@@ -45,7 +45,9 @@ cargo build --locked -p hps-cli -p hps-daemon --no-default-features
 curl --proxy http://127.0.0.1:17901 https://example.com/
 ```
 
-上游支持 HTTP/HTTPS/SOCKS5 与供应商凭据，按启用和剩余有效期准入；上游 TLS 默认验证，不提供跳过验证选项。入口启停、证书有效期、有效资源限制与接入示例可在 CLI/API/共享控制台查看。配置调整需重启，运行启停不写回文件；详见 [接入及运行语义](docs/explicit-proxy-usage.md)。
+上游支持 HTTP/HTTPS/SOCKS5 与供应商凭据，按启用和剩余有效期准入；上游 TLS 默认验证，不提供跳过验证选项。入口启停、证书有效期、有效资源限制与接入示例可在 CLI/API/共享控制台查看。配置工作台支持共享草稿、版本校验、激活、导出和回滚；详见 [配置版本使用说明](docs/configuration-usage.md) 与 [接入及运行语义](docs/explicit-proxy-usage.md)。
+
+Daemon 默认把配置保存在 `.hps/hps.sqlite3`，可通过 `--data-dir` 指定独立目录。TOML 只初始化新目录，已有目录启动时读取数据库期望版本。测试使用 `--ephemeral` 保存在内存中。CLI/Daemon 不需要启动桌面程序。
 
 ## 共享 Web 与 Desktop
 

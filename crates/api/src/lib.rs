@@ -4,21 +4,25 @@ use axum::{
     http::StatusCode,
     routing::{get, post},
 };
+use hps_application::{ApplicationError, Supervisor};
 use hps_config::DaemonConfig;
 use hps_domain::{ApiError, Capabilities, ServiceStatus, VersionInfo};
 use hps_domain::{InboundStatus, ProxyStatus};
 use hps_engine::runtime::{Engine, EngineError};
+use hps_storage::StorageError;
 use std::{
     sync::Arc,
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
+mod configuration;
 #[cfg(feature = "web-ui")]
 mod web;
 
 pub struct AppState {
     pub config: DaemonConfig,
     pub engine: Option<Arc<Engine>>,
+    pub application: Option<Arc<Supervisor>>,
     instance_id: String,
     started_at: Instant,
     started_at_unix: u64,
@@ -29,6 +33,7 @@ impl AppState {
         Self {
             config,
             engine: None,
+            application: None,
             instance_id: uuid::Uuid::new_v4().to_string(),
             started_at: Instant::now(),
             started_at_unix: SystemTime::now()
@@ -42,6 +47,24 @@ impl AppState {
         let mut state = Self::new(config);
         state.engine = Some(engine);
         state
+    }
+    pub fn with_application(application: Arc<Supervisor>) -> Self {
+        let snapshot = application.current();
+        let mut state = Self::with_engine(snapshot.config.clone(), snapshot.engine.clone());
+        state.application = Some(application);
+        state
+    }
+    pub fn effective_config(&self) -> DaemonConfig {
+        self.application.as_ref().map_or_else(
+            || self.config.clone(),
+            |application| application.current().config.clone(),
+        )
+    }
+    pub fn runtime_engine(&self) -> Option<Arc<Engine>> {
+        self.application
+            .as_ref()
+            .map(|application| application.current().engine.clone())
+            .or_else(|| self.engine.clone())
     }
 
     pub fn version(&self) -> VersionInfo {
@@ -63,14 +86,23 @@ impl AppState {
     }
 
     pub fn status(&self) -> ServiceStatus {
+        let snapshot = self
+            .application
+            .as_ref()
+            .map(|application| application.current());
+        let config = snapshot
+            .as_ref()
+            .map_or(&self.config, |snapshot| &snapshot.config);
+        let engine = snapshot
+            .as_ref()
+            .map(|snapshot| &snapshot.engine)
+            .or(self.engine.as_ref());
         ServiceStatus {
             instance_id: self.instance_id.clone(),
-            instance_name: self.config.instance_name.clone(),
+            instance_name: config.instance_name.clone(),
             management_ready: true,
-            proxy_ready: self.engine.as_ref().is_some_and(|engine| engine.ready()),
-            engine_state: self
-                .engine
-                .as_ref()
+            proxy_ready: engine.is_some_and(|engine| engine.ready()),
+            engine_state: engine
                 .map_or("not_initialized", |engine| {
                     if engine.ready() {
                         "running"
@@ -109,6 +141,9 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/v1/inbounds/{id}/start", post(start_inbound))
         .route("/api/v1/inbounds/{id}/stop", post(stop_inbound))
         .route("/api/v1/config", get(config));
+    let router = router
+        .merge(configuration::router())
+        .layer(axum::extract::DefaultBodyLimit::max(4 * 1024 * 1024));
     #[cfg(feature = "web-ui")]
     let router = router.fallback(web::serve);
     #[cfg(not(feature = "web-ui"))]
@@ -123,7 +158,7 @@ async fn version(State(state): State<Arc<AppState>>) -> Json<VersionInfo> {
     Json(state.version())
 }
 async fn capabilities(State(state): State<Arc<AppState>>) -> Json<Capabilities> {
-    Json(if state.engine.is_some() {
+    Json(if state.runtime_engine().is_some() {
         Capabilities::explicit_proxy()
     } else {
         Capabilities::foundation()
@@ -131,7 +166,7 @@ async fn capabilities(State(state): State<Arc<AppState>>) -> Json<Capabilities> 
 }
 
 async fn ready(State(state): State<Arc<AppState>>) -> (StatusCode, Json<serde_json::Value>) {
-    let ready = state.engine.as_ref().is_some_and(|engine| engine.ready());
+    let ready = state.runtime_engine().is_some_and(|engine| engine.ready());
     (
         if ready {
             StatusCode::OK
@@ -144,12 +179,12 @@ async fn ready(State(state): State<Arc<AppState>>) -> (StatusCode, Json<serde_js
     )
 }
 async fn inbounds(State(state): State<Arc<AppState>>) -> Json<ProxyStatus> {
-    Json(state.engine.as_ref().map_or_else(
+    Json(state.runtime_engine().as_ref().map_or_else(
         || ProxyStatus {
             inbounds: vec![],
             active_connections: 0,
             eligible_upstreams: 0,
-            limits: state.config.proxy.limits.clone(),
+            limits: state.effective_config().proxy.limits,
             shutting_down: false,
         },
         |engine| engine.status(),
@@ -177,6 +212,13 @@ async fn start_inbound(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> ApiResult<InboundStatus> {
+    if let Some(application) = &state.application {
+        return application
+            .start_inbound(&id)
+            .await
+            .map(Json)
+            .map_err(application_error);
+    }
     let engine = state
         .engine
         .as_ref()
@@ -187,6 +229,13 @@ async fn stop_inbound(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> ApiResult<InboundStatus> {
+    if let Some(application) = &state.application {
+        return application
+            .stop_inbound(&id)
+            .await
+            .map(Json)
+            .map_err(application_error);
+    }
     let engine = state
         .engine
         .as_ref()
@@ -194,7 +243,38 @@ async fn stop_inbound(
     engine.stop(&id).await.map(Json).map_err(engine_error)
 }
 async fn config(State(state): State<Arc<AppState>>) -> Json<DaemonConfig> {
-    Json(state.config.redacted())
+    Json(state.effective_config().redacted())
+}
+
+fn application_error(error: ApplicationError) -> (StatusCode, Json<ApiError>) {
+    let (status, code) = match &error {
+        ApplicationError::Storage(StorageError::Conflict) => {
+            (StatusCode::CONFLICT, "configuration_conflict")
+        }
+        ApplicationError::Storage(StorageError::NotFound) => {
+            (StatusCode::NOT_FOUND, "revision_not_found")
+        }
+        ApplicationError::Invalid
+        | ApplicationError::Storage(StorageError::Invalid)
+        | ApplicationError::Engine(EngineError::Tls | EngineError::Configuration) => {
+            (StatusCode::UNPROCESSABLE_ENTITY, "invalid_configuration")
+        }
+        ApplicationError::Engine(EngineError::Bind) => (StatusCode::CONFLICT, "listen_failed"),
+        ApplicationError::Engine(EngineError::NotFound) => {
+            (StatusCode::NOT_FOUND, "inbound_not_found")
+        }
+        ApplicationError::GenerationBudget => (StatusCode::CONFLICT, "draining_generation_limit"),
+        _ => (StatusCode::SERVICE_UNAVAILABLE, "configuration_unavailable"),
+    };
+    (
+        status,
+        Json(ApiError {
+            code: code.into(),
+            message: error.to_string(),
+            request_id: uuid::Uuid::new_v4().to_string(),
+            retryable: false,
+        }),
+    )
 }
 
 async fn linux_preflight() -> Result<Json<hps_domain::LinuxPreflight>, (StatusCode, Json<ApiError>)>

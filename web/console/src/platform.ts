@@ -63,11 +63,14 @@ export async function getJson<T>(
   return response.json() as Promise<T>;
 }
 
-export async function postJson<T>(path: string): Promise<T> {
-  if (isDesktop) return native<T>("api_post", { path });
+export async function postJson<T>(path: string, body?: unknown): Promise<T> {
+  if (isDesktop) return native<T>("api_post", { path, body: body ?? null });
   const response = await fetch(new URL(path, await endpoint()), {
     method: "POST",
     credentials: "omit",
+    headers:
+      body === undefined ? undefined : { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!response.ok) {
     const error: unknown = await response.json().catch(() => null);
@@ -78,4 +81,20 @@ export async function postJson<T>(path: string): Promise<T> {
     );
   }
   return response.json() as Promise<T>;
+}
+
+export async function saveConfiguration(revision: number): Promise<boolean> {
+  if (isDesktop) return native<boolean>("save_config_export", { revision });
+  const exported = await getJson<{ format_version: number; toml: string }>(
+    `api/v1/config/revisions/${revision}`,
+  );
+  const url = URL.createObjectURL(
+    new Blob([exported.toml], { type: "text/plain;charset=utf-8" }),
+  );
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `hps-config-r${revision}.toml`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return true;
 }

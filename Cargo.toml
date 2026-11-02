@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["apps/cli", "apps/daemon", "crates/domain", "crates/config", "crates/client", "crates/api", "crates/web-assets", "crates/platform", "crates/engine"]
+members = ["apps/cli", "apps/daemon", "crates/domain", "crates/config", "crates/client", "crates/api", "crates/web-assets", "crates/platform", "crates/engine", "crates/storage", "crates/application"]
 default-members = ["apps/cli", "apps/daemon"]
 exclude = ["src-tauri"]
 
@@ -16,6 +16,8 @@ hps-client = { path = "crates/client" }
 hps-api = { path = "crates/api" }
 hps-platform = { path = "crates/platform" }
 hps-engine = { path = "crates/engine" }
+hps-storage = { path = "crates/storage" }
+hps-application = { path = "crates/application" }
 axum = "0.8"
 clap = { version = "4.6", features = ["derive", "env"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }

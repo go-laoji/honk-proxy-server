@@ -17,6 +17,8 @@ struct Args {
         env = "HPS_ENDPOINT"
     )]
     endpoint: String,
+    #[arg(long = "ca-cert", global = true, env = "HPS_CA_CERT")]
+    ca_certificate: Option<PathBuf>,
     #[arg(long, global = true, default_value_t = 10, value_parser = clap::value_parser!(u64).range(1..=300))]
     timeout: u64,
     #[arg(long, global = true, value_enum, default_value_t = Output::Text)]
@@ -61,7 +63,59 @@ enum Command {
 #[derive(Subcommand)]
 enum ConfigCommand {
     Show,
-    Check { path: PathBuf },
+    Check {
+        path: PathBuf,
+    },
+    Workspace,
+    Validate {
+        path: PathBuf,
+        #[arg(long)]
+        expected_revision: Option<i64>,
+        #[arg(long)]
+        draft_version: Option<i64>,
+        #[arg(long, requires = "draft_version")]
+        use_draft_credentials: bool,
+    },
+    SaveDraft {
+        path: PathBuf,
+        #[arg(long)]
+        expected_revision: i64,
+        #[arg(long)]
+        draft_version: i64,
+        #[arg(long)]
+        use_draft_credentials: bool,
+    },
+    Import {
+        path: PathBuf,
+        #[arg(long)]
+        expected_revision: i64,
+        #[arg(long, default_value = "CLI import")]
+        note: String,
+        #[arg(long)]
+        draft_version: Option<i64>,
+        #[arg(long, requires = "draft_version")]
+        use_draft_credentials: bool,
+    },
+    Activate {
+        revision: i64,
+        #[arg(long)]
+        expected_revision: i64,
+        #[arg(long)]
+        defer_until_restart: bool,
+    },
+    Rollback {
+        revision: i64,
+        #[arg(long)]
+        expected_revision: i64,
+        #[arg(long)]
+        defer_until_restart: bool,
+    },
+    Export {
+        #[arg(long)]
+        revision: Option<i64>,
+        #[arg(long)]
+        path: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -82,12 +136,26 @@ async fn main() -> ExitCode {
         Ok(value) => {
             match args.output {
                 Output::Json => println!("{}", value),
+                Output::Text
+                    if matches!(
+                        args.command,
+                        Command::Config {
+                            command: ConfigCommand::Export { path: None, .. }
+                        }
+                    ) =>
+                {
+                    print!("{}", value["toml"].as_str().unwrap_or(""))
+                }
                 Output::Text => println!(
                     "{}",
                     serde_json::to_string_pretty(&value).expect("JSON value")
                 ),
             }
-            ExitCode::SUCCESS
+            if value.get("valid").and_then(serde_json::Value::as_bool) == Some(false) {
+                ExitCode::from(5)
+            } else {
+                ExitCode::SUCCESS
+            }
         }
         Err((code, message)) => {
             eprintln!("{message}");
@@ -98,7 +166,7 @@ async fn main() -> ExitCode {
 
 fn client_error(error: ClientError) -> (u8, String) {
     let code = match &error {
-        ClientError::InvalidEndpoint => 2,
+        ClientError::InvalidEndpoint | ClientError::InvalidCertificate => 2,
         ClientError::Transport(e) if e.is_timeout() => 6,
         ClientError::Transport(_) => 3,
         ClientError::Api { status: 409, .. } => 7,
@@ -130,8 +198,24 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
         }
         _ => {}
     }
-    let client =
-        HpsClient::new(&args.endpoint, Duration::from_secs(args.timeout)).map_err(client_error)?;
+    let certificate = if let Some(path) = &args.ca_certificate {
+        let metadata = std::fs::metadata(path).map_err(|error| (2, error.to_string()))?;
+        if !metadata.is_file() || metadata.len() > 1024 * 1024 {
+            return Err((
+                2,
+                "CA bundle must be a regular file no larger than 1 MiB".into(),
+            ));
+        }
+        Some(std::fs::read(path).map_err(|error| (2, error.to_string()))?)
+    } else {
+        None
+    };
+    let client = HpsClient::with_ca(
+        &args.endpoint,
+        Duration::from_secs(args.timeout),
+        certificate.as_deref(),
+    )
+    .map_err(client_error)?;
     let value = match &args.command {
         Command::Status => serde_json::to_value(client.status().await.map_err(client_error)?),
         Command::Version => serde_json::to_value(client.version().await.map_err(client_error)?),
@@ -152,9 +236,125 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
         Command::Linux {
             command: LinuxCommand::Preflight,
         } => serde_json::to_value(client.linux_preflight().await.map_err(client_error)?),
-        Command::Config {
-            command: ConfigCommand::Show,
-        } => serde_json::to_value(client.config().await.map_err(client_error)?),
+        Command::Config { command } => match command {
+            ConfigCommand::Show => {
+                serde_json::to_value(client.config().await.map_err(client_error)?)
+            }
+            ConfigCommand::Workspace => {
+                serde_json::to_value(client.config_workspace().await.map_err(client_error)?)
+            }
+            ConfigCommand::Validate {
+                path,
+                expected_revision,
+                draft_version,
+                use_draft_credentials,
+            } => {
+                let expected = match expected_revision {
+                    Some(expected) => *expected,
+                    None => {
+                        client
+                            .config_workspace()
+                            .await
+                            .map_err(client_error)?
+                            .desired_revision
+                    }
+                };
+                serde_json::to_value(
+                    client
+                        .validate_config(&read_config_input(
+                            path,
+                            expected,
+                            *draft_version,
+                            String::new(),
+                            *use_draft_credentials,
+                        )?)
+                        .await
+                        .map_err(client_error)?,
+                )
+            }
+            ConfigCommand::SaveDraft {
+                path,
+                expected_revision,
+                draft_version,
+                use_draft_credentials,
+            } => serde_json::to_value(
+                client
+                    .save_draft(&read_config_input(
+                        path,
+                        *expected_revision,
+                        Some(*draft_version),
+                        String::new(),
+                        *use_draft_credentials,
+                    )?)
+                    .await
+                    .map_err(client_error)?,
+            ),
+            ConfigCommand::Import {
+                path,
+                expected_revision,
+                note,
+                draft_version,
+                use_draft_credentials,
+            } => serde_json::to_value(
+                client
+                    .create_revision(&read_config_input(
+                        path,
+                        *expected_revision,
+                        *draft_version,
+                        note.clone(),
+                        *use_draft_credentials,
+                    )?)
+                    .await
+                    .map_err(client_error)?,
+            ),
+            ConfigCommand::Activate {
+                revision,
+                expected_revision,
+                defer_until_restart,
+            } => serde_json::to_value(
+                client
+                    .activate_config(&hps_domain::ConfigActivate {
+                        revision: *revision,
+                        expected_revision: *expected_revision,
+                        defer_until_restart: *defer_until_restart,
+                    })
+                    .await
+                    .map_err(client_error)?,
+            ),
+            ConfigCommand::Rollback {
+                revision,
+                expected_revision,
+                defer_until_restart,
+            } => serde_json::to_value(
+                client
+                    .rollback_config(&hps_domain::ConfigActivate {
+                        revision: *revision,
+                        expected_revision: *expected_revision,
+                        defer_until_restart: *defer_until_restart,
+                    })
+                    .await
+                    .map_err(client_error)?,
+            ),
+            ConfigCommand::Export { revision, path } => {
+                let export = client
+                    .export_config(*revision)
+                    .await
+                    .map_err(client_error)?;
+                if let Some(path) = path {
+                    let mut file = std::fs::OpenOptions::new()
+                        .write(true)
+                        .create_new(true)
+                        .open(path)
+                        .map_err(|error| (2, error.to_string()))?;
+                    file.write_all(export.toml.as_bytes())
+                        .map_err(|error| (2, error.to_string()))?;
+                    Ok(serde_json::json!({"created":path,"revision":export.revision}))
+                } else {
+                    serde_json::to_value(export)
+                }
+            }
+            ConfigCommand::Check { .. } => unreachable!(),
+        },
         Command::Ui { open } => {
             let url = client.console_url();
             if *open {
@@ -162,12 +362,29 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
             }
             Ok(serde_json::json!({"url": url.as_str()}))
         }
-        Command::Init { .. }
-        | Command::Config {
-            command: ConfigCommand::Check { .. },
-        } => unreachable!(),
+        Command::Init { .. } => unreachable!(),
     };
     value.map_err(|e| (5, e.to_string()))
+}
+
+fn read_config_input(
+    path: &std::path::Path,
+    expected_revision: i64,
+    expected_draft_version: Option<i64>,
+    note: String,
+    use_draft_credentials: bool,
+) -> Result<hps_domain::ConfigInput, (u8, String)> {
+    let body = std::fs::read_to_string(path).map_err(|error| (2, error.to_string()))?;
+    if body.len() > 2 * 1024 * 1024 {
+        return Err((2, "configuration file exceeds 2 MiB".into()));
+    }
+    Ok(hps_domain::ConfigInput {
+        toml: body,
+        expected_revision,
+        expected_draft_version,
+        note,
+        use_draft_credentials,
+    })
 }
 
 fn open_browser(url: &str) -> std::io::Result<()> {

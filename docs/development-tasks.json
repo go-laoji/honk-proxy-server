@@ -93,7 +93,7 @@
       "acceptance": "持久化与重启恢复、过期版本409、失败保留旧版本、脱敏导入导出、回滚一致性；HTTP无账号可读写。",
       "issue": 10,
       "url": "https://github.com/go-laoji/honk-proxy-server/issues/10",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "T06",

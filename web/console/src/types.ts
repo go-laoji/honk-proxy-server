@@ -38,6 +38,68 @@ export interface DaemonConfig {
   instance_name: string;
   management_listen: string;
   log_filter: string;
+  management_tls?: { certificate: string; private_key: string } | null;
+  retention?: {
+    config_versions: number;
+    activity_days: number;
+    task_days: number;
+  };
+}
+
+export interface ConfigRevision {
+  id: number;
+  parent_id: number | null;
+  checksum: string;
+  created_at: number;
+  note: string;
+  applied_at: number | null;
+}
+export interface ConfigWorkspace {
+  format_version: number;
+  desired_revision: number;
+  running_revision: number;
+  current_toml: string;
+  desired_toml: string;
+  draft: {
+    version: number;
+    base_revision: number;
+    toml: string;
+    updated_at: number;
+  };
+  revisions: ConfigRevision[];
+  activations: {
+    id: number;
+    revision: number;
+    previous_revision: number;
+    state: string;
+    created_at: number;
+    error_code: string | null;
+  }[];
+  pending_restart: string[];
+  storage_path: string | null;
+  draining_generations: number;
+  startup_overrides: string[];
+  management_certificate: {
+    not_before_unix: number;
+    not_after_unix: number;
+    valid_now: boolean;
+  } | null;
+}
+export interface ConfigValidation {
+  valid: boolean;
+  diagnostics: {
+    path: string;
+    message: string;
+    line: number | null;
+    column: number | null;
+  }[];
+  changes: {
+    path: string;
+    before: unknown;
+    after: unknown;
+    apply_mode: string;
+  }[];
+  restart_required: string[];
 }
 
 export interface ResourceLimits {
