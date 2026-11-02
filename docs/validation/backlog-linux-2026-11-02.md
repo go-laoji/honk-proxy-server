@@ -18,3 +18,9 @@ x86 首轮普通测试在未修改的 `transparent::tests::udp_recovers_actual_d
 x86 标准矩阵开始时曾因本地 kernel image tag 缺失而在 fixture 层退出，尚未执行案例。原短日志与[恢复元数据](backlog-kernel-2026-11-02/x86_64/fixture-image-recovery.json)保留。相同 Dockerfile 与参数从本地 BuildKit 缓存重建镜像后，核对 APK 摘要与此前 Net 串口证据一致，再重新执行完整矩阵。该 fixture 失败不计为案例失败或通过。
 
 所有源码以只读冻结快照挂载，双架构 cargo/target 输出分开；实际网络/eBPF 操作仅在自有完整 QEMU guest 内执行。没有操作宿主 Mac Wi-Fi、DNS、路由、系统代理，未启停用户服务或原有 mysql。普通容器的只读拓扑采样不代替本页真实内核证明。静态 headless 候选的打包、实际安装及发行 daemon 的额外内核案例单独记录，不把 debug test binary 的通过自动当成发行 daemon 已验收。
+
+ARM 静态 headless 候选已用本架构执行元数据检查、打包及实际安装。包的编译来源是 `862ddad`，打包文档来源是 `34acb5d`，未允许 dirty；ELF 没有 `PT_INTERP`，运行无需 Desktop、display 或 Node。候选包 SHA-256 为 `74e0dc1bd1355e6f6693e67d7b3d2830968f01770eb82778cebde07ba6582906`。包内文件摘要、配置保留及损坏重装不改变已安装两个二进制均通过。安装二进制完成 18 页服务、独立 CLI、HTTP/CONNECT/SOCKS5、256 请求/16 workers 零失败本地负载、连接归零、4 连接预算/第五条拒绝、端口冲突拒绝及干净重启。此处同一二进制的持久状态重启/停机快照回退不冒充跨源码版本升级；Mac 的独立旧版升级验收见其报告。负载数字只描述自有本地夹具。
+
+ARM 安装后的独立 CLI 另完成真实在线备份/摘要检查、运行锁拒绝恢复、停止后恢复保留原库、坏摘要拒绝和重新启动。[包清单与安装报告](backlog-kernel-2026-11-02/packages/aarch64/manifest.json)保留实际来源、Web ID、eBPF 对象和二进制摘要，其他原始结果位于同目录。已安装 `hpsd` SHA-256 `d6d6d7bec8e0224cb6c8ab642a08cfaf2a05403acc808cf21936c63e0931f728` 与两个完整 ARM 内核实际执行的 release daemon 相同。两条额外发行案例均精确 1 passed，确认真实 SIGKILL、外来规则保留及重启前后 TCP/UDP 转发，独立于标准 52。
+
+可恢复的实际包、manifest、安装结果与 installed-prefix 已复制至主工作目录 `target/validation/backlog-candidate/linux-aarch64`，不依赖当前工作树的 ignored target 留存。未打 deb/Desktop Linux 包、未发布 registry 或启用实际系统服务。

@@ -1,0 +1,72 @@
+{
+  "format_version": 1,
+  "package": "headless",
+  "version": "0.1.0",
+  "source_revision": "862ddad624403e6f81bc994a7fe262ac04b7fb01",
+  "packaging_revision": "34acb5d438994f710ac698da3dfd85d2bb75de24",
+  "dirty_tracked_source": false,
+  "exploratory_artifact": false,
+  "target": "aarch64-unknown-linux-musl",
+  "runtime_metadata_checked": true,
+  "runtime_metadata": {
+    "format_version": 1,
+    "binary": "hpsd",
+    "architecture": "aarch64",
+    "platform": "linux",
+    "source_revision": "862ddad624403e6f81bc994a7fe262ac04b7fb01",
+    "source_dirty": false,
+    "version": {
+      "service": "honk-proxy-server",
+      "version": "0.1.0",
+      "api_version": "v1",
+      "web_build_id": "7c94170ee16c7b9c2f8e0aa08c219e172c2a7b6bb4834c71b2cf96a2fb4316e1"
+    }
+  },
+  "web_ui": true,
+  "web_build_id": "7c94170ee16c7b9c2f8e0aa08c219e172c2a7b6bb4834c71b2cf96a2fb4316e1",
+  "web_pages": [
+    "index.html",
+    "overview.html",
+    "inbounds.html",
+    "providers.html",
+    "provider-detail.html",
+    "nodes.html",
+    "node-detail.html",
+    "groups.html",
+    "group-detail.html",
+    "rules.html",
+    "health.html",
+    "dns.html",
+    "connections.html",
+    "events.html",
+    "tasks.html",
+    "linux.html",
+    "config.html",
+    "settings.html"
+  ],
+  "ebpf": {
+    "available": true,
+    "abi": 4,
+    "sha256": "fa5449609f86a6b50300a83a6e10d2f2150aa42eaa6676c8e64dd1581bbd5286",
+    "minimum_verified_kernel": "6.12.115"
+  },
+  "locks": {
+    "Cargo.lock": "286cb05b84c10288f633e0aaf52fb202b42da4927397da18e0416088fa2dc211",
+    "src-tauri/Cargo.lock": "a637d2309de3369d03533a6284df740893b1ff8fb742170f29bc1796e96fdfbb",
+    "ebpf/Cargo.lock": "c763d81c373a62b0101e36b6cd17d3ee9cf6f6081301c6f5ec8691aa557a6dba",
+    "pnpm-lock.yaml": "69df477d731f03bb891ee5cf99f7e6f63288c90e7c8279c453dd8cb02907e7a5"
+  },
+  "toolchains": {
+    "rust": "1.98.1",
+    "ebpf_rust": "nightly-2026-09-01",
+    "node": "24.15.0",
+    "pnpm": "12.10.1",
+    "transparent_ebpf_abi": 4,
+    "minimum_verified_linux_kernel": "6.12.115",
+    "web_pages": 18
+  },
+  "requires_desktop": false,
+  "requires_node_at_runtime": false,
+  "macos_actual_proxy_persistent_change_verified": false,
+  "paid_supplier_account_call_verified": false
+}

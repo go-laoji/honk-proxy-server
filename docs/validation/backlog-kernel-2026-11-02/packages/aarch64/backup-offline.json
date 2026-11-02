@@ -1,0 +1,11 @@
+{
+  "scope": "real_cli_and_owned_disposable_daemon",
+  "download_digest_verified": true,
+  "running_restore_refused": true,
+  "offline_restore_and_original_preservation": true,
+  "bad_digest_refused": true,
+  "restart_successful": true,
+  "snapshot_bytes": 262144,
+  "network_configuration_writes": false,
+  "user_services_touched": false
+}
