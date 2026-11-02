@@ -756,12 +756,11 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
         ))
         .map_err(|e| (5, e.to_string()));
     }
-    if let Command::Backup { command } = &args.command {
-        if let Some(result) =
+    if let Command::Backup { command } = &args.command
+        && let Some(result) =
             backup::local(command, args.endpoint.is_some() || args.profile.is_some())
-        {
-            return result;
-        }
+    {
+        return result;
     }
     match &args.command {
         Command::Profile { command } => return local::profiles(command),

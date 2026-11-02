@@ -488,8 +488,10 @@ mod tests {
         save_new(&export, &snapshot.bytes).unwrap();
         source.close().await.unwrap();
         let target_dir = tempfile::tempdir().unwrap();
-        let mut bootstrap = DaemonConfig::default();
-        bootstrap.instance_name = "before-restore".into();
+        let bootstrap = DaemonConfig {
+            instance_name: "before-restore".into(),
+            ..Default::default()
+        };
         let target = Store::open(Some(target_dir.path()), bootstrap).unwrap();
         assert!(matches!(
             restore(target_dir.path(), &export, &snapshot.metadata.sha256),

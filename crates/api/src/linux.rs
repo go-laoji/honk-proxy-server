@@ -42,6 +42,16 @@ async fn control(
         .map_err(application_error)
 }
 
+async fn diagnostics(
+    State(state): State<Arc<AppState>>,
+) -> ApiResult<hps_domain::LinuxDiagnostics> {
+    application(&state)?
+        .linux_diagnostics()
+        .await
+        .map(Json)
+        .map_err(application_error)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -117,14 +127,4 @@ mod tests {
         service.shutdown().await.unwrap();
         server.abort();
     }
-}
-
-async fn diagnostics(
-    State(state): State<Arc<AppState>>,
-) -> ApiResult<hps_domain::LinuxDiagnostics> {
-    application(&state)?
-        .linux_diagnostics()
-        .await
-        .map(Json)
-        .map_err(application_error)
 }
