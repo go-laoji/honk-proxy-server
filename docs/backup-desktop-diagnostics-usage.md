@@ -2,18 +2,18 @@
 
 ## 一致性备份与离线恢复
 
-设置页的“数据库备份与恢复”要求确认备份含凭据，再生成完整 SQLite 文件。Daemon 的 `POST /api/v1/config/backup` 使用独立只读连接与 SQLite Backup API，固定 WAL 只读事务快照，每次最多 128 页、间隔 5ms、总期限 30s、文件上限 64MiB、每实例最多一个正在生成或下载的完整备份。不会复制正在写入的主文件，也不会把备份放进普通脱敏诊断包。
+设置页的“数据库备份与恢复”要求确认备份含凭据，再生成完整 SQLite 文件。Daemon 的 `POST /api/v1/config/backup` 使用独立只读连接与 SQLite Backup API，固定 WAL 只读事务快照，每次最多 128 页、间隔 5ms、逐页复制阶段期限 30s、文件上限 64MiB、每实例最多一个正在生成或下载的完整备份。源捕获、后续校验/落盘和传输不受该 30s timer 覆盖，另受 64MiB 文件和并发许可约束；大库 CLI 可显式设置 `--timeout 120`。不会复制正在写入的主文件，也不会把备份放进普通脱敏诊断包。
 
 候选存储在数据目录中随机命名的私有临时文件，quick_check、foreign_key_check、声明版本对应的参考迁移 schema、所有配置历史的内容摘要、草稿/时钟/事件单例、持久租约/健康记录的可解析性及文件 SHA-256 都验证后才返回；失败清理候选。结果为独立 DELETE-journal SQLite 文件。`X-HPS-Backup` 包含格式、schema、大小、摘要与校验时间。响应 `Cache-Control: no-store`。下载响应持有容量许可直到消费完成或丢弃；分块输出避免尾部慢帧保留整个快照。Native 保存对话框也限制每进程一份等待快照。CLI/Native 下载另验大小与摘要，保存使用 0600 且拒绝覆盖已有文件。浏览器保存权限由浏览器/OS 决定；安全上下文可用 Web Crypto 时另验摘要，普通远程 HTTP 仍校验大小并显示服务器摘要供离线 inspect 校验。
 
 ```sh
-hps --endpoint http://127.0.0.1:17900 --timeout 45 --output json backup create ./hps-backup.sqlite3
+hps --endpoint http://127.0.0.1:17900 --timeout 120 --output json backup create ./hps-backup.sqlite3
 hps --output json backup inspect ./hps-backup.sqlite3 --sha256 <下载返回的摘要>
 # 使用你已经配置的服务管理方式先停止目标 Daemon，再在目标本机运行：
 hps --output json backup restore ./hps-backup.sqlite3 --offline --data-dir /private/hps-data --sha256 <摘要>
 ```
 
-restore 不接受远端 endpoint/profile，不通过管理 API 触发，不会自动停止/启动任何服务。它要求已存在的数据目录，复用 Daemon 生命周期 `daemon.lock` 的独占锁；只要 Store 仍在运行，就会拒绝替换。先验证输入的大小、摘要、schema 和完整性，再用 Backup API 生成候选。输入必须是独立 DELETE-journal 快照，不能拿活动 WAL 主文件当备份。schema 高于当前支持版本会拒绝；受支持旧版本在下一次正常启动按既有迁移处理，不强改版本号。
+restore 不接受远端 endpoint/profile，不通过管理 API 触发，不会自动停止/启动任何服务。它要求已存在的数据目录，复用 Daemon 生命周期 `daemon.lock` 的独占锁；只要 Store 仍在运行，就会拒绝替换。输入路径只打开读取一次，按 64MiB 上限捕获字节并核对摘要；之后写入 0700 UUID 私有目录内的 0600 sealed 文件。schema 校验和 Backup API 恢复候选都只读取同一 sealed 内容，不再重新打开原路径，避免来源 A→B→A 替换使摘要和恢复内容分离。临时封存文件在成功/失败后清理。全部非内部 schema 对象的 name/type/tbl_name/sql 必须与该版本参考 schema 精确一致，额外触发器、表、视图或索引均拒绝。输入必须是独立 DELETE-journal 快照，不能拿活动 WAL 主文件当备份。schema 高于当前支持版本会拒绝；受支持旧版本在下一次正常启动按既有迁移处理，不强改版本号。
 
 持锁期间 checkpoint 原库，保留 `hps.pre-restore-<随机ID>.sqlite3` 硬链接，再原子替换主库并同步目录。替换前失败原库保持可用，候选清理；替换完成但目录同步失败会明确报告“已发布但持久性不能确认”，此时保持服务停止并检查保留原件。完成后 CLI 返回 `restart_required: true`，用户显式重启 Daemon。正常启动会生成新 epoch、标记旧进行中任务 interrupted、撤销旧健康证明，重新建立控制器。不要让旧 Store 或后台写入跨越恢复。原库保留文件也含凭据，需按备份妥善保管。
 

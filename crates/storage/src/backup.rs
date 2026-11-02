@@ -19,7 +19,7 @@ pub enum BackupError {
     Busy,
     #[error("backup is corrupt, unsupported, oversized, or has an unexpected digest")]
     Invalid,
-    #[error("backup exceeded the 30 second snapshot deadline")]
+    #[error("backup page copy exceeded the 30 second deadline")]
     Timeout,
     #[error("stop the daemon before restoring; its data directory is locked")]
     Running,
@@ -69,6 +69,19 @@ fn readonly(path: &Path) -> Result<Connection, BackupError> {
 }
 fn validate(connection: &Connection) -> Result<i64, BackupError> {
     connection.pragma_update(None, "trusted_schema", false)?;
+    // Authenticate the version table's own shape before executing any SQL from it.
+    let reference = Connection::open_in_memory()?;
+    reference.execute_batch(SCHEMA_MIGRATIONS_SQL)?;
+    let metadata_object = |c: &Connection| -> Result<SchemaObject, rusqlite::Error> {
+        c.query_row(
+            "SELECT name,type,tbl_name,sql FROM sqlite_schema WHERE name='schema_migrations'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+        )
+    };
+    if metadata_object(connection)? != metadata_object(&reference)? {
+        return Err(BackupError::Invalid);
+    }
     let version: i64 =
         connection.query_row("SELECT max(version) FROM schema_migrations", [], |r| {
             r.get(0)
@@ -76,7 +89,6 @@ fn validate(connection: &Connection) -> Result<i64, BackupError> {
     if !(1..=SCHEMA_VERSION).contains(&version) {
         return Err(BackupError::Invalid);
     }
-    let reference = Connection::open_in_memory()?;
     let scripts = [
         include_str!("../migrations/0001_configuration.up.sql"),
         include_str!("../migrations/0002_known_good.up.sql"),
@@ -90,19 +102,14 @@ fn validate(connection: &Connection) -> Result<i64, BackupError> {
     for script in scripts.iter().take(version as usize) {
         reference.execute_batch(script)?;
     }
-    let mut statement = reference.prepare(
-        "SELECT name,sql FROM sqlite_schema WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'",
+    let expected = schema_objects(&reference)?;
+    let actual_count: i64 = connection.query_row(
+        "SELECT count(*) FROM sqlite_schema WHERE name NOT GLOB 'sqlite_*'",
+        [],
+        |r| r.get(0),
     )?;
-    for item in statement.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))? {
-        let (name, expected) = item?;
-        let actual: Option<String> = connection
-            .query_row("SELECT sql FROM sqlite_schema WHERE name=?1", [name], |r| {
-                r.get(0)
-            })
-            .optional()?;
-        if actual.as_deref() != Some(expected.as_str()) {
-            return Err(BackupError::Invalid);
-        }
+    if actual_count != expected.len() as i64 || schema_objects(connection)? != expected {
+        return Err(BackupError::Invalid);
     }
     let check: String = connection.query_row("PRAGMA quick_check", [], |r| r.get(0))?;
     if check != "ok"
@@ -169,6 +176,15 @@ fn validate(connection: &Connection) -> Result<i64, BackupError> {
     }
     Ok(version)
 }
+type SchemaObject = (String, String, String, Option<String>);
+fn schema_objects(connection: &Connection) -> Result<Vec<SchemaObject>, BackupError> {
+    let mut statement=connection.prepare("SELECT name,type,tbl_name,sql FROM sqlite_schema WHERE name NOT GLOB 'sqlite_*' ORDER BY name,type,tbl_name,sql")?;
+    Ok(statement
+        .query_map([], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        })?
+        .collect::<Result<Vec<_>, _>>()?)
+}
 fn validate_documents<T: serde::de::DeserializeOwned>(
     connection: &Connection,
     sql: &str,
@@ -215,38 +231,101 @@ fn copy(source: &Connection, destination: &Path) -> Result<(), BackupError> {
     file.sync_all()?;
     Ok(())
 }
-pub fn inspect(
-    path: &Path,
-    expected_sha256: Option<&str>,
-) -> Result<hps_domain::BackupMetadata, BackupError> {
+struct CapturedBackup {
+    bytes: Vec<u8>,
+    sha256: String,
+}
+struct SealedBackup {
+    directory: PathBuf,
+    path: PathBuf,
+}
+impl Drop for SealedBackup {
+    fn drop(&mut self) {
+        for path in [
+            &self.path,
+            &self.path.with_extension("sqlite3-wal"),
+            &self.path.with_extension("sqlite3-shm"),
+        ] {
+            let _ = std::fs::remove_file(path);
+        }
+        let _ = std::fs::remove_dir(&self.directory);
+    }
+}
+struct VerifiedBackup {
+    sealed: SealedBackup,
+    metadata: hps_domain::BackupMetadata,
+}
+/// Read the caller's pathname exactly once. Every later SQL operation uses these captured bytes.
+fn capture(path: &Path, expected_sha256: Option<&str>) -> Result<CapturedBackup, BackupError> {
     let mut file = File::open(path)?;
-    let size = file.metadata()?.len();
-    if size == 0 || size > MAX_BACKUP_BYTES {
+    let info = file.metadata()?;
+    let size = info.len();
+    if !info.is_file() || size == 0 || size > MAX_BACKUP_BYTES {
         return Err(BackupError::Invalid);
     }
     let mut bytes = Vec::with_capacity(size as usize);
     Read::by_ref(&mut file)
         .take(MAX_BACKUP_BYTES + 1)
         .read_to_end(&mut bytes)?;
-    let digest = format!("{:x}", Sha256::digest(&bytes));
-    if bytes.len() as u64 != size || expected_sha256.is_some_and(|expected| expected != digest) {
+    let sha256 = format!("{:x}", Sha256::digest(&bytes));
+    if bytes.len() as u64 != size || expected_sha256.is_some_and(|expected| expected != sha256) {
         return Err(BackupError::Invalid);
     }
-    let connection = readonly(path)?;
+    Ok(CapturedBackup { bytes, sha256 })
+}
+fn verify_captured(captured: CapturedBackup) -> Result<VerifiedBackup, BackupError> {
+    let directory =
+        std::env::temp_dir().join(format!("hps-backup-sealed-{}", uuid::Uuid::new_v4()));
+    let mut builder = std::fs::DirBuilder::new();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        builder.mode(0o700);
+    }
+    builder.create(&directory)?;
+    let sealed = SealedBackup {
+        path: directory.join("input.sqlite3"),
+        directory,
+    };
+    let mut file = private_file(&sealed.path)?;
+    file.write_all(&captured.bytes)?;
+    file.sync_all()?;
+    drop(file);
+    let connection = readonly(&sealed.path)?;
     let journal: String = connection.query_row("PRAGMA journal_mode", [], |r| r.get(0))?;
     if journal != "delete" {
         return Err(BackupError::Invalid);
     }
     let schema_version = validate(&connection)?;
-    Ok(hps_domain::BackupMetadata {
+    let metadata = hps_domain::BackupMetadata {
         format_version: 1,
         schema_version,
-        size_bytes: size,
-        sha256: digest,
+        size_bytes: captured.bytes.len() as u64,
+        sha256: captured.sha256,
         verified_at_unix: unix_now(),
         contains_credentials: true,
         restore_requires_stopped_daemon: true,
-    })
+    };
+    Ok(VerifiedBackup { sealed, metadata })
+}
+pub fn inspect(
+    path: &Path,
+    expected_sha256: Option<&str>,
+) -> Result<hps_domain::BackupMetadata, BackupError> {
+    Ok(verify_captured(capture(path, expected_sha256)?)?.metadata)
+}
+fn restore_lock(directory: &Path) -> Result<File, BackupError> {
+    let mut options = std::fs::OpenOptions::new();
+    options.create(true).read(true).write(true).truncate(false);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let lock = options.open(directory.join("daemon.lock"))?;
+    lock.try_lock_exclusive()
+        .map_err(|_| BackupError::Running)?;
+    Ok(lock)
 }
 /// Local CLI only. Holds exactly the daemon's lifetime lock until publication completes.
 pub fn restore(
@@ -258,25 +337,21 @@ pub fn restore(
         return Err(BackupError::Invalid);
     }
     let directory = directory.canonicalize()?;
-    let mut options = std::fs::OpenOptions::new();
-    options.create(true).read(true).write(true).truncate(false);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    let lock = options.open(directory.join("daemon.lock"))?;
-    lock.try_lock_exclusive()
-        .map_err(|_| BackupError::Running)?;
-    let original = directory.join("hps.sqlite3");
-    if source.canonicalize()? == original {
+    let lock = restore_lock(&directory)?;
+    if source.canonicalize()? == directory.join("hps.sqlite3") {
         return Err(BackupError::Invalid);
     }
-    // Validate the caller's digest before touching the target. Recheck the source after copying.
-    inspect(source, Some(expected_sha256))?;
+    restore_captured(&directory, capture(source, Some(expected_sha256))?, lock)
+}
+fn restore_captured(
+    directory: &Path,
+    captured: CapturedBackup,
+    lock: File,
+) -> Result<RestoreResult, BackupError> {
+    let verified = verify_captured(captured)?;
+    let original = directory.join("hps.sqlite3");
     let temporary = Temporary(directory.join(format!(".restore-{}.sqlite3", uuid::Uuid::new_v4())));
-    copy(&readonly(source)?, &temporary.0)?;
-    inspect(source, Some(expected_sha256))?;
+    copy(&readonly(&verified.sealed.path)?, &temporary.0)?;
     let metadata = inspect(&temporary.0, None)?;
     let preserved = if original.exists() {
         let current = Connection::open(&original)?;
@@ -297,7 +372,7 @@ pub fn restore(
     // The original stays present until atomic publication; the hard link preserves recovery data.
     std::fs::rename(&temporary.0, &original)?;
     #[cfg(unix)]
-    File::open(&directory)
+    File::open(directory)
         .and_then(|v| v.sync_all())
         .map_err(|_| BackupError::PublishedDurability)?;
     drop(lock);
@@ -353,16 +428,16 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let store = Store::open(Some(dir.path()), DaemonConfig::default()).unwrap();
         let writer = Connection::open(store.database_path.as_ref().unwrap()).unwrap();
-        writer.execute_batch("CREATE TABLE backup_pair(a INTEGER,b INTEGER CHECK(a=b)); INSERT INTO backup_pair VALUES(0,0);CREATE TABLE backup_payload(data BLOB);INSERT INTO backup_payload VALUES(zeroblob(2097152))").unwrap();
+        writer.execute_batch("WITH RECURSIVE fixture(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM fixture WHERE x<10000) INSERT INTO service_events(recorded_epoch,occurred_at,level,module,code) SELECT '00000000-0000-0000-0000-000000000000',0,'info','backup_fixture',printf('%096d',x) FROM fixture").unwrap();
         let running = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
         let signal = running.clone();
         let progress = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
         let count = progress.clone();
         let worker = std::thread::spawn(move || {
-            let mut n = 0;
+            let mut n = 1;
             while signal.load(std::sync::atomic::Ordering::Relaxed) {
                 writer
-                    .execute("UPDATE backup_pair SET a=?1,b=?1", [n])
+                    .execute("UPDATE config_draft SET version=?1,updated_at=?1", [n])
                     .unwrap();
                 n += 1;
                 count.store(n as u64, std::sync::atomic::Ordering::Relaxed);
@@ -384,9 +459,11 @@ mod tests {
         assert_eq!(actual.schema_version, SCHEMA_VERSION);
         let copy = readonly(&path).unwrap();
         let (a, b): (i64, i64) = copy
-            .query_row("SELECT a,b FROM backup_pair", [], |r| {
-                Ok((r.get(0)?, r.get(1)?))
-            })
+            .query_row(
+                "SELECT version,updated_at FROM config_draft WHERE singleton=1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
             .unwrap();
         assert_eq!(a, b);
         #[cfg(unix)]
@@ -405,6 +482,123 @@ mod tests {
                 .starts_with(".backup-")
         }));
         store.close().await.unwrap();
+    }
+    #[tokio::test]
+    async fn extra_objects_including_literal_prefix_bypass_cannot_poison_restored_schema() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(Some(dir.path()), DaemonConfig::default()).unwrap();
+        let snapshot = store.backup().await.unwrap();
+        store.close().await.unwrap();
+        let target = dir.path().join("hps.sqlite3");
+        let before = std::fs::read(&target).unwrap();
+        let source = dir.path().join("untrusted.sqlite3");
+        for sql in [
+            "CREATE TRIGGER poison_event_context AFTER UPDATE ON event_context BEGIN UPDATE schema_migrations SET version=999; END",
+            "CREATE TRIGGER sqliteXpoison AFTER UPDATE ON event_context BEGIN UPDATE schema_migrations SET version=999; END",
+            "CREATE TABLE extra_table(payload TEXT)",
+            "CREATE VIEW extra_view AS SELECT id FROM config_revisions",
+            "CREATE INDEX extra_index ON config_revisions(created_at)",
+        ] {
+            std::fs::write(&source, &snapshot.bytes).unwrap();
+            let db = Connection::open(&source).unwrap();
+            db.execute_batch(sql).unwrap();
+            drop(db);
+            let injected = std::fs::read(&source).unwrap();
+            let digest = format!("{:x}", Sha256::digest(&injected));
+            assert!(inspect(&source, Some(&digest)).is_err(), "accepted {sql}");
+            assert!(
+                restore(dir.path(), &source, &digest).is_err(),
+                "restored {sql}"
+            );
+            assert_eq!(before, std::fs::read(&target).unwrap());
+            assert_eq!(injected, std::fs::read(&source).unwrap());
+            assert_eq!(
+                readonly(&target)
+                    .unwrap()
+                    .query_row("SELECT max(version) FROM schema_migrations", [], |r| r
+                        .get::<_, i64>(0))
+                    .unwrap(),
+                SCHEMA_VERSION
+            );
+        }
+    }
+    #[tokio::test]
+    async fn captured_bytes_bind_digest_schema_and_restore_after_source_path_replacement() {
+        let a_dir = tempfile::tempdir().unwrap();
+        let b_dir = tempfile::tempdir().unwrap();
+        let target_dir = tempfile::tempdir().unwrap();
+        let config_a = DaemonConfig {
+            instance_name: "captured-A".into(),
+            ..Default::default()
+        };
+        let a = Store::open(Some(a_dir.path()), config_a).unwrap();
+        let snapshot_a = a.backup().await.unwrap();
+        a.close().await.unwrap();
+        let config_b = DaemonConfig {
+            instance_name: "replacement-B".into(),
+            ..Default::default()
+        };
+        let b = Store::open(Some(b_dir.path()), config_b).unwrap();
+        let snapshot_b = b.backup().await.unwrap();
+        b.close().await.unwrap();
+        let source = a_dir.path().join("selected.sqlite3");
+        save_new(&source, &snapshot_a.bytes).unwrap();
+        // Both public inspect and public restore use this same capture -> verify path.
+        let for_inspect = capture(&source, Some(&snapshot_a.metadata.sha256)).unwrap();
+        let for_restore = capture(&source, Some(&snapshot_a.metadata.sha256)).unwrap();
+        std::fs::write(&source, &snapshot_b.bytes).unwrap();
+        let verified = verify_captured(for_inspect).unwrap();
+        assert_eq!(verified.metadata.sha256, snapshot_a.metadata.sha256);
+        assert_eq!(
+            std::fs::read(&verified.sealed.path).unwrap(),
+            snapshot_a.bytes
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                std::fs::metadata(&verified.sealed.directory)
+                    .unwrap()
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o700
+            );
+            assert_eq!(
+                std::fs::metadata(&verified.sealed.path)
+                    .unwrap()
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o600
+            );
+        }
+        let sealed_path = verified.sealed.path.clone();
+        let sealed_directory = verified.sealed.directory.clone();
+        drop(verified);
+        assert!(!sealed_path.exists() && !sealed_directory.exists());
+        let restored = restore_captured(
+            target_dir.path(),
+            for_restore,
+            restore_lock(target_dir.path()).unwrap(),
+        )
+        .unwrap();
+        assert!(restored.restart_required);
+        let target = readonly(&target_dir.path().join("hps.sqlite3")).unwrap();
+        let document: String = target
+            .query_row(
+                "SELECT document FROM config_revisions WHERE id=1",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(document.contains("captured-A") && !document.contains("replacement-B"));
+        assert_eq!(std::fs::read(&source).unwrap(), snapshot_b.bytes);
+        // Replacing the path cannot rescue invalid bytes captured before the replacement either.
+        std::fs::write(&source, b"not a SQLite snapshot").unwrap();
+        let captured_invalid = capture(&source, None).unwrap();
+        std::fs::write(&source, &snapshot_a.bytes).unwrap();
+        assert!(verify_captured(captured_invalid).is_err());
     }
     #[tokio::test]
     async fn supported_old_schema_restores_without_forging_version_and_migrates_on_restart() {

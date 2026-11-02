@@ -394,8 +394,9 @@ fn check_head(connection: &Connection, expected: i64) -> Result<(), StorageError
         Err(StorageError::Conflict)
     }
 }
+const SCHEMA_MIGRATIONS_SQL: &str = "CREATE TABLE IF NOT EXISTS schema_migrations(version INTEGER PRIMARY KEY,applied_at INTEGER NOT NULL)";
 fn migrate(connection: &mut Connection, bootstrap: &str, epoch: &str) -> Result<(), StorageError> {
-    connection.execute_batch("CREATE TABLE IF NOT EXISTS schema_migrations(version INTEGER PRIMARY KEY,applied_at INTEGER NOT NULL)")?;
+    connection.execute_batch(SCHEMA_MIGRATIONS_SQL)?;
     let version: i64 = connection.query_row(
         "SELECT coalesce(max(version),0) FROM schema_migrations",
         [],
