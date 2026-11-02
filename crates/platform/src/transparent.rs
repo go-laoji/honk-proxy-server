@@ -4,6 +4,10 @@ mod metadata;
 mod routes;
 #[cfg(test)]
 mod tcp_tests;
+#[cfg(test)]
+mod test_support;
+#[cfg(test)]
+mod udp_tests;
 use aya::{
     Ebpf, EbpfLoader,
     maps::{Array, HashMap, LpmTrie, PerCpuArray, SockMap, lpm_trie::Key},

@@ -1,5 +1,5 @@
+use super::test_support::{Address, Group, Jobs};
 use super::{CaptureSockets, PreparedCapture};
-use crate::rtnetlink::{self, attribute};
 use hps_config::{
     GroupConfig, GroupStrategy, InboundConfig, LinuxCaptureConfig, PortRange, ProcessCondition,
     ProxyConfig, ProxyProtocol, RuleConditions, RuleConfig, ServerTls, UpstreamConfig,
@@ -8,9 +8,9 @@ use hps_domain::{FlowOrigin, RouteAction};
 use hps_engine::runtime::Engine;
 use std::{
     io::{Read, Write},
-    net::{IpAddr, SocketAddr},
+    net::SocketAddr,
     os::fd::AsFd,
-    path::{Path, PathBuf},
+    path::Path,
     process::{Command, Stdio},
     sync::{Arc, Mutex},
     time::Duration,
@@ -19,55 +19,6 @@ use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpListener,
 };
-
-struct Address {
-    payload: Vec<u8>,
-}
-impl Address {
-    fn add(address: &str) -> Self {
-        let ip = address.parse::<IpAddr>().unwrap();
-        let (family, prefix, flags, bytes) = match ip {
-            IpAddr::V4(a) => (libc::AF_INET as u8, 32, 0, a.octets().to_vec()),
-            IpAddr::V6(a) => (libc::AF_INET6 as u8, 128, 2, a.octets().to_vec()), // NODAD
-        };
-        let mut payload = vec![family, prefix, flags, 0];
-        payload.extend_from_slice(&unsafe { libc::if_nametoindex(c"lo".as_ptr()) }.to_ne_bytes());
-        attribute(&mut payload, 1, &bytes);
-        attribute(&mut payload, 2, &bytes);
-        rtnetlink::exchange(
-            libc::RTM_NEWADDR,
-            (libc::NLM_F_REQUEST | libc::NLM_F_ACK | libc::NLM_F_CREATE | libc::NLM_F_EXCL) as u16,
-            &payload,
-            false,
-        )
-        .unwrap();
-        Self { payload }
-    }
-}
-impl Drop for Address {
-    fn drop(&mut self) {
-        let _ = rtnetlink::exchange(
-            libc::RTM_DELADDR,
-            (libc::NLM_F_REQUEST | libc::NLM_F_ACK) as u16,
-            &self.payload,
-            false,
-        );
-    }
-}
-struct Group(PathBuf);
-impl Drop for Group {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir(&self.0);
-    }
-}
-struct Jobs(Vec<tokio::task::JoinHandle<()>>);
-impl Drop for Jobs {
-    fn drop(&mut self) {
-        for job in &self.0 {
-            job.abort();
-        }
-    }
-}
 
 #[test]
 #[ignore = "helper invoked only by the isolated real_transparent_tcp_shared_engine test"]

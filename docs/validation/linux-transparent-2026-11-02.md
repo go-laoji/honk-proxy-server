@@ -89,3 +89,13 @@ UDP 连接观察使用原有全局事实源；业务字节只在发送成功和�
 Linux 普通真实 socket 测试验证：pending=1、会话=1、报文=2、字节=512 的上限，512 B 与空报文排队/在途占用、字节/报文/尺寸分别拒绝、setup 完成释放 pending、旧代际占用阻止新代际、取消阻断延迟回复、显式入口保持监听、空闲结束回收、scope 取消 pending 关联与排队。还分别验证 TCP 控制关闭能打断上行 512 秒限速等待，以及已收到下行数据后的 50 秒限速等待（发送侧无下一条消息时也必须监视）；两项均在 1 秒内回收。TCP 三类上游契约同时验证 scoped pending 在业务连接仍活跃时已释放，等待 drain 被取消后接纳恢复。该批 owner 进程元数据仍为测试调用契约，实际内核 UDP 联合验证待下一批。
 
 额度中的 queued_bytes 指客户端 UDP 请求的等待/在途 payload，不是进程或内核 socket 总内存上限；每会话还有有界接收缓冲/socket 开销，受 max_udp_sessions 约束。当前公共实际服务尚未接入 owner，不据此宣称完整数据面 ready。Linux 全部 engine 用例 50 通过，macOS 45 通过，零失败/忽略，相关 Clippy 通过；实际 7.0 内核的共享 TCP 三上游回归也通过。
+
+## 实际内核到共享引擎 UDP（第九批）
+
+`transparent::udp_tests::real_transparent_udp_shared_engine` 在实际 aarch64 7.0.14-linuxkit 和 QEMU aarch64 6.12.115-0-virt 均显式执行 1 项并通过，证据为 `linux-transparent-udp-shared-kernel{7,612}-2026-11-02.json`。同一对象 SHA256 `466a946dd961ca1aff226bfb2e37484bf7fd7cce4f357b7acb55a7cce16e985d`，每个内核分别验证 Direct 与 SOCKS5 两种模式，各 8 条真实流：双栈、连接式/无连接式 UDP、同一 socket 两个目标。进程规则来自实际 map 中客户端 PID/comm，代际为 7；SOCKS5 模式经过固定组、实际 UDP ASSOCIATE 和受控 UDP relay 到真实目标。每种模式业务上行 144 B、下行 128 B，回包原始源地址与端口均核对。
+
+Daemon 测试进程及其工作线程在启用前进入受选 cgroup；其新建 Direct 与 relay 出站 socket 仍正确旁路，不发生自身递归捕获。每种模式保留全部客户端 socket 到结束，避免测试中的端口提前复用；8 个 owner 在 1 秒空闲配置下全部回收，排队/会话/pending 额度归零。停止后核对实际 TCX 链接与私有路由回收，并恢复测试进程原 cgroup。双内核均没有 metadata 缺失、捕获错误、无效回复或队列丢弃。
+
+共享地址/cgroup fixture 提取到独立测试模块，使用 Rust route-netlink CREATE|EXCL 并按 ACK 所有权清理。Linux 与 macOS 相关 Clippy、格式检查通过。一次旧快照执行只匹配 0 项，不计入验收；本批证据均来自刷新源码后实际匹配的 1 项测试与两个模式的结果。
+
+这些证据覆盖本机 UDP 共享引擎路径，`forwarding_verified=true`；完整 Daemon 控制面、LAN、原子代际、接口/路由监视、异常恢复和 x86_64 矩阵仍未完成，`full_transparent_datapath_ready=false`，T11/T13/T15 继续保持开放。

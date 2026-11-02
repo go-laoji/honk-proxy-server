@@ -11,6 +11,7 @@ hps-domain.workspace = true
 hps-engine.workspace = true
 rcgen = "0.14"
 tempfile = "3"
+tokio-util = {version="0.7",features=["rt"]}
 serde_json.workspace = true
 hps-dns.workspace = true
 hps-net.workspace = true
