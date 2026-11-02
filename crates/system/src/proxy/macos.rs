@@ -198,6 +198,7 @@ impl Backend for Session {
             .as_dictionary()
             .ok_or("invalid network services")?
             .iter()
+            .filter(|(id, _)| proxy_path(id).is_ok())
             .map(|(id, value)| NetworkService {
                 id: id.clone(),
                 name: value
@@ -248,7 +249,7 @@ mod tests {
         );
         let mut services = plist::Dictionary::new();
         services.insert(
-            "hps-readonly-fixture".into(),
+            "00000000-0000-4000-8000-000000000003".into(),
             plist::Value::Dictionary(service),
         );
         let mut fixture = plist::Dictionary::new();
@@ -259,7 +260,7 @@ mod tests {
         let readonly = Session::create(false, Some(path.to_str().unwrap())).unwrap();
         let services = readonly.services().unwrap();
         assert_eq!(services.len(), 1);
-        assert_eq!(services[0].id, "hps-readonly-fixture");
+        assert_eq!(services[0].id, "00000000-0000-4000-8000-000000000003");
     }
     #[test]
     fn native_proxy_path_stages_and_restores_only_in_private_session_memory() {

@@ -11,3 +11,7 @@
 保护原来的 17900 服务、原 Desktop bundle 与偏好及用户原始未跟踪文件。验收仅使用独立端口、独立服务 label/state 目录与独立 bundle；不修改当前系统代理作日常测试，采用独立 OS 网络配置或隔离测试会话验证恢复。开发分批提交，不 push 或合入 main。
 
 服务生命周期参考 [systemd.service](https://freedesktop.org/software/systemd/man/latest/systemd.service.html) 与 [Apple launchd](https://support.apple.com/en-asia/guide/terminal/apdc6c1077b-5d5d-4d35-9c19-60f2397b2369/mac)。严格区分启动命令成功、进程存活和实际 API/代理 ready。
+
+## 宿主网络事故后的验收修订
+
+用户已明确要求不能导致开发 Mac 断网。旧的私有 SCPreferences 授权写入测试发生范围错误，其 pass 已作废；不得沿用或重跑。宿主后续只执行真实只读 API、私有会话内存中的 SDK 子路径测试（不持久提交且验证文件不变）以及无 OS 副作用的原值/冲突/失败恢复测试。Cargo 与开发应用均禁止 macOS 网络写入。真实 OS 提交未在修复后复验，作为明确边界保留，不冒称完整活动网络验收；Linux eBPF 和供应商的原有真实验收门槛不变。详见 [事故记录](validation/macos-network-incident-2026-11-02.md)。
