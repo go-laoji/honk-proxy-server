@@ -30,7 +30,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if args.build_info {
         println!(
             "{}",
-            serde_json::json!({"format_version":1,"binary":"hpsd","architecture":std::env::consts::ARCH,"platform":std::env::consts::OS,"version":hps_api::build_version()})
+            serde_json::to_string(&hps_domain::compiled_build_info(
+                "hpsd",
+                hps_api::build_version()
+            ))?
         );
         return Ok(());
     }

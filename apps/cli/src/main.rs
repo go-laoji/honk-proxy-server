@@ -699,9 +699,16 @@ fn client_error(error: ClientError) -> (u8, String) {
 async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
     // Local configuration commands do not require a reachable daemon.
     if matches!(args.command, Command::BuildInfo) {
-        return Ok(
-            serde_json::json!({"format_version":1,"binary":"hps","architecture":std::env::consts::ARCH,"platform":std::env::consts::OS,"version":{"service":"honk-proxy-server","version":env!("CARGO_PKG_VERSION"),"api_version":hps_domain::API_VERSION,"web_build_id":null}}),
-        );
+        return serde_json::to_value(hps_domain::compiled_build_info(
+            "hps",
+            hps_domain::VersionInfo {
+                service: "honk-proxy-server".into(),
+                version: env!("CARGO_PKG_VERSION").into(),
+                api_version: hps_domain::API_VERSION.into(),
+                web_build_id: None,
+            },
+        ))
+        .map_err(|e| (5, e.to_string()));
     }
     match &args.command {
         Command::Profile { command } => return local::profiles(command),

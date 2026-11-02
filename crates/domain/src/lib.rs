@@ -50,6 +50,28 @@ pub struct VersionInfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompiledBuildInfo {
+    pub format_version: u32,
+    pub binary: String,
+    pub architecture: String,
+    pub platform: String,
+    pub source_revision: Option<String>,
+    pub source_dirty: bool,
+    pub version: VersionInfo,
+}
+pub fn compiled_build_info(binary: &str, version: VersionInfo) -> CompiledBuildInfo {
+    CompiledBuildInfo {
+        format_version: 1,
+        binary: binary.into(),
+        architecture: std::env::consts::ARCH.into(),
+        platform: std::env::consts::OS.into(),
+        source_revision: option_env!("HPS_SOURCE_REVISION").map(str::to_owned),
+        source_dirty: option_env!("HPS_SOURCE_DIRTY") != Some("0"),
+        version,
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceStatus {
     pub instance_id: String,
     pub instance_name: String,

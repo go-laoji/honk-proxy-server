@@ -95,6 +95,9 @@ def main():
     if can_run:
         cli_info = build_info(compiled / "hps", False)
         info = build_info(compiled / "hpsd", True)
+        if not args.allow_dirty:
+            for built in (cli_info,info):
+                require(built.get("source_revision")==revision and built.get("source_dirty") is False,"compiled source revision is stale or unknown; rebuild the clean source using the release build script")
         require(cli_info['version']['version'] == info['version']['version'] == version, 'invalid compiled package metadata')
         require(info['version']['web_build_id'] == (web['web_build_id'] if web else None), 'daemon embeds a different web artifact')
 
@@ -140,8 +143,10 @@ def main():
             "format_version": 1,
             "package": "headless",
             "version": version,
-            "source_revision": revision,
-            "dirty_tracked_source": dirty,
+            "source_revision": info.get("source_revision"),
+            "packaging_revision": revision,
+            "dirty_tracked_source": dirty or info.get("source_dirty",True),
+            "exploratory_artifact": args.allow_dirty,
             "target": args.target,
             "runtime_metadata_checked": can_run,
             "runtime_metadata": info,
