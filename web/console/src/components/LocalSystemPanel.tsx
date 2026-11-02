@@ -170,6 +170,11 @@ export default function LocalSystemPanel({
           )}
           <div className="mt-6 border-t border-slate-100 pt-5 dark:border-slate-800">
             <h3 className="text-sm font-medium">系统代理原值恢复</h3>
+            {context?.network_changes_disabled && (
+              <p role="status" className="mt-2 text-sm text-amber-700">
+                开发验收保护已开启：当前应用只读检查系统代理，修改与恢复均已停用。
+              </p>
+            )}
             <p className="muted mt-2 text-xs leading-6">
               {context?.proxy?.supported
                 ? `当前状态：${context.proxy.state}。修改前保存完整原值；后续有外部修改时拒绝覆盖并保留备份。系统可能要求操作系统管理员授权。`
@@ -245,6 +250,7 @@ export default function LocalSystemPanel({
                     type="submit"
                     disabled={
                       busy ||
+                      context.network_changes_disabled ||
                       (!http && !socks) ||
                       context.proxy.state !== "unmanaged"
                     }
@@ -254,7 +260,11 @@ export default function LocalSystemPanel({
                   <button
                     className="btn"
                     type="button"
-                    disabled={busy || context.proxy.state === "unmanaged"}
+                    disabled={
+                      busy ||
+                      context.network_changes_disabled ||
+                      context.proxy.state === "unmanaged"
+                    }
                     onClick={() => void act("local_proxy_restore")}
                   >
                     恢复原系统代理

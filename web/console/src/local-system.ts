@@ -12,6 +12,7 @@ export interface Profiles {
   profiles: Profile[];
 }
 export interface LocalContext {
+  network_changes_disabled: boolean;
   endpoint: string;
   profile_id: string | null;
   local: boolean;

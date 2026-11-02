@@ -84,6 +84,7 @@ pub(super) async fn profiles_change(
 }
 #[derive(serde::Serialize)]
 pub(super) struct Context {
+    network_changes_disabled:bool,
     endpoint: String,
     profile_id: Option<String>,
     local: bool,
@@ -133,6 +134,7 @@ pub(super) async fn local_context(
             (None, None, None, vec![])
         };
         Ok(Context {
+            network_changes_disabled:std::env::var_os("HPS_FORBID_HOST_NETWORK_CHANGES").is_some(),
             endpoint: target.endpoint,
             profile_id: target.profile_id,
             local: target.local,
