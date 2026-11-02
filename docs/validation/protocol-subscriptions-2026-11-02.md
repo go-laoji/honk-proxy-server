@@ -31,3 +31,7 @@ UDP 新增测试实际覆盖 IPv4/IPv6、真正的 SOCKS5 上游 association 链
 ## 合并 #23 后复验
 
 按主代理指示将 `develop ec69bc3` 合并进本分支，得到 `c2e87f0`，自动合并无冲突；保留 #23 alerts、diagnostic/CLI/shared UI 与 Native 路径测试。合并后再执行：subscription Application 3 项、typed API 1 项、UDP ingress 5 项、selection 5 项，合计 14 项通过；`npm run typecheck`、18 页 build 与独立 18024 浏览器综合验收再次通过。中央进度/audit 由主代理维护。
+
+## 解析资源审查修复
+
+主代理审查后修复远端 GET 的解析执行位置：完整有界收包后将 owned 配置/文本送入 `spawn_blocking`，外层 tracked/provider permit 持有到解析完成。额外增加解析前 YAML 锚点/别名拒绝、32 层缩进/flow 深度限制及流式 10000 proxies 上限；引号内 &/* 与注释保持普通内容。serde_yaml_ng 自身虽然有 128 深度及 100×event alias jump 限制，本项目不依赖该较宽扩展上限。focused provider 3 项、Application 3 项及 Clippy 通过，覆盖 alias/深度/10001 条预算与引号内敏感字符串。

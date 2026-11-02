@@ -3,8 +3,8 @@ use reqwest::{Client, Url};
 use serde::de::DeserializeOwned;
 use std::time::Duration;
 mod diagnostics;
-mod subscriptions;
 mod events;
+mod subscriptions;
 pub use events::EventSubscription;
 
 #[derive(Debug, thiserror::Error)]

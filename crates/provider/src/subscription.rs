@@ -83,7 +83,118 @@ fn parse_uris(document: &str) -> Result<Vec<UpstreamConfig>, FetchError> {
 }
 #[derive(Deserialize)]
 struct ClashDocument {
+    #[serde(deserialize_with = "bounded_proxies")]
     proxies: Vec<ClashProxy>,
+}
+fn bounded_proxies<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Vec<ClashProxy>, D::Error> {
+    struct Proxies;
+    impl<'de> serde::de::Visitor<'de> for Proxies {
+        type Value = Vec<ClashProxy>;
+        fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str("at most 10000 supported proxy entries")
+        }
+        fn visit_seq<A: serde::de::SeqAccess<'de>>(
+            self,
+            mut seq: A,
+        ) -> Result<Self::Value, A::Error> {
+            let mut nodes = Vec::new();
+            while let Some(node) = seq.next_element()? {
+                if nodes.len() == 10000 {
+                    return Err(serde::de::Error::custom(
+                        "subscription node budget exceeded",
+                    ));
+                }
+                nodes.push(node);
+            }
+            Ok(nodes)
+        }
+    }
+    deserializer.deserialize_seq(Proxies)
+}
+// This deliberately restricted YAML subset has no anchors/aliases and at most 32
+// indentation/flow levels. Scan before serde/libyaml can allocate an event tree.
+// Quoted scalar contents and comments are never interpreted as references.
+fn yaml_budget(document: &str) -> Result<(), FetchError> {
+    let bytes = document.as_bytes();
+    let mut i = 0;
+    let mut quote = 0u8;
+    let mut comment = false;
+    let mut line_start = true;
+    let mut indents = vec![0usize];
+    let mut flow_depth = 0usize;
+    fn boundary(byte: u8) -> bool {
+        byte.is_ascii_whitespace() || b"[]{}:,-?".contains(&byte)
+    }
+    while i < bytes.len() {
+        let byte = bytes[i];
+        if line_start && quote == 0 {
+            let mut end = i;
+            while end < bytes.len() && bytes[end] == b' ' {
+                end += 1;
+            }
+            if end < bytes.len() && !b"\r\n#".contains(&bytes[end]) {
+                let indent = end - i;
+                while indents.last().is_some_and(|n| *n > indent) {
+                    indents.pop();
+                }
+                if indents.last().is_none_or(|n| *n < indent) {
+                    indents.push(indent);
+                }
+                if indents.len() > 32 {
+                    return Err(FetchError::known("subscription_yaml_depth_budget"));
+                }
+            }
+            line_start = false;
+        }
+        if byte == b'\n' {
+            comment = false;
+            line_start = true;
+        }
+        if comment {
+            i += 1;
+            continue;
+        }
+        if quote == b'\'' {
+            if byte == b'\'' {
+                if bytes.get(i + 1) == Some(&b'\'') {
+                    i += 2;
+                    continue;
+                }
+                quote = 0;
+            }
+        } else if quote == b'"' {
+            if byte == b'\\' {
+                i += 2;
+                continue;
+            }
+            if byte == b'"' {
+                quote = 0;
+            }
+        } else {
+            let start = i == 0 || boundary(bytes[i - 1]);
+            match byte {
+                b'#' if start => comment = true,
+                b'\'' | b'"' if start => quote = byte,
+                b'&' | b'*' if start => {
+                    return Err(FetchError::known(
+                        "subscription_yaml_references_unsupported",
+                    ));
+                }
+                b'[' | b'{' => {
+                    flow_depth += 1;
+                    if flow_depth > 32 {
+                        return Err(FetchError::known("subscription_yaml_depth_budget"));
+                    }
+                }
+                b']' | b'}' => flow_depth = flow_depth.saturating_sub(1),
+                _ => {}
+            }
+        }
+        i += 1;
+    }
+    Ok(())
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -109,6 +220,7 @@ struct ClashProxy {
     ip_version: Option<String>,
 }
 fn parse_clash(document: &str) -> Result<Vec<UpstreamConfig>, FetchError> {
+    yaml_budget(document)?;
     let doc: ClashDocument = serde_yaml_ng::from_str(document)
         .map_err(|_| FetchError::known("invalid_or_unsupported_clash_subscription"))?;
     if doc.proxies.len() > 10000 {
@@ -209,8 +321,13 @@ pub async fn fetch(
         bytes.extend_from_slice(&chunk);
     }
     let text =
-        std::str::from_utf8(&bytes).map_err(|_| FetchError::known("subscription_invalid_utf8"))?;
-    parse(config, text)
+        String::from_utf8(bytes).map_err(|_| FetchError::known("subscription_invalid_utf8"))?;
+    let config = config.clone();
+    // The caller's tracked operation and provider slot remain owned until this
+    // blocking parse finishes, including if the HTTP caller disappears.
+    tokio::task::spawn_blocking(move || parse(&config, &text))
+        .await
+        .map_err(|_| FetchError::known("subscription_parse_worker_failed"))?
 }
 #[cfg(test)]
 mod tests {
@@ -256,5 +373,49 @@ mod tests {
             let e = parse(&c, &bad).unwrap_err().to_string();
             assert!(!e.contains("secret"));
         }
+    }
+    #[test]
+    fn clash_alias_depth_and_streamed_entry_budgets_apply_before_expansion() {
+        let mut c = config(SubscriptionFormat::Clash);
+        c.max_nodes = 10000;
+        for text in [
+            "proxies: &nodes []",
+            "anchor: &node {name: a}\nproxies: [*node]",
+        ] {
+            assert_eq!(
+                parse(&c, text).unwrap_err().code,
+                "subscription_yaml_references_unsupported"
+            );
+        }
+        let quoted = "proxies:\n - {name: \"*literal &name\", type: socks5, server: 127.0.0.1, port: 1080, username: user, password: '&literal *password', udp: true} # *comment &comment";
+        assert_eq!(
+            parse(&c, quoted).unwrap()[0]
+                .credentials
+                .as_ref()
+                .unwrap()
+                .password,
+            "&literal *password"
+        );
+        let flow = format!("proxies: {}0{}", "[".repeat(33), "]".repeat(33));
+        assert_eq!(
+            parse(&c, &flow).unwrap_err().code,
+            "subscription_yaml_depth_budget"
+        );
+        let block = (0..33)
+            .map(|n| format!("{}level:\n", " ".repeat(n)))
+            .collect::<String>();
+        assert_eq!(
+            parse(&c, &block).unwrap_err().code,
+            "subscription_yaml_depth_budget"
+        );
+        let document = format!(
+            "proxies:\n{}",
+            " - {name: n, type: http, server: 127.0.0.1, port: 8080}\n".repeat(10001)
+        );
+        assert!(document.len() < MAX_BYTES);
+        assert_eq!(
+            parse(&c, &document).unwrap_err().code,
+            "invalid_or_unsupported_clash_subscription"
+        );
     }
 }

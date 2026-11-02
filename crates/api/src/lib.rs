@@ -26,8 +26,8 @@ mod linux;
 mod nodes;
 mod observability;
 mod providers;
-mod subscriptions;
 mod rules;
+mod subscriptions;
 mod tasks;
 #[cfg(feature = "web-ui")]
 mod web;
