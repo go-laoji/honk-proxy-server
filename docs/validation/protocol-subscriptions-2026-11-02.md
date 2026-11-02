@@ -47,3 +47,7 @@ UDP 新增测试实际覆盖 IPv4/IPv6、真正的 SOCKS5 上游 association 链
 嵌套组的成员/来源/fallback 与节点/来源标签预编译为 HashSet，组引用预编译索引，避免合法大成员表对每个候选做线性成员查找。上述 generation unit、SQLite 故障 Application 4 项、寿命 admission unit、selection 5 项、UDP ingress 5 项、typed API 1 项已通过；最终 Clippy/fmt 检查通过。
 
 代际隔离与寿命修复后，独立 18024 浏览器综合验收再次通过（真实 Daemon，1 项）；`cargo fmt --all --check` 与 `git diff --check` 通过。显式 SOCKS5 UDP 的用户态能力也与 Linux transparent UDP capture 开关分开，关闭透明 UDP 不会关闭已有 SOCKS5 UDP 入站实现。
+
+## 主代理最终集成（67adf99）
+
+Mac workspace 217 passed / 0 ignored，Linux aarch64 workspace 224 passed / 30 ignored（不算内核通过）；两端整仓 all-targets Clippy -D warnings、Native9及Native Clippy、23项Chromium全量、实际CLI7项和fmt/TS/Prettier/18页build通过。Linux5项新增SOCKS UDP真实报文和订阅4项（含真实SQLite故障）均通过。主代理没有把c2e87f0的早期缓存回归算成最终提交：67adf99另建只读源码快照并完整重跑。详见[集成摘要](protocol-subscriptions-integration-2026-11-02.json)。新增原生可见窗口仍受锁屏限制，完整实际内核矩阵由T20组合源码再跑。

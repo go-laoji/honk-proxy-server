@@ -60,3 +60,5 @@
 第三批：#21 按安全窗口与明确 OS 写入边界验收回复并关闭后，使用标准 finish 完成 `desktop-service`：原 tip `0321fe7`，双父合并 `43363f7`，树一致。随后回到 `release-packaging`，通过 merge 同步 develop；没有先 finish 后继分支、手动删除其他 feature、push 或改动 main。
 
 第四批：#22 回复发行候选的实际证据和平台限制后，`release-packaging` 原 tip `27b0060` 独立 finish 为双父合并 `82f6f5b`，内容树完全一致；本地候选标签 `v0.1.0-rc.1` 指向原 tip。随后通过 start 创建 `observability-history` 处理 #23。main 未改动、未 push；没有批量删分支。
+
+第五批：#23 历史观测、诊断、告警与受限任务控制完成并关闭后，`observability-history` 原 tip `c6f0755` 独立 finish 为 `ec69bc3`，双父与内容树一致。用户授权余下 #24/#25/#26 使用独立 managed worktree 并行开发和交叉审查；只有各项集成验收完成后按该顺序逐项 finish，不批量删除分支。
