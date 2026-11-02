@@ -85,3 +85,28 @@ pub struct ApiError {
     pub request_id: String,
     pub retryable: bool,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CheckStatus {
+    Pass,
+    Fail,
+    Unknown,
+    Unsupported,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnvironmentCheck {
+    pub id: String,
+    pub status: CheckStatus,
+    pub detail: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LinuxPreflight {
+    pub platform: String,
+    pub kernel_release: Option<String>,
+    pub checks: Vec<EnvironmentCheck>,
+    pub datapath_ready: bool,
+    pub scope: String,
+}

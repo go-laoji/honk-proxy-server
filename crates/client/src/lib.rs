@@ -89,6 +89,10 @@ impl HpsClient {
     pub async fn config(&self) -> Result<hps_config::DaemonConfig, ClientError> {
         self.get_json("api/v1/config").await
     }
+
+    pub async fn linux_preflight(&self) -> Result<hps_domain::LinuxPreflight, ClientError> {
+        self.get_json("api/v1/linux/preflight").await
+    }
 }
 
 #[cfg(test)]

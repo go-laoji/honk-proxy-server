@@ -37,7 +37,7 @@
     {
       "id": "T03",
       "priority": "P0",
-      "title": "honk 集成与真实 Linux eBPF 前置验证",
+      "title": "自研 Rust 核心与 Linux eBPF 前置验证",
       "deps": [
         "T01"
       ],
@@ -45,8 +45,8 @@
         "LINUX-01",
         "LINUX-02"
       ],
-      "scope": "固定honk基线并确认共享运行时接入边界；实现真实环境预检，准备Linux6.12+隔离测试；验证BPF对象、hooks/maps、TCP/UDP真实出口和清理。",
-      "acceptance": "真实Linux挂载与出口证据；不能使用mock或仅预检替代数据面；非Linux明确unsupported；记录直接crate集成或必要fork决策。",
+      "scope": "定义本项目流量/拨号接口；自研Rust/Aya eBPF程序、公共ABI和loader；实现只读环境预检，验证真实挂载/maps与回收。不集成honk，初始Linux验证基线不等同最终最低内核要求。",
+      "acceptance": "真实Linux上的自有eBPF程序挂载、map交互与清理证据；预检不等于接管；透明TCP/UDP出口由T04/T15联合验收。非Linux如实报告；无honk依赖、对象或fork。",
       "issue": 8,
       "url": "https://github.com/go-laoji/honk-proxy-server/issues/8",
       "status": "in_progress"
@@ -56,8 +56,7 @@
       "priority": "P0",
       "title": "HTTP HTTPS SOCKS5 核心代理与资源控制",
       "deps": [
-        "T01",
-        "T03"
+        "T01"
       ],
       "features": [
         "IN-01",
@@ -315,7 +314,7 @@
         "LINUX-06"
       ],
       "scope": "本机/LAN接管范围、bypass、网卡/路由变化、热更新、启停与对象所有权；真实TCP/UDP和DNS；API/CLI/页面。",
-      "acceptance": "Linux6.12+ x86_64/aarch64真实出口矩阵；失败不假报ready；清理不损伤其他网络对象；异常退出可恢复。",
+      "acceptance": "以6.12 LTS及当前可用Linux内核为初始验证目标，完成x86_64/aarch64真实出口矩阵；失败不假报ready；清理不损伤其他网络对象；异常退出可恢复。最终最低内核要求由本项目程序与测试决定。",
       "issue": 20,
       "url": "https://github.com/go-laoji/honk-proxy-server/issues/20",
       "status": "pending"

@@ -71,6 +71,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/v1/status", get(status))
         .route("/api/v1/version", get(version))
         .route("/api/v1/capabilities", get(capabilities))
+        .route("/api/v1/linux/preflight", get(linux_preflight))
         .route("/api/v1/config", get(config));
     #[cfg(feature = "web-ui")]
     let router = router.fallback(web::serve);
@@ -90,6 +91,24 @@ async fn capabilities() -> Json<Capabilities> {
 }
 async fn config(State(state): State<Arc<AppState>>) -> Json<DaemonConfig> {
     Json(state.config.clone())
+}
+
+async fn linux_preflight() -> Result<Json<hps_domain::LinuxPreflight>, (StatusCode, Json<ApiError>)>
+{
+    tokio::task::spawn_blocking(hps_platform::preflight)
+        .await
+        .map(Json)
+        .map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiError {
+                    code: "preflight_failed".into(),
+                    message: "Environment diagnostic could not finish".into(),
+                    request_id: uuid::Uuid::new_v4().to_string(),
+                    retryable: true,
+                }),
+            )
+        })
 }
 
 pub async fn not_found() -> (StatusCode, Json<ApiError>) {
@@ -147,6 +166,10 @@ mod tests {
             404
         );
         assert!(client.config().await.is_ok());
+        let preflight = client.linux_preflight().await.unwrap();
+        assert_eq!(preflight.platform, std::env::consts::OS);
+        assert_eq!(preflight.scope, "read_only_prerequisites");
+        assert!(!preflight.datapath_ready);
         task.abort();
     }
 }

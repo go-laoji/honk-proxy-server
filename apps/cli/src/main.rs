@@ -36,6 +36,10 @@ enum Command {
     Status,
     Version,
     Capabilities,
+    Linux {
+        #[command(subcommand)]
+        command: LinuxCommand,
+    },
     Init {
         #[arg(long, default_value = "hps.toml")]
         config: PathBuf,
@@ -54,6 +58,11 @@ enum Command {
 enum ConfigCommand {
     Show,
     Check { path: PathBuf },
+}
+
+#[derive(Subcommand)]
+enum LinuxCommand {
+    Preflight,
 }
 
 #[tokio::main]
@@ -119,6 +128,9 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
         Command::Capabilities => {
             serde_json::to_value(client.capabilities().await.map_err(client_error)?)
         }
+        Command::Linux {
+            command: LinuxCommand::Preflight,
+        } => serde_json::to_value(client.linux_preflight().await.map_err(client_error)?),
         Command::Config {
             command: ConfigCommand::Show,
         } => serde_json::to_value(client.config().await.map_err(client_error)?),

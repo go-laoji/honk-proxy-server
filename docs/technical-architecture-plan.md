@@ -22,7 +22,7 @@
 
 供应商 API 密钥/签名、上游代理用户名密码和 TLS 服务端证书属于连接配置，仍按上游协议需要提供；它们不用于验证本项目使用者。Linux eBPF/root、系统服务安装与文件目录的操作系统要求仍然适用，不构成本项目账号体系。
 
-“后端全部 Rust”指本项目后端代码与服务实现；所复用 honk 的加密、系统链接库与 LLVM 等原生依赖仍需按固定基线构建，不据此承诺整个依赖树均无 C/C++。
+honk 仅作为能力和边界的学习参考，不作为本项目依赖，不包装其二进制，不维护 fork。代理运行时、协议接入、供应商/租约、健康/调度和 Linux eBPF 均由本项目以 Rust 自主实现；Tokio、Hyper、rustls、Aya 等通用库按实际需要选用并锁定版本。
 
 ## 2. 交付形态：两个安装版本、三个独立程序
 
@@ -51,7 +51,7 @@ Tauri 支持嵌入外部二进制及静态前端目录，但 sidecar 的打包�
 | 平台 | CLI | 独立 Daemon | Desktop | 透明模式 |
 | --- | --- | --- | --- | --- |
 | Linux x86_64 / aarch64 | 必须 | 必须，含共享 Web 控制台 | 桌面发行环境提供 | 必须支持真实 eBPF，按既定内核与拓扑基线验收 |
-| macOS | 提供远程管理 CLI | 本地显式代理能力经 M0 验证后纳入；不能假定 honk-core 原样可用 | 提供本地配置与远程管理 | 首版不承诺系统透明接管 |
+| macOS | 提供远程管理 CLI | 本地显式代理能力经 M0 验证后纳入；本项目用户态代理核心需验证跨平台编译和协议行为 | 提供本地配置与远程管理 | 首版不承诺系统透明接管 |
 | Windows | 提供远程管理 CLI | 同 macOS，先验证用户态移植范围 | 提供本地配置与远程管理 | 首版不承诺系统透明接管 |
 
 页面是否展示 eBPF 操作依据连接目标返回的能力，而非 Desktop 所在操作系统。macOS Desktop 连接 Linux 服务时，应能管理远端 Linux eBPF。
@@ -99,7 +99,8 @@ honk-proxy-server/
 │   ├── domain/                     # 领域类型、值对象、接口
 │   ├── application/                # 用例、任务、配置发布编排
 │   ├── infrastructure/             # SQLite、供应商适配、凭据引用
-│   ├── engine-honk/                # 固定基线 honk 集成及共享运行时
+│   ├── engine/                     # 自研协议、路由、选点与连接运行时
+│   ├── ebpf-common/                # 本项目内核/用户态 ABI
 │   ├── api/                        # Rust 管理 API、DTO、事件，无用户认证层
 │   ├── client/                     # CLI/原生控制层复用的 Rust API 客户端
 │   ├── platform/                   # 系统服务、目录、权限等平台适配
@@ -123,7 +124,7 @@ honk-proxy-server/
 
 依赖方向为 `入口 → application → domain`；基础设施实现 domain 定义的接口，由 Daemon 入口注入。`domain` 不依赖 Tauri、Axum、SQLite 或 eBPF。不要为每张表机械拆出一个 crate，原型阶段可以合并较小模块。
 
-Desktop crate 与 CLI/Daemon 在构建依赖上隔离：发布服务器程序使用指定 package，不通过“先构建 Tauri 再导出 CLI”取得服务器程序。`hps` 不依赖 `engine-honk`；无桌面 CI 必须能单独构建 `hps` 和 `hpsd`。
+Desktop crate 与 CLI/Daemon 在构建依赖上隔离：发布服务器程序使用指定 package，不通过“先构建 Tauri 再导出 CLI”取得服务器程序。`hps` 不依赖 `engine`；无桌面 CI 必须能单独构建 `hps` 和 `hpsd`。
 
 当前模板的 `src`、`src-tauri`、`package.json`、锁文件均需在实施任务中明确入库和迁移范围；本次文档任务不搬动、覆盖或提交这些未跟踪文件。
 
@@ -131,21 +132,21 @@ Desktop crate 与 CLI/Daemon 在构建依赖上隔离：发布服务器程序使
 
 | 层次 | 选型 | 约束 |
 | --- | --- | --- |
-| 语言与工具链 | Rust，固定工具链与 `Cargo.lock` | 以 honk 兼容性确定最低 Rust 版本；不自动追随 latest |
+| 语言与工具链 | Rust，固定工具链与 `Cargo.lock` | 按项目依赖和自研 eBPF 工具链确定最低版本；不自动追随 latest |
 | 异步运行时 | Tokio | 网络 IO、任务取消、背压、受限并发；阻塞工作移出异步 worker |
 | 管理 HTTP | Axum + Tower 生态 | 直接可用的 API、资源限流、静态资源、SSE；业务逻辑下沉到 application |
-| 显式代理入口 | HTTP/CONNECT、TLS 代理与 SOCKS5 Rust 适配，共享 honk 拨号/转发运行时 | 不能用普通 Axum 路由或管理 API 替代完整正向代理语义 |
-| 代理与 Linux 数据面 | 固定版本 honk 集成 | 出入站、健康、规则与运行代际单一归属；真实 eBPF 单独构建 |
+| 显式代理入口 | 自研 HTTP/CONNECT、TLS 代理与 SOCKS5 Rust 适配，共享本项目拨号/转发运行时 | 不能用普通 Axum 路由或管理 API 替代完整正向代理语义 |
+| 代理与 Linux 数据面 | 自研 Rust engine + Linux Aya/eBPF 模块 | 出入站、健康、规则与运行代际单一归属；内核程序、maps ABI、loader 和生命周期由本项目实现 |
 | CLI | clap | 子命令、补全、稳定退出码、JSON 输出；独立 Rust 二进制 |
 | 短效供应商 API | Rust HTTP 客户端 + 租约/批次归一化 + 受限补池控制器 | 按 API 契约获取有效期、白名单与限频；不以订阅全量替换模型处理提取批次 |
-| 持久化 | SQLite + 与 honk 兼容的 rusqlite 绑定 | 使用数据库工作线程/受控阻塞池；避免在网络热路径阻塞 |
+| 持久化 | SQLite + rusqlite Rust 接口 | 使用数据库工作线程/受控阻塞池；避免在网络热路径阻塞 |
 | 序列化与契约 | Serde + JSON + OpenAPI | Rust 维护 HTTP 契约，生成前端 TS 类型；构建时验证无漂移 |
 | 日志与错误 | tracing、结构化错误、请求/任务 ID | 凭据脱敏；用户可操作错误码与内部错误上下文分开 |
-| TLS 与上游凭据 | 经固定 honk/HTTP 客户端验证的 TLS 栈；供应商密钥/上游密码存储 | 不擅自替换 honk 的底层 TLS/QUIC 依赖；默认验证服务端证书，不设置本项目客户端身份认证 |
+| TLS 与上游凭据 | rustls 生态与项目验证过的 TLS 配置；供应商密钥/上游密码存储 | 根据核心 HTTP/HTTPS/SOCKS5 范围选择依赖；默认验证服务端证书，不设置本项目客户端身份认证 |
 
 Axum 与 Tokio/Hyper/Tower 有明确集成边界，clap 提供独立 Rust 命令行解析，rusqlite 提供 SQLite 接口；这些是选型依据，具体版本仍以 M0 集成结果锁定。[Axum 文档](https://docs.rs/axum/latest/axum/)、[clap 文档](https://docs.rs/clap/latest/clap/)、[rusqlite 文档](https://docs.rs/rusqlite/latest/rusqlite/)
 
-持久化优先沿用同一 SQLite 原生绑定的兼容版本，减少重复引入不同 SQLite 绑定的链接风险。本项目配置库与上游私有状态库的 schema 归属分开，不直接依赖上游内部表。若需要更换数据库访问库，应先在完整 honk 依赖树中验证兼容性。
+持久化 schema 和迁移均由本项目管理，不依赖 honk 状态库或私有表。SQLite 驱动只保留一种一致的绑定方案，数据库工作移出网络热路径。
 
 ### 5.1 首版协议矩阵与浏览器边界
 
@@ -340,7 +341,7 @@ Node.js/pnpm 仅用于开发、构建和前端测试，部署后的后端与静�
 5. TLS 服务端证书和上游 API/代理认证按连接需要配置；不要求使用者提供客户端证书或管理密钥。供应商密钥和节点密码默认掩码、日志脱敏，但相关配置功能向全部使用者开放。
 6. 系统服务安装、eBPF 加载和文件操作仍遵守所在操作系统要求；远端 API 不变成任意 shell 执行入口。此边界不引入本项目账号或角色体系。
 
-复用 honk 内部管理能力时，项目统一 API 不继承其登录、管理口令或角色要求，也不让 CLI/Desktop 使用者额外取得引擎后台凭据。优先经集成层调用同一运行时；引擎内部实现细节不能变成面向使用者的隐藏门禁。
+管理 API 直接操作本项目自研运行时，没有额外的代理引擎后台、登录口令或跨服务控制接口。内部模块边界不改变全部使用者可直接使用全部功能的访问模型。
 
 实时事件优先采用 SSE。Web transport 使用流式 fetch，Desktop transport 由 Rust 客户端订阅相同事件接口并经受控事件桥转发；两者向页面暴露相同的订阅对象，均无需登录或管理令牌。页面离开时同时取消前端与原生订阅，事件包含实例/订阅标识以拒收切换目标后的旧事件。断线重连使用事件游标，游标过期时回拉快照，随后继续订阅。
 
@@ -393,7 +394,7 @@ Linux eBPF 所需权限由受控系统服务承担；WebView、React 页面和�
 
 ## 13. Linux eBPF 的实现约束
 
-沿用前期核查的 honk 基线 `54b2e1cfbe1e7f8a93dba3a0f64fabf2a9f88e38`，不在本次规划中升级上游。内核 6.12+、cgroup v2、BTF、bpffs、真实对象构建等要求见[整体规划第 8 节](overall-plan-and-feasibility.md#8-linux-ebpf-专项方案与发布门槛)。
+自研 Rust eBPF 内核程序、公共类型、Aya loader、连接/原始目标映射和生命周期。honk 仅用于研究能力边界，不复用其 crate、对象、命名空间布局或管理协议。首先选择 Linux 6.12 LTS 及当前可用 Linux 环境作为验证目标；这不是从 honk 继承的最低支持版本，最终内核范围由本项目实际 hook/helper 及验收决定。
 
 项目需要保证：
 
@@ -445,7 +446,7 @@ Rust 运行格式、lint、领域/集成测试；前端运行类型、构建、�
 
 | 里程碑 | 交付 | 通过条件 |
 | --- | --- | --- |
-| M0 集成验证 | 固定 honk、核心三协议、短效 API 租约原型、真实 eBPF、三程序骨架、3 页 MPA 原型 | 无桌面启动；同一 dist 两端切页；HTTP/HTTPS/SOCKS5 与短效批次/到期证明；真实代理流量与挂载证明 |
+| M0 核心验证 | 自研核心三协议、短效 API 租约原型、真实 eBPF 原型、三程序骨架、共享 MPA | 无桌面启动；同一 dist 两端切页；HTTP/HTTPS/SOCKS5 与短效批次/到期证明；真实代理流量与挂载证明 |
 | M1 后端与契约 | 配置、直接访问的 API/OpenAPI、数据库、任务、CLI 基础 | CLI 无账号即可独立读写配置/查询；版本冲突一致；服务器不需要 GUI |
 | M2 代理与节点闭环 | 核心三协议、多来源短效提取、批次租约、补池/预算、健康、组与规则 | 真实短效 API 至选点/到期闭环；增量不误删有效节点；补池不超预算；失败不误直连或盲目重放提取 |
 | M3 Linux 完整验收 | 透明 TCP/UDP、DNS、生命周期、systemd、诊断 | 真实 Linux 与双架构测试通过，服务持续运行不依赖 Desktop |
@@ -461,4 +462,6 @@ Rust 运行格式、lint、领域/集成测试；前端运行类型、构建、�
 
 已确定：全 Rust 后端、CLI/Desktop/Daemon、共享 React/Tailwind 真正 MPA、HTTP/HTTPS/SOCKS5 核心协议、短效提取 API 与租约补池、Linux eBPF 必需、无账号且全部功能直接可用、API 单一入口、运行时与数据库单一所有者。
 
-M0 需要验证后决定：honk 直接 crate 集成还是必要 fork、非 Linux 用户态依赖边界、Tauri 打包后的 MPA 导航/CSP/原生 transport 与直接访问行为、SQLite 依赖兼容版本、具体供应商 API 以及前端最低 WebView 支持范围。具体库版本和性能指标在验证后锁定，不以本文中的候选选型替代编译与真实流量证据。
+M0 需要验证后决定：自研流量上下文/拨号接口、TC/cgroup 等 hook 组合与原始目标恢复、非 Linux 用户态依赖边界、Tauri 打包后的 MPA 导航/CSP/原生 transport 与直接访问行为、SQLite 依赖兼容版本、具体供应商 API 以及前端最低 WebView 支持范围。具体库版本和性能指标在验证后锁定，不以本文中的候选选型替代编译与真实流量证据。
+
+实现来源修订：根据后续用户澄清，当前代码与后续任务均采用自主实现，honk 仅作为能力参考。开发过程按独立验证切片提交，进度以任务记录与代码为准。
