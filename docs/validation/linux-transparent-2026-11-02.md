@@ -235,3 +235,13 @@ Linux MPA 展示实际监听、链接/路由、内核与用户态代际、原位
 实际 Linux 7.0.14/aarch64 验证：自有 veth 行政关闭、真实 peer 载波丢失、网卡改名均降级并暂停；关闭/载波场景保留真实 links，恢复原身份后 recheck 回到 ready。夹具先启动两端设备，再准备 Daemon，不能把关闭的 peer 当成服务可就绪。另从实际透明连接读取可信进程上下文，对候选规则执行模拟，核对 revision/首条命中/动作，再实际热发布，旧 4 流保留、新 8 流拒绝，模拟不改变当前流量。
 
 两项实际用例及 Linux Clippy 通过；Mac 普通回归通过，x86_64 编译通过。证据 `linux-transparent-interface-kernel7-2026-11-02.json`。此前完整四组合 48 项矩阵已经通过；新增接口状态核验仍需在相同矩阵复验，最终门槛继续保持开放。
+
+## 第 25 批：最终双架构、双内核实际矩阵
+
+基于 `d60934d` 的全部内核门槛重新执行，aarch64/x86_64 × 6.12.115 LTS/7.2.14 各 12 项，合计 **48 passed**。每项实际匹配恰好一个测试、CASE_EXIT=0，四个客体 SELF_TEST_EXIT=0；每条证据的实际 kernel 匹配。完整串口、逐组合 JSON、客体实际 strip 后执行文件及内核包 SHA256 保存在 [矩阵目录](linux-transparent-matrix-2026-11-02/index.json)。单项证据中的 full_transparent_datapath_ready=false 表示该项独立范围不冒充整体交付，不能将字段改成 true 来替代联合门槛。
+
+12 项覆盖：本机 TCP 三类上游与双栈、UDP Direct/SOCKS5、内核代际完整快照、身份/容量/精确退休、旧 ABI 挂载前拒绝、真实 cgroup/TCX 查询与重挂、Daemon 热更旧流保持与新流拒绝、持久 head 回退、DNS 双栈 TCP/UDP 共存及恢复、路由故障有限原位修复、实际 LAN/来源规则/固定组/旁路及网卡关闭/改名/载波恢复、独立 hpsd 的 SIGKILL/外部冲突拒绝/持久重启。候选进程规则的模拟使用实际捕获上下文，再核对实际发布和流量结果。
+
+矩阵首轮发现两类客体夹具问题，均未算通过：stable ARM 的 RTC 驱动未自动加载使时钟停在 1970、HTTPS 证书按预期拒绝；补齐客体真实 epoch 后保持正常 TLS 校验。完整 stable x86 模块占满 initramfs；改为 ipv6/af_packet/veth 及依赖闭包后恢复正常。随后四组合从头实际复验通过。编译、镜像拉取或零匹配都不计为数据面验证。
+
+矩阵构建与执行见 [可复现说明](../../tests/linux/ebpf/MATRIX.md)。源码快照使用新 mtime，双架构独立 Cargo/Rustup 卷，headless hpsd 冻结为独立测试输入，避免构建控制台时替换测试执行文件。仍继续核对最终共用控制台产物和收尾文档。

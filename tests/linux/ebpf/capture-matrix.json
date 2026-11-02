@@ -1,0 +1,14 @@
+[
+  {"package":"hps-platform","binary":"hps_platform","test":"transparent::tcp_tests::real_transparent_tcp_shared_engine"},
+  {"package":"hps-platform","binary":"hps_platform","test":"transparent::udp_tests::real_transparent_udp_shared_engine"},
+  {"package":"hps-platform","binary":"hps_platform","test":"transparent::generation_tests::real_flow_identity_and_generation_retirement"},
+  {"package":"hps-platform","binary":"hps_platform","test":"transparent::generation_tests::real_policy_publication_observes_only_complete_snapshots"},
+  {"package":"hps-platform","binary":"hps_platform","test":"transparent::inspection::real_legacy_capture_object_is_rejected_before_any_link"},
+  {"package":"hps-platform","binary":"hps_platform","test":"transparent::inspection::tests::real_scope_queries_detect_detached_hooks_and_keep_hot_metadata_independent"},
+  {"package":"hps-application","binary":"transparent","test":"real_transparent_supervisor"},
+  {"package":"hps-application","binary":"transparent","test":"real_transparent_publication_failure_restores_deferred_head"},
+  {"package":"hps-application","binary":"transparent","test":"real_transparent_dns_coexist_and_publication_rollback"},
+  {"package":"hps-application","binary":"capture_monitor","test":"real_capture_monitor_suspends_after_route_loss"},
+  {"package":"hps-application","binary":"gateway","test":"real_gateway_shared_engine"},
+  {"package":"hps-daemon","binary":"linux_capture","test":"real_hpsd_sigkill_recovery_preserves_foreign_rules"}
+]

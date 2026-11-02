@@ -1,0 +1,39 @@
+{
+  "cases_per_combination": 12,
+  "total_passed": 48,
+  "ebpf_object_sha256": "fa5449609f86a6b50300a83a6e10d2f2150aa42eaa6676c8e64dd1581bbd5286",
+  "matrix": [
+    {
+      "architecture": "aarch64",
+      "kernel": "6.12.115",
+      "passed": 12,
+      "report": "aarch64-6.12.115.json",
+      "serial_log": "aarch64-6.12.115.log",
+      "kernel_apk_sha256": "445dd29708c1df38c6643e2d6e7b4ac86ff6ab1e26e14f6c512c1e64794b51ef"
+    },
+    {
+      "architecture": "aarch64",
+      "kernel": "7.2.14",
+      "passed": 12,
+      "report": "aarch64-7.2.14.json",
+      "serial_log": "aarch64-7.2.14.log",
+      "kernel_apk_sha256": "f21725368f0d34e519ce25d2534947eed6adabf91276ebfa8c96ecfb3f9ed36c"
+    },
+    {
+      "architecture": "x86_64",
+      "kernel": "6.12.115",
+      "passed": 12,
+      "report": "x86_64-6.12.115.json",
+      "serial_log": "x86_64-6.12.115.log",
+      "kernel_apk_sha256": "2c0146b71bb15b1dbfe3056d430ddcdb6f99ed937db51be0a2a7760db6a9b3fc"
+    },
+    {
+      "architecture": "x86_64",
+      "kernel": "7.2.14",
+      "passed": 12,
+      "report": "x86_64-7.2.14.json",
+      "serial_log": "x86_64-7.2.14.log",
+      "kernel_apk_sha256": "e8213dee682105c1507b4742f365bfc3c2ccd91cdba9aa3e036b73b13a1879ae"
+    }
+  ]
+}
