@@ -9,13 +9,13 @@
 
 下列问题已经实现负责人修复并提供 focused 回归，T21 agent 复核了修复与测试覆盖的问题路径。**测试执行者是 root 或对应实现 agent，T21 agent 没有亲自重跑这些运行测试。** 本记录中的“通过”均按各实现负责人的执行结果及其仓库记录转录，源码复核与测试执行分开列出。
 
-本记录生成时，root 正在进行最终 macOS/Linux 组合验收；本文不将尚未结束的全量测试、Linux 内核/eBPF 矩阵或平台打包计算为已通过。各分支历史测试数量不能与这里的 focused 数量直接相加，后者可能重跑相同用例。
+本记录初版生成时，root 正在进行最终 macOS/Linux 组合验收，初版不将尚未结束的全量测试、Linux 内核/eBPF 矩阵或平台打包计算为已通过。后续第 4.5 节仅引用 root 已归档的最终报告，仍不代表 T21 agent 亲自执行。各分支历史测试数量、这里的 focused 数量及最终报告不能直接相加，它们可能重跑相同用例。
 
 | 功能 | 审查起点 | 已复核修复 |
 | --- | --- | --- |
 | #23 / T18 诊断与任务 | root 的 `011149b` 运行控制/告警/导出路径 | `6318c2c`：持久终态与采集结束分离 |
 | #24 / T19 协议、订阅与分组 | 合并 #23 后的 `c2e87f0` | `dced51a`：解析预算；`67adf99`：订阅代际、来源寿命与嵌套查找 |
-| #25 / T20 备份与恢复 | backend `646e4d6` | `54c6117`：WAL 快照/配置摘要；`79a9819`：启动状态/响应预算 |
+| #25 / T20 备份与恢复 | backend `646e4d6`；后续 root 恢复审查 | `54c6117`：WAL 快照/配置摘要；`79a9819`：启动状态/响应预算；`862ddad`：输入封存/精确 schema |
 | #26 / T21 储备契约 | `423c41c` 基线 | `113b619` / `88f4685`：范围计划与契约；本次只增加本文 |
 
 ## 2. #23：落库失败控制项不能随重试缓存淘汰
@@ -93,9 +93,33 @@
 
 实现 agent 在 `54c6117` 进一步固定源库 WAL 只读事务快照，避免逐页复制被高频外部写入反复重启，并增加 2 MiB 数据下持续写入可前进的一致性测试。T21 agent 只读复核了此修复及独立只读连接、逐页/期限/文件边界。
 
-离线 restore 的其余已查范围包括与 Store 相同的 `daemon.lock`、checkpoint 忙拒绝、原库硬链接保留、候选原子 rename、目录同步失败专用结果、schema 上限及私有新文件权限，未发现其他具体问题。这不是对任意文件系统/断电/外部非协作写入的全面保证。
+离线 restore 的其余已查范围包括与 Store 相同的 `daemon.lock`、checkpoint 忙拒绝、原库硬链接保留、候选原子 rename、目录同步失败专用结果、schema 上限及私有新文件权限；该轮 T21 只读审查未报告其他具体问题。随后 root 又实际复现并修复了第 4.4 节的问题，因此该轮结论不代表恢复输入和 schema 校验已经没有遗漏，也不是对任意文件系统/断电/外部非协作写入的全面保证。
 
 #25 agent 报告 `cargo test -p hps-api -p hps-storage backup -- --nocapture` **6 项通过（Storage 4、API 2）**，见 `docs/validation/backup-desktop-diagnostics-2026-11-02.md` / `.json`；包含上述 WAL、校验、临时目标库原件保留、旧 schema 及响应额度回归。恢复测试由 #25 agent 在临时测试数据库执行，T21 agent 未执行恢复。其单独的 CLI/Desktop/Linux 采集证据保留在原记录中，本文不将其转换为 root 的最终组合验收。
+
+### 4.4 Root 补充复现：输入路径替换与 schema 对象遗漏
+
+**发现与归属。** 以下问题由 **root 实际复现、实现修复并执行验证**，提交为 `862ddad`；T21 agent 只读复核该提交的源码/测试、更新后的 `docs/backup-desktop-diagnostics-usage.md` 和最终报告，没有亲自运行路径替换攻击、恢复或组合验收。
+
+- **原路径 A→B→A。** 旧路径多次重新打开输入，前后摘要检查均可能读到 A，而中间复制读到 B；前后再次核对原路径不能证明复制的内容就是获准的字节。修复将 `capture` 的单次有界读取结果与 SHA 绑定，写入 UUID 命名的 0700 私有目录和 0600 sealed 文件；后续 schema 校验及 Backup API 只读同一封存内容，不再打开调用者的原路径。成功/失败都清理封存对象。
+- **额外 schema 对象。** 旧校验只确认预期对象存在，未拒绝额外 trigger/table/view/index；额外触发器可以在恢复后的正常 SQL 操作中改变数据库。修复先校验 `schema_migrations` 自身的对象形状，再对该版本全部非内部对象的 `name/type/tbl_name/sql` 排序精确比较，数量或内容不一致均拒绝。
+- **`LIKE` 的下划线通配符。** `name NOT LIKE 'sqlite_%'` 中 `_` 匹配任意单字符，可能将 `sqliteXpoison` 这样的用户对象误当内部对象排除。修复使用 `name NOT GLOB 'sqlite_*'`，只排除字面 `sqlite_` 前缀；回归专门覆盖该绕过名称。
+
+**只读复核的回归。** `captured_bytes_bind_digest_schema_and_restore_after_source_path_replacement` 在捕获 A 后把原路径替换为 B，确认 inspect 使用的封存字节仍为 A、恢复出的配置为 A、原路径仍保持 B，并核对 0700/0600 权限与封存清理；另确认先捕获的非法内容不能被随后替换成合法 A 救回。该回归验证修复后的同一捕获链路，不将它描述为 T21 agent 亲自重现旧 A→B→A 攻击。`extra_objects_including_literal_prefix_bypass_cannot_poison_restored_schema` 覆盖普通与 `sqliteXpoison` trigger、额外表/视图/索引：inspect/restore 均拒绝，目标原库和注入后的源文件字节均保持不变。
+
+使用说明同时澄清：30 秒期限只覆盖逐页复制阶段，源捕获、后续校验/落盘和传输另受文件大小与并发预算约束；不再把它描述为整个备份/恢复请求的总期限。
+
+### 4.5 Root 最终报告引用，不重新加总
+
+最终编译源码为 `862ddad624403e6f81bc994a7fe262ac04b7fb01`。T21 agent 只读查看了以下报告；执行结果归 root 及报告列明的实现负责人，本文不重跑、不合并成新的测试总数，也不把历史 focused 数量再次相加。
+
+| 报告 | 报告中的结果及边界 |
+| --- | --- |
+| `docs/validation/backlog-macos-2026-11-02.md` / `.json` | 最终 Mac workspace **227 passed**、Native **11 passed**，各自 0 failed/ignored；最终持久库浏览器 **3 项**单列。较早 `695e116` 的全量浏览器 25 项保留其原源码归属，不改记为最终源码全量。 |
+| `docs/validation/backlog-linux-2026-11-02.md` | ARM 容器普通 workspace **234 passed / 30 ignored**；x86 仿真 userland **233 passed / 30 ignored / 1 条运行时 skip**。原 socket 用例 errno 92 失败保持记录；同一未剥离 ELF 在两套真实 x86 guest 内分别精确通过，该补验不并入普通 workspace 或标准 52 项。 |
+| `docs/validation/backlog-kernel-2026-11-02/acceptance.json` | aarch64/x86_64 × 6.12.115/7.2.14 的标准真实内核案例 **52 项**，新增 live diagnostics 证据 **12 条**；诊断断言嵌于既有路径，不能将两者加成另一组案例数。socket 差异补验和发行 Daemon 额外案例均明确不计入该 52 项。 |
+
+报告资料提交为 `34acb5d438994f710ac698da3dfd85d2bb75de24`。报告保留 Mac 可见 GUI、真实 OS 通知/登录自启、宿主网络持久写入、云签名/公证和付费供应商等限制；本次文档追加不将这些未验收项变成通过，也不执行任何宿主网络写入。
 
 ## 5. 固定修复来源与后续边界
 
@@ -106,6 +130,7 @@
 | `67adf99` | `67adf993906b3cd6149a74c5b01d2677ee71fdd6` |
 | `54c6117` | `54c61175b2d21d99a1d911d1bf7278c1d85ea057` |
 | `79a9819` | `79a981901efd9a3c0ea34ebdc6bdf1be6423dc80` |
+| `862ddad` | `862ddad624403e6f81bc994a7fe262ac04b7fb01` |
 
 代码与测试可在共享 Git 对象库按上述修复提交用 `git show <SHA>:<仓库路径>` 复核。验收记录的资料提交分别为 #23 `c6f0755e2cc6065fe69a266948a552fd508d31fd`、#24 `67adf993906b3cd6149a74c5b01d2677ee71fdd6`、#25 `1f4be37388fbad0fca517de109778dfe9a12c7bf`；记录提交不代替对应代码修复 SHA。这样不要求本记录分支提前合入其他功能。本文只增加过程记录，不改变 #26 的未来能力边界，也不代替各 Issue 的实际结果回复。
 
