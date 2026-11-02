@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { Badge, Stat } from "../components/ui";
 import { getJson, postJson } from "../platform";
+import HealthHistoryPanel from "../components/HealthHistoryPanel";
 import type {
   HealthConfig,
   HealthOverview,
@@ -82,6 +83,8 @@ function Evidence({ result }: { result: ProbeResult }) {
           {result.http_status ?? "—"}
           {result.target_ok === false ? " · 目标未接受" : ""}
         </dd>
+        <dt className="muted">观察到的出口 IP</dt>
+        <dd>{result.exit_ip ?? "未知"} · 地域未知</dd>
       </dl>
       {result.error_code && (
         <p className="mt-3 break-all rounded-lg bg-slate-50 p-2 font-mono leading-5 dark:bg-slate-800">
@@ -621,6 +624,10 @@ export default function HealthPage({
           </section>
         </>
       )}
+      <HealthHistoryPanel
+        key={`${serviceEndpoint}:${nodeFilter}`}
+        node={nodeFilter || undefined}
+      />
     </div>
   );
 }

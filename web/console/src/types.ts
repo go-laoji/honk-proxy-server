@@ -254,6 +254,7 @@ export interface ProbeProfile {
   tls_server_name: string | null;
   ca_certificate: string | null;
   expected_status: number | null;
+  capture_exit_ip?: boolean;
 }
 export interface HealthConfig {
   enabled: boolean;
@@ -284,6 +285,7 @@ export interface ProbeResult {
   tunnel_established: boolean;
   http_status: number | null;
   target_ok: boolean | null;
+  exit_ip?: string | null;
   latency_ms: number;
   checked_at: number;
 }
@@ -314,6 +316,21 @@ export interface HealthRun {
   started_at: number | null;
   finished_at: number | null;
   result: ProbeResult | null;
+}
+export interface HealthHistory {
+  source: string;
+  observed_at_unix: number;
+  since_unix: number;
+  oldest_retained_unix: number | null;
+  retained_task_limit: number;
+  retained_run_target: number;
+  records: HealthRun[];
+  next_before: number | null;
+  day_started_at: number;
+  used_probes: number;
+  daily_budget: number;
+  exit_ip_source: string;
+  region_source: string;
 }
 export interface HealthTask {
   id: number;
