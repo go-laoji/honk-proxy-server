@@ -44,7 +44,7 @@ export default function LinuxPage({ data }: { data: ServiceData }) {
             <Cpu size={26} />
           </div>
           <div>
-            <h2 className="font-semibold">真实数据面状态</h2>
+            <h2 className="font-semibold">透明 TCP/UDP 数据面状态</h2>
             <p className="muted mt-2 text-sm leading-6">{ebpf.reason}</p>
           </div>
         </div>
@@ -65,12 +65,19 @@ export default function LinuxPage({ data }: { data: ServiceData }) {
                   : "否"
                 : "正在读取",
             ],
-            ["当前服务内置 eBPF 对象", ebpf.compiled ? "是" : "否"],
-            ["已配置", ebpf.configured ? "是" : "否"],
-            ["已挂载", ebpf.attached ? "是" : "否"],
-            ["接管就绪", ebpf.ready ? "是" : "否"],
+            ["完整透明数据面内置对象", ebpf.compiled ? "是" : "否"],
+            ["透明捕获已配置", ebpf.configured ? "是" : "否"],
+            ["透明捕获已挂载", ebpf.attached ? "是" : "否"],
+            ["完整透明接管就绪", ebpf.ready ? "是" : "否"],
           ]}
         />
+        <p className="muted px-6 pb-5 text-xs leading-6">
+          本机应用的 UDP/TCP 53 端口 DNS 捕获可单独启用，运行状态及内核证据在{" "}
+          <a href="./dns.html" className="text-blue-600 hover:underline">
+            DNS 设置
+          </a>{" "}
+          中查看。
+        </p>
       </section>
       <section className="panel overflow-hidden" aria-label="Linux 环境预检">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-5 dark:border-slate-800">

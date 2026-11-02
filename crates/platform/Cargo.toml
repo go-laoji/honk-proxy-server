@@ -9,9 +9,15 @@ hps-domain.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
+hps-dns.workspace = true
+hps-net.workspace = true
+tokio.workspace = true
+hps-config.workspace = true
+hickory-proto = "0.26.3"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 aya = "0.14"
 hps-ebpf-abi = {workspace = true,features = ["userspace"]}
 libc = "0.2"
 sha2 = "0.10"
+fs2 = "0.4"

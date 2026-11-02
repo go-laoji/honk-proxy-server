@@ -185,7 +185,7 @@ export default function ConfigPage({
         <Stat
           title="排空代际"
           value={String(workspace.draining_generations)}
-          detail="已有连接按原配置继续完成"
+          detail="代理与 DNS 分别计数，在途工作按原配置完成"
           icon={Database}
         />
       </div>

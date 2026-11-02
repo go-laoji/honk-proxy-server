@@ -128,14 +128,17 @@ impl Supervisor {
             inflight: record.inflight.as_ref().map_or(0, |t| t.requested_count),
             demand_active,
         };
-        let health_block = self
-            .health_purchase_block()
-            .await?
-            .or(if health_source_blocked {
-                Some("health_source_configuration")
-            } else {
-                None
-            });
+        let health_block = if config.enabled && config.refill.enabled {
+            self.health_purchase_block()
+                .await?
+                .or(if health_source_blocked {
+                    Some("health_source_configuration")
+                } else {
+                    None
+                })
+        } else {
+            None
+        };
         let state = ControlState {
             refilling: record.refilling,
             paused: record.paused_reason.is_some() || clock_wrong || health_block.is_some(),

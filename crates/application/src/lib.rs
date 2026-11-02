@@ -1,4 +1,7 @@
 mod controller;
+mod dns;
+mod dns_capture;
+pub use dns::DnsOverview;
 mod health;
 mod providers;
 use arc_swap::ArcSwap;
@@ -23,7 +26,7 @@ pub enum ApplicationError {
     Engine(#[from] EngineError),
     #[error("configuration is invalid; run validation for field diagnostics")]
     Invalid,
-    #[error("too many draining generations; close old connections before activating")]
+    #[error("too many draining generations; wait for proxy/DNS work to finish before activating")]
     GenerationBudget,
     #[error("runtime preparation could not finish")]
     Worker,
@@ -35,6 +38,10 @@ pub enum ApplicationError {
     ClockRollback,
     #[error("provider operation failed: {0}")]
     Provider(#[from] hps_provider::FetchError),
+    #[error(transparent)]
+    Dns(#[from] hps_dns::DnsError),
+    #[error("Linux DNS capture could not be prepared: {0}")]
+    Capture(String),
 }
 #[derive(Default, Clone)]
 pub struct StartupOverrides {
@@ -67,6 +74,9 @@ pub struct RuntimeSnapshot {
     pub engine: Arc<Engine>,
     pub management_tls: Option<hps_engine::tls::PreparedServer>,
     pub health_profiles: Vec<hps_health::PreparedProfile>,
+    pub dns: hps_dns::Resolver,
+    pub dns_server: Option<Arc<hps_dns::server::DnsServer>>,
+    capture: Option<Arc<dns_capture::CaptureRuntime>>,
     base_config: DaemonConfig,
 }
 pub struct Supervisor {
@@ -74,6 +84,7 @@ pub struct Supervisor {
     current: ArcSwap<RuntimeSnapshot>,
     operation: tokio::sync::Mutex<()>,
     retired: Mutex<Vec<Arc<Engine>>>,
+    retired_dns: Mutex<Vec<hps_dns::Resolver>>,
     overrides: StartupOverrides,
     path_base: PathBuf,
     closed: std::sync::atomic::AtomicBool,
@@ -100,6 +111,8 @@ impl Supervisor {
         let engine = prepared.engine;
         engine.set_generation(workspace.desired.revision.id);
         engine.prepare_enabled(None).await?;
+        let dns_server = dns::listener(&prepared.dns, None).await?;
+        let capture = prepared.capture.ready(&prepared.dns).await?;
         engine.start_enabled().await?;
         let path_base = store
             .database_path
@@ -116,9 +129,13 @@ impl Supervisor {
                 engine,
                 management_tls: prepared.management_tls,
                 health_profiles: prepared.health_profiles,
+                dns: prepared.dns,
+                dns_server,
+                capture,
             }),
             operation: tokio::sync::Mutex::new(()),
             retired: Mutex::new(vec![]),
+            retired_dns: Mutex::new(vec![]),
             overrides,
             path_base,
             closed: std::sync::atomic::AtomicBool::new(false),
@@ -131,6 +148,16 @@ impl Supervisor {
         });
         service.load_health().await?;
         service.refresh_pool().await?;
+        let current = service.current();
+        if let Some(server) = &current.dns_server {
+            server.start();
+        }
+        if let Some(capture) = &current.capture
+            && let Err(error) = capture.start(&current.dns)
+        {
+            service.shutdown().await?;
+            return Err(error);
+        }
         Ok(service)
     }
     pub fn current(&self) -> Arc<RuntimeSnapshot> {
@@ -150,6 +177,8 @@ impl Supervisor {
         let current = self.current();
         let mut retired = self.retired.lock().unwrap();
         retired.retain(|engine| !engine.is_idle());
+        let mut retired_dns = self.retired_dns.lock().unwrap();
+        retired_dns.retain(|dns| !dns.is_released());
         let mut pending = restart_fields(&current.base_config, &workspace.desired.config);
         if let Some((revision, reasons)) = self.pending_restart.lock().unwrap().as_ref()
             && *revision == workspace.desired.revision.id
@@ -191,7 +220,7 @@ impl Supervisor {
                 .database_path
                 .as_ref()
                 .map(|path| path.display().to_string()),
-            draining_generations: retired.len(),
+            draining_generations: retired.len() + retired_dns.len(),
             startup_overrides: self.overrides.fields(),
             management_certificate: current.management_tls.as_ref().map(|prepared| {
                 let info = &prepared.certificate;
@@ -363,7 +392,7 @@ impl Supervisor {
         let mut config = target.config.clone();
         self.overrides.apply(&mut config);
         let prepare = config.clone();
-        let previous = current.engine.clone();
+        let previous = current.clone();
         let prepared =
             match tokio::task::spawn_blocking(move || prepare_engine(&prepare, Some(&previous)))
                 .await
@@ -396,6 +425,11 @@ impl Supervisor {
             restart_required.push("management_tls.certificate_contents".into());
         }
         let candidate = prepared.engine;
+        if prepared.capture.requires_restart(current.capture.as_ref())
+            && !restart_required.iter().any(|s| s == "dns.capture")
+        {
+            restart_required.push("dns.capture".into());
+        }
         if !restart_required.is_empty() || input.defer_until_restart {
             let activation_id = self
                 .store
@@ -417,6 +451,7 @@ impl Supervisor {
             });
         }
         if current.engine.preparation_fingerprint() == candidate.preparation_fingerprint()
+            && current.dns.fingerprint() == prepared.dns.fingerprint()
             && serde_json::to_value(&current.base_config.proxy)
                 .map_err(|_| ApplicationError::Invalid)?
                 == serde_json::to_value(&target.config.proxy)
@@ -446,6 +481,9 @@ impl Supervisor {
                 engine: current.engine.clone(),
                 management_tls: prepared.management_tls,
                 health_profiles: prepared.health_profiles,
+                dns: prepared.dns,
+                dns_server: current.dns_server.clone(),
+                capture: current.capture.clone(),
             }));
             *self.pending_restart.lock().unwrap() = None;
             self.store
@@ -463,7 +501,9 @@ impl Supervisor {
         {
             let mut retired = self.retired.lock().unwrap();
             retired.retain(|engine| !engine.is_idle());
-            if retired.len() >= 32 {
+            let mut retired_dns = self.retired_dns.lock().unwrap();
+            retired_dns.retain(|dns| !dns.is_released());
+            if retired.len() + retired_dns.len() >= 32 {
                 return Err(ApplicationError::GenerationBudget);
             }
         }
@@ -477,6 +517,32 @@ impl Supervisor {
                 .await?;
             return Err(error.into());
         }
+        let dns_server = match dns::listener(&prepared.dns, Some(&current)).await {
+            Ok(server) => server,
+            Err(error) => {
+                self.store
+                    .record_failure(
+                        input.revision,
+                        input.expected_revision,
+                        "dns_listen_preparation_failed",
+                    )
+                    .await?;
+                return Err(error);
+            }
+        };
+        let capture = match prepared.capture.ready(&prepared.dns).await {
+            Ok(capture) => capture,
+            Err(error) => {
+                self.store
+                    .record_failure(
+                        input.revision,
+                        input.expected_revision,
+                        "dns_capture_preparation_failed",
+                    )
+                    .await?;
+                return Err(error);
+            }
+        };
         let activation_id = self
             .store
             .activate(input.revision, input.expected_revision, false)
@@ -493,15 +559,55 @@ impl Supervisor {
                 .await?;
             return Err(error.into());
         }
+        if let Some(capture) = &capture
+            && let Err(error) = capture.start(&prepared.dns)
+        {
+            let cleanup = capture.shutdown().await;
+            candidate.shutdown().await;
+            let rollback = self
+                .store
+                .activate(current.revision, input.revision, false)
+                .await?;
+            self.store
+                .mark_applied(current.revision, Some(rollback))
+                .await?;
+            cleanup?;
+            return Err(error);
+        }
         current.engine.drain_acceptors().await;
-        self.current.store(Arc::new(RuntimeSnapshot {
-            revision: input.revision,
-            config,
-            base_config: target.config,
-            engine: candidate,
-            management_tls: prepared.management_tls,
-            health_profiles: prepared.health_profiles,
-        }));
+        let bootstrap_changed = current.dns.fingerprint() != prepared.dns.fingerprint()
+            || !current
+                .health_profiles
+                .iter()
+                .map(|p| &p.fingerprint)
+                .eq(prepared.health_profiles.iter().map(|p| &p.fingerprint));
+        if let Some(server) = &dns_server {
+            server.replace_resolver(prepared.dns.clone());
+            server.start();
+        }
+        self.health.publish_generation(bootstrap_changed, || {
+            prepared.dns.activate();
+            self.current.store(Arc::new(RuntimeSnapshot {
+                revision: input.revision,
+                config,
+                base_config: target.config,
+                engine: candidate,
+                management_tls: prepared.management_tls,
+                health_profiles: prepared.health_profiles,
+                dns: prepared.dns,
+                dns_server: dns_server.clone(),
+                capture,
+            }))
+        });
+        if current.dns.fingerprint() != self.current().dns.fingerprint() {
+            current.dns.retire();
+            self.retired_dns.lock().unwrap().push(current.dns.clone());
+        }
+        if let Some(old) = &current.dns_server
+            && !dns_server.as_ref().is_some_and(|new| Arc::ptr_eq(old, new))
+        {
+            old.shutdown().await;
+        }
         self.refresh_pool().await?;
         self.retired.lock().unwrap().push(current.engine.clone());
         *self.pending_restart.lock().unwrap() = None;
@@ -580,6 +686,19 @@ impl Supervisor {
         drop(_operation);
         self.provider_tasks.close();
         self.provider_tasks.wait().await;
+        self.current().dns.shutdown().await;
+        let retired_dns = std::mem::take(&mut *self.retired_dns.lock().unwrap());
+        for dns in retired_dns {
+            dns.shutdown().await;
+        }
+        let capture_error = if let Some(capture) = &self.current().capture {
+            capture.shutdown().await.err()
+        } else {
+            None
+        };
+        if let Some(server) = &self.current().dns_server {
+            server.shutdown().await;
+        }
         self.current().engine.shutdown().await;
         let retired = std::mem::take(&mut *self.retired.lock().unwrap());
         for engine in retired {
@@ -595,6 +714,9 @@ impl Supervisor {
             )
             .await?;
         self.store.close().await?;
+        if let Some(error) = capture_error {
+            return Err(error);
+        }
         Ok(())
     }
 }
@@ -636,13 +758,15 @@ fn export(config: &DaemonConfig) -> Result<String, ApplicationError> {
         .map_err(|_| ApplicationError::Invalid)
 }
 struct PreparedRuntime {
+    capture: dns_capture::PreparedCapture,
+    dns: hps_dns::Resolver,
     health_profiles: Vec<hps_health::PreparedProfile>,
     engine: Arc<Engine>,
     management_tls: Option<hps_engine::tls::PreparedServer>,
 }
 fn prepare_engine(
     config: &DaemonConfig,
-    previous: Option<&Arc<Engine>>,
+    previous: Option<&RuntimeSnapshot>,
 ) -> Result<PreparedRuntime, ApplicationError> {
     tracing_subscriber::EnvFilter::try_new(&config.log_filter)
         .map_err(|_| ApplicationError::Invalid)?;
@@ -656,7 +780,12 @@ fn prepare_engine(
     } else {
         None
     };
-    let engine = Engine::with_previous(config.proxy.clone(), previous)?;
+    let dns = dns::prepare(config, previous)?;
+    let capture = dns_capture::PreparedCapture::prepare(config, previous)?;
+    let engine = Engine::with_previous(config.proxy.clone(), previous.map(|p| &p.engine))?;
+    if config.dns.enabled {
+        engine.configure_resolver(Some(Arc::new(dns.clone())));
+    }
     let health_profiles = if config.health.enabled {
         config
             .health
@@ -664,7 +793,15 @@ fn prepare_engine(
             .iter()
             .filter(|p| p.enabled && p.transport == hps_domain::HealthTransport::Tcp)
             .cloned()
-            .map(hps_health::PreparedProfile::prepare)
+            .map(|profile| {
+                hps_health::PreparedProfile::prepare(profile).map(|profile| {
+                    if config.dns.enabled {
+                        profile.with_resolver(Arc::new(dns.clone()), dns.fingerprint())
+                    } else {
+                        profile
+                    }
+                })
+            })
             .collect::<Result<Vec<_>, _>>()
             .map_err(|_| ApplicationError::Invalid)?
     } else {
@@ -696,6 +833,8 @@ fn prepare_engine(
         return Err(ApplicationError::Invalid);
     }
     Ok(PreparedRuntime {
+        capture,
+        dns,
         health_profiles,
         engine,
         management_tls,
@@ -704,11 +843,15 @@ fn prepare_engine(
 fn restart_fields(current: &DaemonConfig, target: &DaemonConfig) -> Vec<String> {
     let before = serde_json::to_value(current.redacted()).expect("config serialization");
     let after = serde_json::to_value(target.redacted()).expect("config serialization");
-    ["management_listen", "management_tls", "log_filter"]
+    let mut fields = ["management_listen", "management_tls", "log_filter"]
         .into_iter()
         .filter(|field| before[*field] != after[*field])
         .map(str::to_owned)
-        .collect()
+        .collect::<Vec<_>>();
+    if current.dns.capture.is_some() && current.dns.capture != target.dns.capture {
+        fields.push("dns.capture".into());
+    }
+    fields
 }
 fn changes(current: &DaemonConfig, target: &DaemonConfig) -> Vec<ConfigChange> {
     fn walk(
@@ -753,6 +896,13 @@ fn changes(current: &DaemonConfig, target: &DaemonConfig) -> Vec<ConfigChange> {
         &serde_json::to_value(target.redacted()).unwrap(),
         &mut out,
     );
+    if current.dns.capture.is_some() {
+        for change in &mut out {
+            if change.path == "dns.capture" || change.path.starts_with("dns.capture.") {
+                change.apply_mode = "restart".into();
+            }
+        }
+    }
     for upstream in &target.proxy.upstreams {
         let before = current
             .proxy

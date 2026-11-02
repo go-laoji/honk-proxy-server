@@ -197,6 +197,9 @@ impl Engine {
     pub fn configure_health(&self, policy: crate::health::HealthPolicy) {
         self.dialer.configure_health(policy);
     }
+    pub fn configure_resolver(&self, resolver: Option<Arc<dyn hps_net::NameResolver>>) {
+        self.dialer.configure_resolver(resolver);
+    }
     pub fn health_usable(&self, identity: &str) -> bool {
         self.dialer.health_usable(identity, None)
     }

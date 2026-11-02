@@ -1,0 +1,61 @@
+{
+  "bind_failure_keeps_head": true,
+  "boot_and_real_dns": true,
+  "capture": {
+    "allocated_slots": 4,
+    "attached": true,
+    "cgroup": "/sys/fs/cgroup/hps-dns-test-app-1",
+    "ipv4_alias_prefix": "127.77.0.0/16",
+    "ipv6_alias_prefix": "fd77:6870:7300::/112",
+    "map_ids": [
+      212,
+      213,
+      214,
+      216,
+      217
+    ],
+    "netns_cookie": 1262,
+    "object_sha256": "c308612ca777c19a1f61323132707f9901476cf386e2d260b2a3c11fb1867051",
+    "peers": 4,
+    "port": 44383,
+    "program_ids": [
+      371,
+      372,
+      373,
+      374,
+      375,
+      376,
+      377,
+      378
+    ],
+    "scope": "cgroup_local_application_dns",
+    "stats": [
+      {
+        "bypassed": 0,
+        "error_code": 0,
+        "error_phase": 0,
+        "errors": 0,
+        "family": "ipv4",
+        "redirected": 4,
+        "restored": 5
+      },
+      {
+        "bypassed": 0,
+        "error_code": 0,
+        "error_phase": 0,
+        "errors": 0,
+        "family": "ipv6",
+        "redirected": 4,
+        "restored": 5
+      }
+    ]
+  },
+  "capture_disable_pending_restart": true,
+  "cgroup_removed": true,
+  "hot_policy_keeps_hooks": true,
+  "invalid_object_keeps_head": true,
+  "kernel": "7.0.14-linuxkit",
+  "pending_rollback": true,
+  "programs_removed": true,
+  "shutdown_and_restart_reacquire": true
+}

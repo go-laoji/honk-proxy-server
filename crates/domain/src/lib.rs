@@ -3,6 +3,33 @@ use serde::{Deserialize, Serialize};
 pub const API_VERSION: &str = "v1";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DnsCaptureStats {
+    pub family: String,
+    pub redirected: u64,
+    pub restored: u64,
+    pub errors: u64,
+    pub bypassed: u64,
+    pub error_code: i64,
+    pub error_phase: u64,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DnsCaptureStatus {
+    pub scope: String,
+    pub attached: bool,
+    pub object_sha256: String,
+    pub cgroup: String,
+    pub port: u16,
+    pub ipv4_alias_prefix: String,
+    pub ipv6_alias_prefix: String,
+    pub netns_cookie: u64,
+    pub program_ids: Vec<u32>,
+    pub map_ids: Vec<u32>,
+    pub peers: usize,
+    pub allocated_slots: u64,
+    pub stats: Vec<DnsCaptureStats>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VersionInfo {
     pub service: String,
     pub version: String,
@@ -79,7 +106,7 @@ impl Capabilities {
                 attached: false,
                 ready: false,
                 reason: if cfg!(target_os = "linux") {
-                    "此构建尚未集成真实 eBPF 数据面，不能接管流量"
+                    "完整透明 TCP/UDP 数据面尚未接入；DNS 捕获状态单独在 DNS 设置中显示"
                 } else {
                     "真实 eBPF 数据面仅支持符合内核要求的 Linux"
                 }

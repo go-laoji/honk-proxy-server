@@ -232,7 +232,7 @@ impl Supervisor {
             .clone()
             .try_acquire_owned()
             .map_err(|_| ApplicationError::ExtractionCapacity)?;
-        let client = ProviderClient::new(&config)?;
+        let client = ProviderClient::with_resolver(&config, self.name_resolver())?;
         self.store.observe_lease_clock(logical).await?;
         let (task, new) = self
             .store
@@ -283,9 +283,11 @@ impl Supervisor {
             .provider_slots
             .try_acquire()
             .map_err(|_| ApplicationError::Worker)?;
-        Ok(ProviderClient::new(&config)?
-            .diagnostic(&config, kind)
-            .await?)
+        Ok(
+            ProviderClient::with_resolver(&config, self.name_resolver())?
+                .diagnostic(&config, kind)
+                .await?,
+        )
     }
     /// Small convenience API over immutable configuration revisions, with the same CAS.
     pub async fn edit_provider(

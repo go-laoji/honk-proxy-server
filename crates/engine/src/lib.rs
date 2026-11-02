@@ -11,10 +11,7 @@ pub mod target;
 pub mod tls;
 mod traffic;
 
-use tokio::io::{AsyncRead, AsyncWrite};
-pub trait ProxyIo: AsyncRead + AsyncWrite + Unpin + Send {}
-impl<T: AsyncRead + AsyncWrite + Unpin + Send> ProxyIo for T {}
-pub type BoxIo = Box<dyn ProxyIo>;
+pub use hps_net::{BoxIo, ProxyIo};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProxyError {
@@ -28,6 +25,8 @@ pub enum ProxyError {
     LocalResource,
     #[error("upstream endpoint connection failed")]
     Endpoint,
+    #[error("upstream endpoint DNS resolution failed")]
+    Dns,
     #[error("upstream TLS handshake failed")]
     UpstreamTls,
     #[error("upstream authentication failed")]

@@ -57,6 +57,8 @@ Daemon 默认把配置保存在 `.hps/hps.sqlite3`，可通过 `--data-dir` 指�
 
 [健康检测](docs/health-usage.md) 默认启用，按 TCP/UDP、IPv4/IPv6 分开记录端点、认证和目标穿透证据；统一控制新选点、寿命与预算。支持单个/批量后台任务、真实流量分层反馈、CLI/API 与共用控制台。UDP 当前如实报告不支持，重启后重新取得成功证据。
 
+[DNS](docs/dns-usage.md) 支持 System/UDP/TCP/DoT/DoH、按用途和域名选路、正负 TTL 缓存、诊断及清理。System 不虚构 TTL；可选静态代理承载 TCP DNS。Linux 自有八个 eBPF hook 已实际验证双栈 TCP/UDP DNS 捕获、对端地址恢复和服务生命周期；默认不开启监听或捕获，完整透明转发仍由 T15 交付。
+
 前端在 `web/console`，包含 18 个实际 HTML 入口。原始未使用的演示素材未纳入版本管理。连接、运行概览、代理入口、启动设置与 eBPF 状态读取真实 Daemon API；尚未实现的业务模块明确显示不可用，不使用演示节点填充。
 
 ```sh

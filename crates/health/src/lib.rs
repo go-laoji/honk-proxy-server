@@ -12,7 +12,7 @@ use http_body_util::Empty;
 use hyper_util::rt::TokioIo;
 use sha2::{Digest, Sha256};
 use std::{
-    net::{IpAddr, SocketAddr},
+    net::IpAddr,
     sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -29,11 +29,7 @@ pub struct PreparedProfile {
     host: String,
     tls: Option<Arc<ClientConfig>>,
     tls_name: String,
-    resolved: Arc<tokio::sync::Mutex<Option<Resolution>>>,
-}
-struct Resolution {
-    until: std::time::Instant,
-    target: Result<Target, &'static str>,
+    resolver: Option<Arc<dyn hps_net::NameResolver>>,
 }
 impl PreparedProfile {
     pub fn prepare(profile: ProbeProfile) -> Result<Self, ProxyError> {
@@ -86,53 +82,65 @@ impl PreparedProfile {
             host,
             tls,
             tls_name,
-            resolved: Arc::new(tokio::sync::Mutex::new(None)),
+            resolver: None,
         })
     }
     pub async fn bootstrap_ready(&self) -> bool {
         self.resolve().await.is_ok()
     }
+    pub fn with_resolver(
+        mut self,
+        resolver: Arc<dyn hps_net::NameResolver>,
+        fingerprint: &str,
+    ) -> Self {
+        let mut hash = Sha256::new();
+        hash.update(self.fingerprint.as_bytes());
+        hash.update(fingerprint.as_bytes());
+        self.fingerprint = format!("{:x}", hash.finalize());
+        self.resolver = Some(resolver);
+        self
+    }
     async fn resolve(&self) -> Result<Target, &'static str> {
-        let mut cached = self.resolved.lock().await;
-        if let Some(cached) = cached.as_ref()
-            && cached.until > std::time::Instant::now()
-        {
-            return cached.target.clone();
-        }
         let port = self
             .url
             .port_or_known_default()
             .ok_or("invalid_target_port")?;
-        let addresses: Result<Vec<SocketAddr>, _> = if let Ok(ip) = self.host.parse::<IpAddr>() {
-            Ok(vec![SocketAddr::new(ip, port)])
-        } else {
-            tokio::net::lookup_host((self.host.as_str(), port))
-                .await
-                .map(|values| values.collect())
-        };
-        let target = addresses
-            .map_err(|_| "probe_target_dns_failed")
+        let addresses: Result<Vec<IpAddr>, &'static str> =
+            if let Ok(ip) = self.host.parse::<IpAddr>() {
+                Ok(vec![ip])
+            } else if let Some(resolver) = &self.resolver {
+                resolver
+                    .lookup_family(
+                        self.host.clone(),
+                        hps_net::ResolvePurpose::Health,
+                        match self.profile.family {
+                            IpFamily::Ipv4 => hps_net::AddressFamily::Ipv4,
+                            IpFamily::Ipv6 => hps_net::AddressFamily::Ipv6,
+                        },
+                    )
+                    .await
+                    .map_err(|_| "probe_target_dns_failed")
+            } else {
+                tokio::net::lookup_host((self.host.as_str(), port))
+                    .await
+                    .map(|values| values.map(|a| a.ip()).collect())
+                    .map_err(|_| "probe_target_dns_failed")
+            };
+        addresses
             .and_then(|values| {
                 values
                     .into_iter()
                     .find(|a| {
                         matches!(
-                            (a.ip(), self.profile.family),
+                            (a, self.profile.family),
                             (IpAddr::V4(_), IpFamily::Ipv4) | (IpAddr::V6(_), IpFamily::Ipv6)
                         )
                     })
                     .ok_or("probe_target_family_unavailable")
             })
             .and_then(|address| {
-                Target::new(&address.ip().to_string(), address.port())
-                    .map_err(|_| "invalid_probe_target")
-            });
-        let ttl = if target.is_ok() { 60 } else { 5 };
-        *cached = Some(Resolution {
-            until: std::time::Instant::now() + Duration::from_secs(ttl),
-            target: target.clone(),
-        });
-        target
+                Target::new(&address.to_string(), port).map_err(|_| "invalid_probe_target")
+            })
     }
     pub async fn probe(&self, plan: &ProbePlan, settings: &HealthConfig) -> ProbeResult {
         let started = std::time::Instant::now();
@@ -421,6 +429,10 @@ fn dial_failure(
 ) -> ProbeResult {
     result.endpoint_reachable = error.endpoint_reachable;
     let (verdict, code) = match error.error {
+        ProxyError::Dns => (HealthVerdict::Unknown, "endpoint_dns_failed"),
+        ProxyError::Timeout if error.phase == ProbePhase::Local => {
+            (HealthVerdict::Unknown, "endpoint_dns_timeout")
+        }
         ProxyError::LocalResource => {
             return finish(
                 result,

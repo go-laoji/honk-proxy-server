@@ -3,6 +3,8 @@ use std::{net::SocketAddr, path::Path};
 
 mod health;
 pub use health::*;
+mod dns;
+pub use dns::*;
 mod provider;
 pub use provider::*;
 mod proxy;
@@ -19,6 +21,7 @@ pub struct DaemonConfig {
     pub proxy: ProxyConfig,
     pub providers: Vec<ProviderConfig>,
     pub health: HealthConfig,
+    pub dns: DnsConfig,
 }
 
 impl Default for DaemonConfig {
@@ -32,6 +35,7 @@ impl Default for DaemonConfig {
             proxy: ProxyConfig::default(),
             providers: vec![],
             health: HealthConfig::default(),
+            dns: DnsConfig::default(),
         }
     }
 }
@@ -66,6 +70,18 @@ impl DaemonConfig {
     }
 
     pub fn resolve_paths(&mut self, parent: &Path) {
+        if let Some(capture) = &mut self.dns.capture
+            && capture.object.is_relative()
+        {
+            capture.object = parent.join(&capture.object);
+        }
+        for upstream in &mut self.dns.upstreams {
+            if let Some(path) = &mut upstream.ca_certificate
+                && path.is_relative()
+            {
+                *path = parent.join(&*path);
+            }
+        }
         for profile in &mut self.health.profiles {
             if let Some(path) = &mut profile.ca_certificate
                 && path.is_relative()
@@ -167,6 +183,7 @@ impl DaemonConfig {
         }
         self.proxy.validate()?;
         self.health.validate()?;
+        self.dns.validate(&self.proxy)?;
         Ok(())
     }
 

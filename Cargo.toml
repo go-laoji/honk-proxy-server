@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["apps/cli", "apps/daemon", "crates/domain", "crates/config", "crates/client", "crates/api", "crates/web-assets", "crates/platform", "crates/engine", "crates/storage", "crates/application", "crates/provider", "crates/health", "crates/ebpf-abi"]
+members = ["apps/cli", "apps/daemon", "crates/domain", "crates/config", "crates/client", "crates/api", "crates/web-assets", "crates/platform", "crates/engine", "crates/storage", "crates/application", "crates/provider", "crates/health", "crates/ebpf-abi", "crates/net", "crates/dns"]
 default-members = ["apps/cli", "apps/daemon"]
 exclude = ["src-tauri", "ebpf"]
 
@@ -20,6 +20,8 @@ hps-storage = { path = "crates/storage" }
 hps-application = { path = "crates/application" }
 hps-provider = { path = "crates/provider" }
 hps-health = { path = "crates/health" }
+hps-net = { path = "crates/net" }
+hps-dns = { path = "crates/dns" }
 hps-ebpf-abi = {path = "crates/ebpf-abi"}
 axum = "0.8"
 clap = { version = "4.6", features = ["derive", "env"] }

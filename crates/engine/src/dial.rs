@@ -67,6 +67,7 @@ pub struct Dialer {
     timeout: Duration,
     min_lifetime: u64,
     max_header: usize,
+    resolver: std::sync::RwLock<Option<Arc<dyn hps_net::NameResolver>>>,
 }
 #[derive(Debug)]
 pub struct DialFailure {
@@ -187,6 +188,7 @@ impl Dialer {
             timeout: Duration::from_millis(config.limits.connect_timeout_ms),
             min_lifetime: config.limits.min_remaining_lifetime_secs,
             max_header: config.limits.max_header_bytes,
+            resolver: Default::default(),
         })
     }
     pub fn probe_plans(self: &Arc<Self>) -> Vec<ProbePlan> {
@@ -208,6 +210,9 @@ impl Dialer {
     }
     pub fn configure_health(&self, policy: crate::health::HealthPolicy) {
         *self.policy.write().unwrap() = policy;
+    }
+    pub fn configure_resolver(&self, resolver: Option<Arc<dyn hps_net::NameResolver>>) {
+        *self.resolver.write().unwrap() = resolver;
     }
     pub fn health_usable(&self, identity: &str, family: Option<hps_domain::IpFamily>) -> bool {
         self.health
@@ -317,6 +322,7 @@ impl Dialer {
             let (code, global) = match error {
                 ProxyError::LocalResource => ("local_resource_exhausted", false),
                 ProxyError::Endpoint => ("endpoint_connect_failed", true),
+                ProxyError::Dns => ("endpoint_dns_failed", false),
                 ProxyError::UpstreamTls => ("upstream_tls_failed", true),
                 ProxyError::Authentication => ("upstream_authentication_failed", true),
                 ProxyError::Timeout => (
@@ -365,9 +371,28 @@ impl Dialer {
         progress: &Progress,
     ) -> Result<Connected, ProxyError> {
         let config = &upstream.config;
-        let tcp = TcpStream::connect((config.host.as_str(), config.port))
-            .await
-            .map_err(socket_error)?;
+        let resolver = self.resolver.read().unwrap().clone();
+        let tcp = if config.host.parse::<std::net::IpAddr>().is_err()
+            && let Some(resolver) = resolver
+        {
+            progress.stage(ProbePhase::Local);
+            let addresses = resolver
+                .lookup(config.host.clone(), hps_net::ResolvePurpose::Bootstrap)
+                .await
+                .map_err(|_| ProxyError::Dns)?;
+            let addresses = addresses
+                .into_iter()
+                .map(|ip| std::net::SocketAddr::new(ip, config.port))
+                .collect::<Vec<_>>();
+            progress.stage(ProbePhase::EndpointConnect);
+            TcpStream::connect(addresses.as_slice())
+                .await
+                .map_err(socket_error)?
+        } else {
+            TcpStream::connect((config.host.as_str(), config.port))
+                .await
+                .map_err(socket_error)?
+        };
         progress.endpoint.store(true, Ordering::Relaxed);
         tcp.set_nodelay(true)?;
         let mut io: BoxIo = if let Some(tls) = &upstream.tls {

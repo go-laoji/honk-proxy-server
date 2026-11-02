@@ -16,6 +16,7 @@ use std::{
 };
 
 mod configuration;
+mod dns;
 mod health;
 mod providers;
 #[cfg(feature = "web-ui")]
@@ -147,6 +148,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .merge(configuration::router())
         .merge(providers::router())
         .merge(health::router())
+        .merge(dns::router())
         .layer(axum::extract::DefaultBodyLimit::max(4 * 1024 * 1024));
     #[cfg(feature = "web-ui")]
     let router = router.fallback(web::serve);
@@ -269,6 +271,22 @@ fn application_error(error: ApplicationError) -> (StatusCode, Json<ApiError>) {
         }
         ApplicationError::ProviderUnavailable => (StatusCode::NOT_FOUND, "provider_unavailable"),
         ApplicationError::Provider(error) => (StatusCode::BAD_GATEWAY, error.code),
+        ApplicationError::Capture(_) => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "dns_capture_preparation_failed",
+        ),
+        ApplicationError::Dns(error) => {
+            use hps_dns::DnsError;
+            match error {
+                DnsError::InvalidQuery | DnsError::Configuration | DnsError::Loop => {
+                    (StatusCode::UNPROCESSABLE_ENTITY, "dns_invalid_input")
+                }
+                DnsError::Disabled => (StatusCode::CONFLICT, "dns_disabled"),
+                DnsError::Capacity => (StatusCode::TOO_MANY_REQUESTS, "dns_capacity"),
+                DnsError::Timeout => (StatusCode::GATEWAY_TIMEOUT, "dns_timeout"),
+                _ => (StatusCode::BAD_GATEWAY, "dns_resolution_failed"),
+            }
+        }
         ApplicationError::Storage(StorageError::ProviderRateLimited) => {
             (StatusCode::TOO_MANY_REQUESTS, "provider_interval_limit")
         }

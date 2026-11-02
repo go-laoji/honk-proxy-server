@@ -10,7 +10,12 @@ for app in sh mount mkdir ip uname cat poweroff modprobe; do ln -s busybox "$roo
 cp -a /qemu/kernel/lib/modules "$rootfs/lib/modules"
 kver=$(basename /qemu/kernel/lib/modules/*)
 depmod -b "$rootfs" "$kver"
-cp "${HPS_CLI:-/artifacts/hps}" "$rootfs/hps"
+if [ -n "${HPS_DNS_TEST:-}" ]; then
+    cp "$HPS_DNS_TEST" "$rootfs/hps"
+    touch "$rootfs/dns-test"
+else
+    cp "${HPS_CLI:-/artifacts/hps}" "$rootfs/hps"
+fi
 strip "$rootfs/hps"
 cp "${HPS_EBPF_OBJECT:-/artifacts/hps-ebpf}" "$rootfs/hps-ebpf"
 cat > "$rootfs/init" <<'INIT'
@@ -24,7 +29,11 @@ mount -t cgroup2 none /sys/fs/cgroup
 modprobe ipv6 || true
 ip link set lo up
 uname -r
-/hps --output json linux self-test --object /hps-ebpf
+if [ -f /dns-test ]; then
+    HPS_EBPF_OBJECT=/hps-ebpf /hps --exact real_dns_capture --ignored --nocapture
+else
+    /hps --output json linux self-test --object /hps-ebpf
+fi
 status=$?
 echo HPS_SELF_TEST_EXIT=$status
 poweroff -f
