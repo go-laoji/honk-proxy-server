@@ -59,7 +59,7 @@ impl Supervisor {
             retained_run_target: 100000,
             records,
             next_before,
-            day_started_at: usage.day,
+            day_started_at: usage.day.saturating_mul(86400),
             used_probes: usage.used,
             daily_budget: self.current().config.health.daily_probe_budget,
             exit_ip_source: "configured_plain_ip_probe_response_when_present".into(),

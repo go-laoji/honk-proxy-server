@@ -111,6 +111,7 @@ mod tests {
             .unwrap();
         assert!(history.records.is_empty());
         assert_eq!(history.source, "persisted_health_runs");
+        assert_eq!(history.day_started_at, overview.day_started_at);
         assert_eq!(
             history.daily_budget,
             overview.configuration.daily_probe_budget

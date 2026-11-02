@@ -173,6 +173,7 @@ test("health MPA keeps probes across navigation, recovers lost acknowledgment an
       history.getByRole("cell").filter({ hasText: "203.0.113.10" }).first(),
     ).toBeVisible();
     await expect(history).toContainText("探测预算");
+    await expect(history).not.toContainText("1970/");
     await expect(history.getByRole("img").first()).toBeVisible();
     await history
       .getByRole("combobox", { name: "健康历史窗口" })
