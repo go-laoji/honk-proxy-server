@@ -27,7 +27,7 @@ impl Session {
         let private = private_id.map(CFString::new);
         let mut auth = ptr::null_mut();
         // Only native OS authorization may prompt. No WebView or daemon is elevated.
-        if writing && private.is_none() {
+        if writing {
             let error = unsafe { AuthorizationCreate(ptr::null(), ptr::null(), 0, &mut auth) };
             if error != 0 {
                 return Err(format!("OS authorization unavailable: {error}"));
@@ -170,7 +170,7 @@ impl Backend for Session {
 mod tests {
     use super::*;
     #[test]
-    #[ignore = "requires an administrator for an isolated SCPreferences file; never modifies active network preferences"]
+    #[ignore = "requires native OS administrator authorization for an isolated SCPreferences file; never modifies active network preferences"]
     fn real_systemconfiguration_private_preferences_commit_and_restore() {
         let dir = tempfile::tempdir().unwrap();
         let id = dir.path().join("isolated-network.plist");

@@ -5,7 +5,7 @@ use tauri_plugin_dialog::DialogExt;
 mod events;
 mod local;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 struct Target {
     endpoint: String,
     ca_certificate: Option<Vec<u8>>,
@@ -93,10 +93,15 @@ fn set_endpoint(
     state: tauri::State<'_, Connection>,
     endpoint: String,
     subscriptions: tauri::State<'_, events::NativeEvents>,
+    window: tauri::WebviewWindow,
+    context: events::SubscriptionContext,
 ) -> Result<(), String> {
     let client = HpsClient::new(&endpoint, Duration::from_secs(10)).map_err(|e| e.to_string())?;
     let endpoint = client.endpoint().as_str().to_owned();
     let mut current = state.0.lock().map_err(|_| "connection state unavailable")?;
+    subscriptions
+        .validate_context(window.label(), context)
+        .map_err(|e| e.message)?;
     subscriptions
         .ensure_target_generation()
         .map_err(|e| e.message)?;
@@ -440,39 +445,49 @@ fn supported_action(path: &str) -> bool {
 #[tauri::command]
 async fn api_post(
     state: tauri::State<'_, Connection>,
+    subscriptions: tauri::State<'_, events::NativeEvents>,
+    window: tauri::WebviewWindow,
+    context: events::SubscriptionContext,
     path: String,
     body: Option<serde_json::Value>,
 ) -> Result<serde_json::Value, NativeApiError> {
     if !supported_action(&path) {
         return Err("unsupported API operation".into());
     }
-    let endpoint = state
-        .0
-        .lock()
-        .map_err(|_| "connection state unavailable")?
-        .clone();
+    let endpoint = {
+        let target = state.0.lock().map_err(|_| "connection state unavailable")?;
+        subscriptions.validate_context(window.label(), context)?;
+        target.clone()
+    };
     let timeout = if path == "api/v1/dns/resolve" { 65 } else { 10 };
     let client = endpoint
         .client(Duration::from_secs(timeout))
         .map_err(NativeApiError::from)?;
-    match body {
+    let result = match body {
         Some(body) => client.post_body(&path, &body).await,
         None => client.post_json(&path).await,
     }
-    .map_err(NativeApiError::from)
+    .map_err(NativeApiError::from);
+    subscriptions.validate_context(window.label(), context)?;
+    result
 }
 
 #[tauri::command]
 async fn save_config_export(
     app: tauri::AppHandle,
     state: tauri::State<'_, Connection>,
+    subscriptions: tauri::State<'_, events::NativeEvents>,
+    window: tauri::WebviewWindow,
+    context: events::SubscriptionContext,
     revision: i64,
 ) -> Result<bool, String> {
-    let endpoint = state
-        .0
-        .lock()
-        .map_err(|_| "connection state unavailable")?
-        .clone();
+    let endpoint = {
+        let target = state.0.lock().map_err(|_| "connection state unavailable")?;
+        subscriptions
+            .validate_context(window.label(), context)
+            .map_err(|e| e.message)?;
+        target.clone()
+    };
     let export = endpoint
         .client(Duration::from_secs(10))
         .map_err(|error| error.to_string())?
@@ -490,6 +505,9 @@ async fn save_config_export(
     let Some(path) = receiver.await.map_err(|_| "save dialog did not complete")? else {
         return Ok(false);
     };
+    subscriptions
+        .validate_context(window.label(), context)
+        .map_err(|e| e.message)?;
     let path = path
         .into_path()
         .map_err(|_| "selected file path is unavailable")?;
@@ -503,22 +521,27 @@ async fn save_config_export(
 #[tauri::command]
 async fn api_get(
     state: tauri::State<'_, Connection>,
+    subscriptions: tauri::State<'_, events::NativeEvents>,
+    window: tauri::WebviewWindow,
+    context: events::SubscriptionContext,
     path: String,
 ) -> Result<serde_json::Value, NativeApiError> {
     if !supported_api(&path) {
         return Err("unsupported API path".into());
     }
-    let endpoint = state
-        .0
-        .lock()
-        .map_err(|_| "connection state unavailable")?
-        .clone();
-    endpoint
+    let endpoint = {
+        let target = state.0.lock().map_err(|_| "connection state unavailable")?;
+        subscriptions.validate_context(window.label(), context)?;
+        target.clone()
+    };
+    let result = endpoint
         .client(Duration::from_secs(10))
         .map_err(NativeApiError::from)?
         .get_json(&path)
         .await
-        .map_err(NativeApiError::from)
+        .map_err(NativeApiError::from);
+    subscriptions.validate_context(window.label(), context)?;
+    result
 }
 
 #[tauri::command]

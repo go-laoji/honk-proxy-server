@@ -33,6 +33,15 @@ async fn blocking<T: Send + 'static>(
         .await
         .map_err(|_| "local operation could not finish".to_owned())?
 }
+fn check_document(
+    app: &tauri::AppHandle,
+    window: &tauri::WebviewWindow,
+    context: events::SubscriptionContext,
+) -> Result<(), String> {
+    app.state::<events::NativeEvents>()
+        .validate_context(window.label(), context)
+        .map_err(|e| e.message)
+}
 #[tauri::command]
 pub(super) async fn profiles_get() -> Result<Profiles, String> {
     blocking(|| Store::new(&hps_system::state_dir()?).load()).await
@@ -40,6 +49,8 @@ pub(super) async fn profiles_get() -> Result<Profiles, String> {
 #[tauri::command]
 pub(super) async fn profiles_change(
     app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    context: events::SubscriptionContext,
     expected_revision: u64,
     change: Change,
 ) -> Result<Profiles, String> {
@@ -48,6 +59,9 @@ pub(super) async fn profiles_change(
         let mut current = state.0.lock().map_err(|_| "connection state unavailable")?;
         let subscriptions = app.state::<events::NativeEvents>();
         subscriptions
+            .validate_context(window.label(), context)
+            .map_err(|e| e.message)?;
+        subscriptions
             .ensure_target_generation()
             .map_err(|e| e.message)?;
         let store = Store::new(&hps_system::state_dir()?);
@@ -55,8 +69,10 @@ pub(super) async fn profiles_change(
         // Changing the active profile cancels every stream before another document can observe the target.
         if let Some(profile) = profiles.active() {
             let target = Target::profile(profile)?;
-            subscriptions.change_target().map_err(|e| e.message)?;
-            *current = target;
+            if *current != target {
+                subscriptions.change_target().map_err(|e| e.message)?;
+                *current = target;
+            }
         } else if current.profile_id.is_some() {
             subscriptions.change_target().map_err(|e| e.message)?;
             current.local = false;
@@ -78,8 +94,13 @@ pub(super) struct Context {
     network_services: Vec<proxy::NetworkService>,
 }
 #[tauri::command]
-pub(super) async fn local_context(app: tauri::AppHandle) -> Result<Context, String> {
+pub(super) async fn local_context(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    context: events::SubscriptionContext,
+) -> Result<Context, String> {
     blocking(move || {
+        check_document(&app, &window, context)?;
         let target = app
             .state::<Connection>()
             .0
@@ -127,6 +148,8 @@ pub(super) async fn local_context(app: tauri::AppHandle) -> Result<Context, Stri
 #[tauri::command]
 pub(super) async fn local_service_install(
     app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    context: events::SubscriptionContext,
     expected: ExpectedTarget,
     binary: String,
     config: String,
@@ -135,6 +158,7 @@ pub(super) async fn local_service_install(
         let state = app.state::<Connection>();
         let current = state.0.lock().map_err(|_| "connection state unavailable")?;
         expected.check(&current)?;
+        check_document(&app, &window, context)?;
         Manager::new(&hps_system::state_dir()?).install(Install {
             id: expected.profile_id,
             binary: binary.into(),
@@ -148,6 +172,8 @@ pub(super) async fn local_service_install(
 #[tauri::command]
 pub(super) async fn local_service_control(
     app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    context: events::SubscriptionContext,
     expected: ExpectedTarget,
     action: Action,
 ) -> Result<hps_system::service::Status, String> {
@@ -155,6 +181,7 @@ pub(super) async fn local_service_control(
         let state = app.state::<Connection>();
         let current = state.0.lock().map_err(|_| "connection state unavailable")?;
         expected.check(&current)?;
+        check_document(&app, &window, context)?;
         Manager::new(&hps_system::state_dir()?).control(
             &expected.profile_id,
             &expected.endpoint,
@@ -166,6 +193,8 @@ pub(super) async fn local_service_control(
 #[tauri::command]
 pub(super) async fn local_proxy_apply(
     app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    context: events::SubscriptionContext,
     expected: ExpectedTarget,
     input: proxy::Apply,
 ) -> Result<proxy::Status, String> {
@@ -174,6 +203,7 @@ pub(super) async fn local_proxy_apply(
         let state = app.state::<Connection>();
         let current = state.0.lock().map_err(|_| "connection state unavailable")?;
         expected.check(&current)?;
+        check_document(&app, &window, context)?;
         current.clone()
     };
     let inbounds = target
@@ -183,8 +213,8 @@ pub(super) async fn local_proxy_apply(
         .await
         .map_err(|e| e.to_string())?;
     for (protocol, port) in [("http", input.http), ("socks5", input.socks5)] {
-        if let Some(port) = port {
-            if !inbounds.inbounds.iter().any(|i| {
+        if let Some(port) = port
+            && !inbounds.inbounds.iter().any(|i| {
                 i.protocol == protocol
                     && i.running
                     && i.listen
@@ -195,15 +225,16 @@ pub(super) async fn local_proxy_apply(
                                 && a.is_ipv4()
                                 && (a.ip().is_loopback() || a.ip().is_unspecified())
                         })
-            }) {
-                return Err("selected local proxy port is not a running compatible inbound".into());
-            }
+            })
+        {
+            return Err("selected local proxy port is not a running compatible inbound".into());
         }
     }
     blocking(move || {
         let state = app.state::<Connection>();
         let current = state.0.lock().map_err(|_| "connection state unavailable")?;
         expected.check(&current)?;
+        check_document(&app, &window, context)?;
         proxy::apply(&hps_system::state_dir()?, &expected.endpoint, &input)
     })
     .await
@@ -211,12 +242,15 @@ pub(super) async fn local_proxy_apply(
 #[tauri::command]
 pub(super) async fn local_proxy_restore(
     app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    context: events::SubscriptionContext,
     expected: ExpectedTarget,
 ) -> Result<proxy::Status, String> {
     blocking(move || {
         let state = app.state::<Connection>();
         let current = state.0.lock().map_err(|_| "connection state unavailable")?;
         expected.check(&current)?;
+        check_document(&app, &window, context)?;
         proxy::restore(&hps_system::state_dir()?)
     })
     .await

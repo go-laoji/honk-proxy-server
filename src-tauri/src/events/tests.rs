@@ -1,4 +1,20 @@
 use super::*;
+
+#[test]
+fn request_context_rejects_old_documents_and_targets_even_after_returning_to_same_address() {
+    let events = NativeEvents::default();
+    let first = events.context("main").unwrap();
+    events.validate_context("main", first).unwrap();
+    events.change_target().unwrap();
+    events.change_target().unwrap();
+    assert!(events.validate_context("main", first).is_err());
+    let current = events.context("main").unwrap();
+    events.navigate("main").unwrap();
+    assert!(events.validate_context("main", current).is_err());
+    events
+        .validate_context("main", events.context("main").unwrap())
+        .unwrap();
+}
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},

@@ -114,6 +114,19 @@ fn current(
         })
 }
 impl NativeEvents {
+    pub(super) fn validate_context(
+        &self,
+        label: &str,
+        context: SubscriptionContext,
+    ) -> Result<(), NativeApiError> {
+        if self.context(label)? != context {
+            return Err(error(
+                "native_target_changed",
+                "target or document changed; reload before making this request",
+            ));
+        }
+        Ok(())
+    }
     fn context(&self, label: &str) -> Result<SubscriptionContext, NativeApiError> {
         let mut inner = self
             .inner
