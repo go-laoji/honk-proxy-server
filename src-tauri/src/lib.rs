@@ -142,6 +142,7 @@ fn supported_api(path: &str) -> bool {
             | "api/v1/providers"
             | "api/v1/groups"
     ) || supported_health_get(path)
+        || supported_observability_get(path)
         || events::supported_get(path)
         || supported_connections_get(path)
         || supported_nodes_get(path)
@@ -149,6 +150,21 @@ fn supported_api(path: &str) -> bool {
         || supported_dns_get(path)
         || supported_provider_get(path)
         || supported_epoch_detail(path, "api/v1/config/revisions/")
+}
+fn supported_observability_get(path: &str) -> bool {
+    if path == "api/v1/observability" {
+        return true;
+    }
+    let Some(query) = path.strip_prefix("api/v1/observability?") else {
+        return false;
+    };
+    let pairs = url::form_urlencoded::parse(query.as_bytes()).collect::<Vec<_>>();
+    pairs.len() == 1
+        && pairs[0].0 == "window_secs"
+        && pairs[0]
+            .1
+            .parse::<u32>()
+            .is_ok_and(|n| (60..=3600).contains(&n))
 }
 fn supported_epoch_detail(path: &str, prefix: &str) -> bool {
     let (base, query) = path
@@ -659,6 +675,11 @@ mod tests {
         assert!(supported_action("api/v1/linux/capture/save"));
         assert!(!supported_action("api/v1/linux/capture/unknown"));
         assert!(supported_api("api/v1/status"));
+        assert!(supported_api("api/v1/observability?window_secs=300"));
+        assert!(!supported_api("api/v1/observability?window_secs=3601"));
+        assert!(!supported_api(
+            "api/v1/observability?window_secs=60&window_secs=120"
+        ));
         let connection = "12345678-1234-4321-8234-123456789abc%3A00000000000000000001";
         assert!(supported_api(&format!("api/v1/connections/{connection}")));
         assert!(!supported_api(&format!(

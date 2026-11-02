@@ -153,6 +153,16 @@ impl HpsClient {
         self.get_json(&format!("api/v1/health/history?{}", query.finish()))
             .await
     }
+    pub async fn observations(
+        &self,
+        query: &hps_domain::ObservationQuery,
+    ) -> Result<hps_domain::ObservationOverview, ClientError> {
+        self.get_json(&format!(
+            "api/v1/observability?window_secs={}",
+            query.window_secs
+        ))
+        .await
+    }
     pub async fn dns(
         &self,
         after: Option<&str>,

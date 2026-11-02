@@ -40,3 +40,75 @@ pub struct RuleHitStatistics {
     pub untracked_hits: u64,
     pub counters: Vec<RuleHitCounter>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DnsCounters {
+    pub hits: u64,
+    pub misses: u64,
+    pub merged: u64,
+    pub failures: u64,
+    pub cache_entries: usize,
+    pub cache_bytes: usize,
+    pub in_flight: usize,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrendSample {
+    pub at_unix_ms: u64,
+    pub interval_ms: u64,
+    pub active: usize,
+    pub bytes_up_delta: u64,
+    pub bytes_down_delta: u64,
+    pub closed_delta: u64,
+    pub failed_delta: u64,
+    pub rejected_delta: u64,
+    pub dns: DnsCounters,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FlowCorrelation {
+    pub source_ip: Option<std::net::IpAddr>,
+    pub inbound: Option<String>,
+    pub destination_host: String,
+    pub destination_port: u16,
+    pub closed: u64,
+    pub failed: u64,
+    pub bytes_up: u64,
+    pub bytes_down: u64,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Correlations {
+    pub source: String,
+    pub resolution_secs: u32,
+    pub retention_secs: u32,
+    pub partial_boundary_bucket: bool,
+    pub unrepresented_closed_flows: u64,
+    pub group_limit_per_bucket: usize,
+    pub total_groups: usize,
+    pub groups_truncated: bool,
+    pub groups: Vec<FlowCorrelation>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct ObservationQuery {
+    pub window_secs: u32,
+}
+impl Default for ObservationQuery {
+    fn default() -> Self {
+        Self { window_secs: 3600 }
+    }
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ObservationOverview {
+    pub epoch: String,
+    pub source: String,
+    pub observed_at_unix_ms: u64,
+    pub requested_window_secs: u32,
+    pub sample_interval_secs: u32,
+    pub sample_limit: usize,
+    pub oldest_sample_unix_ms: Option<u64>,
+    pub resets_on_daemon_restart: bool,
+    pub wall_clock_changed: bool,
+    pub samples: Vec<TrendSample>,
+    pub statistics: crate::ConnectionStatistics,
+    pub rule_hits: RuleHitStatistics,
+    pub correlations: Correlations,
+}

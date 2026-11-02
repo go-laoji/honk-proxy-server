@@ -23,6 +23,7 @@ mod groups;
 mod health;
 mod linux;
 mod nodes;
+mod observability;
 mod providers;
 mod rules;
 mod tasks;
@@ -164,6 +165,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .merge(dns::router())
         .merge(groups::router())
         .merge(nodes::router())
+        .merge(observability::router())
         .merge(rules::router())
         .merge(tasks::router())
         .merge(linux::router())

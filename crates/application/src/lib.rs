@@ -7,6 +7,7 @@ mod groups;
 mod health;
 mod node_import;
 mod nodes;
+mod observability;
 mod providers;
 mod rules;
 mod tasks;
@@ -155,6 +156,7 @@ pub struct Supervisor {
     work_registration: Mutex<()>,
     controller_started: std::sync::atomic::AtomicBool,
     health: health::HealthRuntime,
+    observability: observability::ObservationRuntime,
 }
 impl Supervisor {
     pub async fn boot(
@@ -217,6 +219,7 @@ impl Supervisor {
             work_registration: Mutex::new(()),
             controller_started: std::sync::atomic::AtomicBool::new(false),
             health: Default::default(),
+            observability: Default::default(),
         });
         service.load_health().await?;
         service.refresh_pool().await?;
@@ -276,6 +279,7 @@ impl Supervisor {
         self.prune().await?;
         self.start_health_scheduler();
         self.start_pool_controller();
+        self.start_observer();
         Ok(())
     }
     pub async fn workspace(&self) -> Result<ConfigWorkspace, ApplicationError> {

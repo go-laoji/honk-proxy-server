@@ -20,6 +20,7 @@ use std::{
 };
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio_util::sync::{CancellationToken, WaitForCancellationFutureOwned};
+mod history;
 
 pub const MAX_ACTIVE_RECORDS: usize = 10000;
 pub const MAX_RECENT_RECORDS: usize = 512;
@@ -60,6 +61,7 @@ struct State {
     recent: VecDeque<(Instant, ConnectionInfo)>,
     rule_hits: BTreeMap<(i64, Option<String>), u64>,
     untracked_rule_hits: u64,
+    history: history::History,
 }
 impl State {
     fn prune(&mut self) {
@@ -224,6 +226,7 @@ impl Drop for Owner {
             };
             *state.errors.entry(key.into()).or_default() += 1;
         }
+        state.history.record(info.as_ref());
         if let Some(info) = info {
             state.recent.push_back((Instant::now(), info));
         }
@@ -437,6 +440,14 @@ impl NodeRegistry {
                 .collect(),
         }
     }
+    pub fn connection_correlations(&self, window_secs: u32) -> hps_domain::Correlations {
+        self.observations()
+            .state
+            .lock()
+            .unwrap()
+            .history
+            .view(window_secs.clamp(60, 3600))
+    }
     pub fn connection_record(&self, id: &str) -> Option<ConnectionInfo> {
         if !hps_domain::valid_connection_id(id) {
             return None;
@@ -629,7 +640,7 @@ mod tests {
     use super::*;
     use hps_domain::{FlowOrigin, RouteAction, SelectionTransport};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    fn flow(registry: &Arc<NodeRegistry>) -> ConnectionGuard {
+    pub(super) fn flow(registry: &Arc<NodeRegistry>) -> ConnectionGuard {
         registry
             .observe(
                 RoutingContext {

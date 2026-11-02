@@ -60,6 +60,10 @@ enum Command {
     Status,
     Version,
     Capabilities,
+    Observe {
+        #[arg(long, default_value_t = 3600)]
+        window_secs: u32,
+    },
     Inbound {
         #[command(subcommand)]
         command: InboundCommand,
@@ -826,6 +830,14 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
             return tasks::run_events(&client, command, args.output).await;
         }
         Command::Status => serde_json::to_value(client.status().await.map_err(client_error)?),
+        Command::Observe { window_secs } => serde_json::to_value(
+            client
+                .observations(&hps_domain::ObservationQuery {
+                    window_secs: *window_secs,
+                })
+                .await
+                .map_err(client_error)?,
+        ),
         Command::Version => serde_json::to_value(client.version().await.map_err(client_error)?),
         Command::Capabilities => {
             serde_json::to_value(client.capabilities().await.map_err(client_error)?)

@@ -524,6 +524,19 @@ impl Resolver {
             failures: state.failures,
         })
     }
+    pub fn statistics(&self) -> hps_domain::DnsCounters {
+        let mut state = self.0.state.lock().unwrap();
+        state.prune();
+        hps_domain::DnsCounters {
+            hits: state.hits,
+            misses: state.misses,
+            merged: state.merged,
+            failures: state.failures,
+            cache_entries: state.cache.len(),
+            cache_bytes: state.bytes,
+            in_flight: self.0.slots.active.load(Ordering::Acquire),
+        }
+    }
     pub fn clear(&self, domain: Option<&str>) -> Result<usize> {
         let domain = domain.map(|s| s.trim_end_matches('.').to_ascii_lowercase());
         if domain.as_ref().is_some_and(|s| {
