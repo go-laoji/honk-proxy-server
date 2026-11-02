@@ -1,0 +1,26 @@
+{
+  "source_revision": "862ddad624403e6f81bc994a7fe262ac04b7fb01",
+  "architecture": "aarch64",
+  "workspace_passed": 234,
+  "workspace_failed": 0,
+  "workspace_ignored": 30,
+  "clippy_all_targets_deny_warnings": true,
+  "cargo_json_artifacts_recorded": true,
+  "test_and_daemon_stripped": true,
+  "ordinary_ignored_not_kernel_acceptance": true,
+  "log_sha256": "0d3b792e3d809e2b9d5eb50f5ab25df8927658608d7094f6247d79c556f177bd",
+  "build_info": {
+    "format_version": 1,
+    "binary": "hpsd",
+    "architecture": "aarch64",
+    "platform": "linux",
+    "source_revision": "862ddad624403e6f81bc994a7fe262ac04b7fb01",
+    "source_dirty": false,
+    "version": {
+      "service": "honk-proxy-server",
+      "version": "0.1.0",
+      "api_version": "v1",
+      "web_build_id": "7c94170ee16c7b9c2f8e0aa08c219e172c2a7b6bb4834c71b2cf96a2fb4316e1"
+    }
+  }
+}

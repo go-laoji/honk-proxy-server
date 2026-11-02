@@ -1,0 +1,468 @@
+    Updating crates.io index
+ Downloading crates ...
+  Downloaded serde_yaml_ng v0.10.0
+  Downloaded unsafe-libyaml v0.2.11
+   Compiling hps-domain v0.1.0 (/work/crates/domain)
+   Compiling hps-net v0.1.0 (/work/crates/net)
+   Compiling indexmap v2.14.2
+   Compiling object v0.39.1
+   Compiling hps-config v0.1.0 (/work/crates/config)
+   Compiling unsafe-libyaml v0.2.11
+   Compiling serde_yaml_ng v0.10.0
+   Compiling hps-engine v0.1.0 (/work/crates/engine)
+   Compiling hps-dns v0.1.0 (/work/crates/dns)
+   Compiling aya-obj v0.3.0
+   Compiling hps-provider v0.1.0 (/work/crates/provider)
+   Compiling aya v0.14.0
+   Compiling hps-storage v0.1.0 (/work/crates/storage)
+   Compiling hps-ebpf-abi v0.1.0 (/work/crates/ebpf-abi)
+   Compiling hps-platform v0.1.0 (/work/crates/platform)
+   Compiling hps-health v0.1.0 (/work/crates/health)
+   Compiling serde_core v1.0.229
+   Compiling serde_json v1.0.154
+   Compiling hps-application v0.1.0 (/work/crates/application)
+   Compiling digest v0.10.7
+   Compiling memchr v2.8.3
+   Compiling sha2 v0.10.9
+   Compiling hps-web-assets v0.1.0 (/work/crates/web-assets)
+   Compiling hps-client v0.1.0 (/work/crates/client)
+   Compiling quick-xml v0.42.0
+   Compiling plist v1.10.3
+   Compiling hps-api v0.1.0 (/work/crates/api)
+   Compiling hps-system v0.1.0 (/work/crates/system)
+   Compiling hps-cli v0.1.0 (/work/apps/cli)
+   Compiling hps-daemon v0.1.0 (/work/apps/daemon)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 23m 18s
+     Running unittests src/lib.rs (/target/x86_64/debug/deps/hps_api-bad096cd111c2ec7)
+
+running 20 tests
+test backup::tests::unconsumed_response_holds_snapshot_budget_until_body_is_dropped ... ok
+test configuration::tests::real_http_config_write_conflict_activation_export_and_known_good_rollback ... ok
+test backup::tests::real_http_download_verifies_metadata_and_restore_lock ... ok
+test diagnostics::tests::real_http_diagnostic_task_export_is_whitelisted_and_recoverable_without_auth ... ok
+test connections::tests::actual_http_typed_clients_review_concrete_ids_keep_new_flows_and_return_recovery_codes ... ok
+test dns::tests::dns_http_client_exposes_ttl_semantics_strict_inputs_and_revision_cas ... ok
+test health::tests::real_http_health_policy_uses_revision_conflicts_and_bounded_inputs ... ok
+test linux::tests::capture_client_reports_actual_unconfigured_state_and_persists_control_failure ... ok
+test groups::tests::shared_client_crud_pin_preview_references_and_cas_use_actual_runtime ... ok
+test observability::tests::actual_rejected_business_flow_has_exact_hits_and_only_bounded_metadata_without_auth ... ok
+test nodes::tests::real_http_import_preview_explicit_partial_apply_query_controls_and_cas ... ok
+test providers::tests::provider_http_crud_cas_task_dedup_and_redacted_lease_details_need_no_account ... ok
+test rules::tests::actual_rule_client_separates_candidates_apply_simulation_crud_order_and_cas ... ok
+test rules::tests::versioned_rule_import_requires_preview_checksum_and_never_activates_its_candidate ... ok
+test tasks::tests::management_audit_uses_real_peer_decoded_resources_and_owned_request_correlation ... ok
+test subscriptions::tests::typed_client_subscription_crud_refresh_conflict_and_node_controls_are_real_http ... ok
+test tasks::tests::shared_rust_client_stream_outlives_normal_request_timeout_and_uses_complete_cursors ... ok
+test tests::inbound_controls_and_readiness_follow_runtime_without_credentials ... ok
+test tests::real_http_client_needs_no_auth_and_does_not_claim_proxy_ready ... ok
+test tasks::tests::real_http_tasks_sse_reconnect_and_capacity_release_preserve_actual_facts ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.30s
+
+     Running unittests src/lib.rs (/target/x86_64/debug/deps/hps_application-5dace997747c0d87)
+
+running 20 tests
+test alerts::tests::state_change_cooldown_recovery_and_retention_are_monotonic_and_bounded ... ok
+test connections::tests::accepted_work_keeps_its_slot_and_service_ownership_after_caller_disconnect ... ok
+test alerts::tests::actual_no_exit_alert_recovers_when_inbound_stops_and_settings_require_activation ... ok
+test connections::tests::immutable_pages_and_confirmed_disconnect_never_expand_to_new_matching_flows ... ok
+test connections::tests::snapshot_eviction_expiry_instance_and_diagnostic_capacity_are_explicit ... ok
+test diagnostics::tests::actual_read_only_job_cancels_while_waiting_for_publication_and_retry_is_idempotent ... ok
+test diagnostics::tests::configuration_work_is_never_cancellable_and_changed_or_expired_retry_sources_are_rejected ... ok
+test connections::tests::summaries_use_persisted_failures_current_provider_fingerprints_and_actual_generation ... ok
+test dns::loop_tests::wildcard_listeners_reject_local_interfaces_but_allow_remote_dns_at_the_same_port ... ok
+test diagnostics::tests::failed_terminal_write_retains_cancellation_past_retry_ttl_and_cache_pressure ... ok
+test health::dns_cadence_tests::bootstrap_cadence_does_not_invent_dns_ttl_and_changes_recheck_before_buying ... ok
+test nodes::tests::caller_cancellation_does_not_abandon_accepted_node_action ... ok
+test observability::tests::real_counter_deltas_bound_samples_and_use_monotonic_retention_across_wall_clock_rollback ... ok
+test nodes::tests::inventory_separates_expiry_health_operational_controls_and_exact_lease_ownership ... ok
+test rules::tests::diagnostic_capacity_rejects_before_work_and_recovers_without_production_demand ... ok
+test rules::tests::expired_candidate_node_keeps_head_and_mixed_candidates_require_explicit_rebase ... ok
+test subscriptions::tests::prepared_generation_owns_subscription_snapshot_before_publication_and_failure_keeps_old ... ok
+test tasks::tests::diagnostic_panic_has_fixed_persisted_terminal_and_releases_capacity ... ok
+test tasks::tests::blocking_preflight_keeps_capacity_lock_and_shutdown_ownership_after_caller_abort ... ok
+test tasks::tests::public_preparation_survives_lost_wait_and_submission_is_idempotent_without_storing_input ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.28s
+
+     Running tests/capture_monitor.rs (/target/x86_64/debug/deps/capture_monitor-1d5384e9f3d99bd4)
+
+running 3 tests
+test capture_fault_child ... ignored, helper invoked only by isolated real_capture_monitor_suspends_after_route_loss
+test real_capture_monitor_suspends_after_route_loss ... ignored, requires isolated privileged Linux and actual eBPF; deletes only an exact owned test rule
+test rtnetlink::tests::attributes_allow_identical_kernel_duplicates_but_reject_conflicting_or_truncated_fields ... ok
+
+test result: ok. 1 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/controllers.rs (/target/x86_64/debug/deps/controllers-4d934ed6ce77c8c1)
+
+running 5 tests
+test group_and_rule_demand_only_refills_sources_that_can_supply_future_candidates ... ok
+test malformed_outcome_pauses_and_rate_limit_respects_retry_after_without_replay ... ok
+test idle_source_does_not_purchase_again_after_its_short_leases_expire ... ok
+test on_demand_refill_uses_real_dial_signal_hysteresis_inflight_and_requested_quantities ... ok
+test repeated_empty_results_stop_at_failure_limit_and_preserve_conservative_budget ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.94s
+
+     Running tests/dns.rs (/target/x86_64/debug/deps/dns-1d4ffbdf8f0b4d7b)
+
+running 2 tests
+test dns_static_egress_cannot_reenter_its_own_proxy_inlet ... ok
+test dns_udp_tcp_hot_policy_cas_bind_failure_and_shutdown_are_real ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.84s
+
+     Running tests/dns_capture.rs (/target/x86_64/debug/deps/dns_capture-dbe2d53ea83a1054)
+
+running 2 tests
+test dns_capture_child ... ignored, helper process invoked by the real kernel application test
+test real_dns_capture ... ignored, requires isolated privileged Linux and an independently compiled object
+
+test result: ok. 0 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/dns_egress.rs (/target/x86_64/debug/deps/dns_egress-b09c27c8b4a9961d)
+
+running 1 test
+test dns_uses_all_three_authenticated_static_egresses_without_bootstrap_recursion_or_direct_fallback ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.81s
+
+     Running tests/gateway.rs (/target/x86_64/debug/deps/gateway-d539eee9b39163b1)
+
+running 3 tests
+test gateway_child ... ignored, helper invoked only in a child network namespace by real_gateway_shared_engine
+test real_gateway_shared_engine ... ignored, requires isolated privileged Linux, veth, child netns and actual eBPF
+test rtnetlink::tests::attributes_allow_identical_kernel_duplicates_but_reject_conflicting_or_truncated_fields ... ok
+
+test result: ok. 1 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/health.rs (/target/x86_64/debug/deps/health-2f888fec71e0be4e)
+
+running 6 tests
+test manual_short_lease_reports_skip_and_automatic_probe_spends_nothing ... ok
+test all_inlets_wait_for_real_proof_probe_has_no_demand_and_real_failure_revokes ... ok
+test old_generation_probe_cannot_promote_changed_credentials ... ok
+test real_target_rejection_is_visible_without_invalidating_health_or_replaying_payload ... ok
+test rotating_ca_contents_at_same_path_cannot_reuse_old_prepared_roots_or_health ... ok
+test pending_admission_reserves_inventory_and_batch_coalesces_without_repurchase ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.84s
+
+     Running tests/inbound_overrides.rs (/target/x86_64/debug/deps/inbound_overrides-55f57b5a89db9656)
+
+running 1 test
+test manual_inbound_overrides_survive_hot_rules_until_enabled_changes_or_daemon_restarts ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.89s
+
+     Running tests/nonlocal.rs (/target/x86_64/debug/deps/nonlocal-e07107126594f5dd)
+
+running 4 tests
+test nonlocal_client ... ignored, helper invoked only by real_nonlocal_destination_policy_route
+test nonlocal_origin ... ignored, helper invoked only by real_nonlocal_destination_policy_route
+test real_nonlocal_destination_policy_route ... ignored, requires isolated privileged Linux, child target netns, actual routes and eBPF
+test rtnetlink::tests::attributes_allow_identical_kernel_duplicates_but_reject_conflicting_or_truncated_fields ... ok
+
+test result: ok. 1 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/providers.rs (/target/x86_64/debug/deps/providers-e91fd4eacb30e769)
+
+running 2 tests
+test extracted_authenticated_upstream_is_live_without_restart_and_disable_revokes_new_admission ... ok
+test inflight_merge_and_config_change_do_not_publish_old_response_and_shutdown_is_bounded ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.25s
+
+     Running tests/revisions.rs (/target/x86_64/debug/deps/revisions-186289221764d45c)
+
+running 8 tests
+test dropped_caller_does_not_abandon_activation_queued_behind_database_lock ... ok
+test draft_conflict_redacted_round_trip_and_secret_change_diff_never_expose_credentials ... ok
+test pending_restart_recovers_desired_and_rollback_conflicts_are_explicit ... ok
+test occupied_candidate_and_changed_tls_files_leave_both_head_and_running_generation ... ok
+test refreshed_redacted_draft_preserves_new_and_rotated_credentials_without_stale_reference ... ok
+test same_socket_handoff_retains_old_flow_and_counts_it_against_reduced_limits ... ok
+test stopping_inbound_cancels_its_connections_in_draining_generations ... ok
+test retention_is_bounded_and_keeps_runtime_generation_and_foreign_keys_valid ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.48s
+
+     Running tests/subscriptions.rs (/target/x86_64/debug/deps/subscriptions-11fd00d5c062a681)
+
+running 4 tests
+test remote_clash_get_uses_real_http_and_rejects_redirect_and_bad_refresh ... ok
+test snapshots_publish_atomically_without_leases_and_keep_old_snapshot_on_failure ... ok
+test successful_subscription_and_exact_source_survive_sqlite_restart ... ok
+test subscription_commit_does_not_depend_on_post_publication_lease_reload ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.40s
+
+     Running tests/transparent.rs (/target/x86_64/debug/deps/transparent-7a0210cd3911b6be)
+
+running 5 tests
+test real_transparent_dns_coexist_and_publication_rollback ... ignored, requires isolated privileged Linux and actual DNS plus transparent eBPF programs
+test real_transparent_publication_failure_restores_deferred_head ... ignored, requires isolated privileged Linux, cgroup v2 and freezing an actual owned BPF policy map
+test real_transparent_supervisor ... ignored, requires isolated privileged Linux, writable cgroup v2 and actual eBPF object
+test transparent_supervisor_child ... ignored, helper invoked only by the isolated real_transparent_supervisor test
+test rtnetlink::tests::attributes_allow_identical_kernel_duplicates_but_reject_conflicting_or_truncated_fields ... ok
+
+test result: ok. 1 passed; 0 failed; 4 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running unittests src/main.rs (/target/x86_64/debug/deps/hps-ecc78ea8b36d779b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (/target/x86_64/debug/deps/hps_client-1ac1b66fe6970959)
+
+running 4 tests
+test events::tests::decoder_keeps_fragmented_utf8_crlf_comments_and_multiple_frames ... ok
+test events::tests::invalid_frames_never_advance_the_last_complete_cursor_or_mix_instances ... ok
+test tests::endpoint_validation_and_subpath_preservation ... ok
+test events::tests::decoder_rejects_oversized_unterminated_frames_bad_utf8_and_nul_ids ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+
+     Running unittests src/lib.rs (/target/x86_64/debug/deps/hps_config-c3a95c92ea4b754e)
+
+running 8 tests
+test dns::tests::listener_and_egress_cannot_recursively_bootstrap ... ok
+test linux::tests::explicit_capture_scope_is_required_and_local_and_gateway_are_independent ... ok
+test linux::tests::capture_rejects_routing_collisions_unbounded_queues_and_duplicate_bypasses ... ok
+test routing::tests::routing_references_cidrs_ports_and_account_fields_are_validated ... ok
+test selection::tests::nested_policy_rejects_cycles_unknown_children_depth_and_expansion_budget ... ok
+test proxy::tests::credentials_are_redacted_and_invalid_config_never_quotes_input ... ok
+test tests::configuration_rejects_obsolete_auth_and_unknown_options ... ok
+test selection::tests::policy_rejects_dangling_references_implicit_fallback_and_unbounded_resources ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+
+     Running unittests src/main.rs (/target/x86_64/debug/deps/hpsd-10bc1ecf65e7898a)
+
+running 1 test
+test management::tests::management_https_verifies_certificate_and_slow_handshakes_do_not_block_others ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.38s
+
+     Running tests/linux_capture.rs (/target/x86_64/debug/deps/linux_capture-f6fe85ee37fccb0b)
+
+running 2 tests
+test real_hpsd_sigkill_recovery_preserves_foreign_rules ... ignored, requires actual standalone hpsd, isolated privileged Linux, cgroup v2 and real eBPF; SIGKILLs only fixture children
+test rtnetlink::tests::attributes_allow_identical_kernel_duplicates_but_reject_conflicting_or_truncated_fields ... ok
+
+test result: ok. 1 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running unittests src/lib.rs (/target/x86_64/debug/deps/hps_dns-1d07ad90611c6f5d)
+
+running 1 test
+test system::tests::cancelled_lookups_keep_blocking_work_bounded_and_skip_cancelled_queue_items ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/encrypted.rs (/target/x86_64/debug/deps/encrypted-4abd3e61ae28ddee)
+
+running 1 test
+test dot_and_doh_verify_real_tls_and_never_accept_a_redirect_or_wrong_type ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.41s
+
+     Running tests/resolution.rs (/target/x86_64/debug/deps/resolution-8322fbadb0f63f85)
+
+running 7 tests
+test cname_context_ignores_unrelated_answers_and_rejects_loops ... ok
+test coalescing_survives_cancellation_clear_blocks_old_fill_and_capacity_is_bounded ... ok
+test route_purpose_edns_isolation_bounds_and_domain_ambiguity ... ok
+test server_truncates_oversized_edns_udp_and_tcp_returns_the_complete_answer ... ok
+test system_has_no_invented_ttl_and_timeouts_do_not_poison_cache ... ok
+test generations_share_capacity_retire_caches_and_shutdown_cancels_owned_io ... ok
+test wire_ttl_zero_negative_and_real_ipv6_tcp_fallback ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.68s
+
+     Running unittests src/lib.rs (/target/x86_64/debug/deps/hps_domain-44c30725bdc3ed23)
+
+running 1 test
+test topology::tests::changes_only_compare_same_epoch_generation_and_monotonic_counters ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src/lib.rs (/target/x86_64/debug/deps/hps_ebpf_abi-ff9f65567568276e)
+
+running 5 tests
+test packet::tests::dual_stack_packets_keep_network_addresses_host_ports_and_exact_payload_bounds ... ok
+test packet::tests::options_vlan_and_atomic_ipv6_extensions_have_bounded_offsets ... ok
+test tests::shared_layout_has_no_implicit_padding ... ok
+test transparent::tests::transparent_boundary_offsets_and_sizes_match_kernel_map_contract ... ok
+test packet::tests::truncated_fragmented_or_opaque_packets_never_become_an_invented_flow ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running unittests src/lib.rs (/target/x86_64/debug/deps/hps_engine-06a00b6c340dd396)
+
+running 26 tests
+test connections::history::tests::metadata_windows_bound_dimensions_and_prune_by_monotonic_time ... ok
+test connections::tests::actual_partial_read_write_and_vectored_results_count_once_and_lifetime_is_shared ... ok
+test connections::tests::disconnect_wakes_idle_read_and_old_epoch_never_matches_a_new_flow ... ok
+test connections::tests::rule_hits_survive_record_eviction_and_report_counter_capacity_without_simulated_hits ... ok
+test demand::tests::source_scope_and_configuration_fingerprint_do_not_share_purchase_signals ... ok
+test dial::datagram::tests::direct_and_reject_udp_never_raise_purchase_demand_and_udp_cannot_raise_tcp_provider_demand ... ok
+test dial::datagram::tests::expired_udp_node_never_creates_an_upstream_control_connection ... ok
+test dial::datagram::tests::udp_shares_health_fixed_fallback_drain_real_byte_counts_and_management_disconnect ... ok
+test dial::resource_tests::local_exhaustion_is_separate_from_remote_refusal ... ok
+test dial::resource_tests::unchanged_static_expiry_keeps_monotonic_deadline_across_generations ... ok
+test health::tests::credentials_policy_family_age_and_real_failures_gate_one_fact_source ... ok
+test nodes::tests::restrictions_do_not_erase_active_dials_and_stale_publications_cannot_reenable ... ok
+test pool::tests::fractional_lease_time_is_conservative_and_large_admission_windows_do_not_panic ... ok
+test pool::tests::republishing_or_removing_a_lease_never_moves_clock_backwards ... ok
+test routing::tests::dns_inference_is_opt_in_unambiguous_and_never_resolves_for_cidr_matching ... ok
+test routing::tests::first_match_domain_boundary_combinations_unknowns_and_order_are_shared ... ok
+test routing::tests::unsupported_process_or_udp_cannot_publish_and_remote_process_is_never_invented ... ok
+test runtime::readiness_tests::source_lifetime_policy_is_generation_local_before_shared_lease_pool_refresh ... ok
+test runtime::readiness_tests::transparent_forwarding_requires_a_route_for_the_actual_enabled_transport ... ok
+test selection::tests::advanced_score_lists_sources_components_and_missing_evidence_penalties ... ok
+test selection::tests::fixed_failure_stays_in_explicit_ordered_fallback_and_never_crosses_membership ... ok
+test selection::tests::nested_candidates_keep_child_filters_pin_fallback_and_parent_udp_scope ... ok
+test selection::tests::sessions_are_bounded_by_lifetime_and_capacity_rechecked_and_isolated_by_inbound ... ok
+test selection::tests::weighted_readonly_preview_latency_missing_evidence_tags_and_empty_groups_are_explained ... ok
+test udp::tests::socks_datagrams_keep_dual_stack_domain_empty_payloads_and_reject_ambiguous_frames ... ok
+test connections::tests::active_overflow_remains_explicit_and_recent_records_are_bounded ... ok
+
+test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.62s
+
+     Running tests/capture_budget.rs (/target/x86_64/debug/deps/capture_budget-ef7838f628f5c4f3)
+
+running 4 tests
+test closed_control_tcp_interrupts_udp_budget_wait_and_releases_every_permit ... ok
+test stopping_capture_scope_cancels_a_pending_association_and_its_queued_packets ... ok
+test closed_control_tcp_also_interrupts_a_paced_reply_when_no_sender_is_polling_control ... ok
+test udp_owner_bounds_pending_sessions_inflight_bytes_and_cancels_without_stopping_explicit_ingress ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.34s
+
+     Running tests/captured.rs (/target/x86_64/debug/deps/captured-b9654b673e491657)
+
+running 1 test
+test captured_tcp_contract_shares_process_rules_group_admission_bytes_disconnect_and_immutable_revision ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.36s
+
+     Running tests/connections.rs (/target/x86_64/debug/deps/connections-4199807b0270cb9e)
+
+running 3 tests
+test direct_uses_same_flow_lifetime_and_counts_while_probe_connections_are_excluded ... ok
+test real_http_exchange_counts_streamed_bytes_hides_request_content_and_cancels_a_paced_body ... ok
+test actual_tunnels_record_real_source_port_policy_bytes_and_disconnect_without_replaying ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.62s
+
+     Running tests/dial.rs (/target/x86_64/debug/deps/dial-f4bc2f809b501135)
+
+running 4 tests
+test expired_near_expiry_and_disabled_nodes_are_not_contacted ... ok
+test socks_ipv6_and_http_forward_plan_are_supported ... ok
+test untrusted_or_wrong_name_tls_and_upstream_407_fail_without_retry ... ok
+test real_http_https_and_authenticated_socks_tunnels_preserve_half_close ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.52s
+
+     Running tests/groups.rs (/target/x86_64/debug/deps/groups-4f919b8d598aed8b)
+
+running 3 tests
+test dynamic_lease_identity_minimum_lifetime_provider_and_udp_are_rechecked ... ok
+test real_round_robin_preview_does_not_advance_and_failed_fixed_handshake_never_retries ... ok
+test all_explicit_inlets_use_the_bound_group_and_do_not_escape_an_empty_default ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.62s
+
+     Running tests/nodes.rs (/target/x86_64/debug/deps/nodes-b76471673f30cdc3)
+
+running 1 test
+test actual_tunnel_drains_after_disable_and_generations_share_gate_and_live_count ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.40s
+
+     Running tests/routing.rs (/target/x86_64/debug/deps/routing-02448cea10fe1000)
+
+running 3 tests
+test explicit_node_cannot_escape_to_a_healthy_unrelated_node_and_catchall_reject_masks_direct_default ... ok
+test direct_uses_shared_business_dns_and_keeps_http_host_without_pool_demand ... ok
+test real_three_inlets_share_first_match_node_group_direct_reject_and_do_not_buy_on_direct_or_reject ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.81s
+
+     Running tests/runtime.rs (/target/x86_64/debug/deps/runtime-97a50acedd1e7955)
+
+running 8 tests
+test cancellation_and_partial_start_failure_release_all_runtime_resources ... ok
+test chunked_framing_host_rewrite_and_header_rejection_are_bounded ... ok
+test global_bandwidth_is_shared_by_simultaneous_connections ... ok
+test idle_timeout_connect_timeout_rate_limit_and_ipv6_half_close_are_real ... ok
+test no_upstream_is_503_and_unsupported_socks_methods_and_commands_are_explicit ... ok
+test start_stop_reclaims_ports_connections_and_global_or_entry_admission ... ok
+test upstream_handshake_timeout_and_lost_post_response_never_replay ... ok
+test all_nine_ingress_egress_pairs_stream_http_and_end_to_end_https ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.94s
+
+     Running tests/socks_udp.rs (/target/x86_64/debug/deps/socks_udp-e9e74bc217bd9fb0)
+
+running 5 tests
+test udp_associate_rejects_foreign_source_and_no_udp_capability ... ok
+test udp_associate_dual_stack_and_socks_upstream_use_real_datagrams ... ok
+test udp_domain_datagrams_use_business_resolver_and_per_target_rules_without_direct_fallback ... ok
+test udp_targets_share_global_entry_limits_and_inbound_stop_releases_all ... ok
+test udp_source_port_and_frag_are_enforced_and_malformed_does_not_lock_port ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.41s
+
+     Running tests/udp_association.rs (/target/x86_64/debug/deps/udp_association-f279d7de1795e210)
+
+running 3 tests
+test actual_udp_associate_preserves_dual_stack_datagrams_filters_relay_and_ends_with_tcp ... ok
+test upstream_authentication_and_udp_command_rejection_never_become_an_open_association ... ok
+test udp_associate_timeout_closes_control_without_retrying_business_data ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running unittests src/lib.rs (/target/x86_64/debug/deps/hps_health-497d5f18e6b1576a)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/probes.rs (/target/x86_64/debug/deps/probes-c16a5328ab28aeb3)
+
+running 6 tests
+test auth_endpoint_upstream_tls_and_target_tls_are_separate ... ok
+test explicit_exit_ip_probe_is_bounded_and_bad_portraits_do_not_kill_working_nodes ... ok
+test ipv6_is_actually_dialed_and_timeout_preserves_phase ... ok
+test short_lifetime_and_udp_do_not_touch_supplier_and_family_is_explicit ... ok
+test target_403_and_429_are_reachable_not_globally_dead ... ok
+test real_three_protocols_probe_verified_target_tls_without_business_payload ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.65s
+
+     Running unittests src/lib.rs (/target/x86_64/debug/deps/hps_net-1d9ed2bd7bf4d8e2)
+
+running 3 tests
+test transparent::tests::privileged_transparent_sockets_bind_nonlocal_endpoints_with_exact_bypass_mark ... ignored, requires Linux CAP_NET_RAW or CAP_NET_ADMIN for transparent sockets and SO_MARK
+test transparent::tests::udp_without_original_destination_never_invents_a_target_from_listener ... ok
+test transparent::tests::udp_recovers_actual_dual_stack_addresses_and_ports_and_rejects_partial_payload ... FAILED
+
+failures:
+
+---- transparent::tests::udp_recovers_actual_dual_stack_addresses_and_ports_and_rejects_partial_payload stdout ----
+
+thread 'transparent::tests::udp_recovers_actual_dual_stack_addresses_and_ports_and_rejects_partial_payload' (14191) panicked at crates/net/src/transparent.rs:241:77:
+called `Result::unwrap()` on an `Err` value: Os { code: 92, kind: Uncategorized, message: "Protocol not available" }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    transparent::tests::udp_recovers_actual_dual_stack_addresses_and_ports_and_rejects_partial_payload
+
+test result: FAILED. 1 passed; 1 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+error: test failed, to rerun pass `-p hps-net --lib`

@@ -1,0 +1,32 @@
+{
+  "source_revision": "862ddad624403e6f81bc994a7fe262ac04b7fb01",
+  "architecture": "x86_64",
+  "workspace_userland_passed": 233,
+  "workspace_ignored": 30,
+  "workspace_userland_runtime_skipped": 1,
+  "runtime_skip_exact_name": "transparent::tests::udp_recovers_actual_dual_stack_addresses_and_ports_and_rejects_partial_payload",
+  "skipped_case_not_claimed_as_userland_pass": true,
+  "same_binary_native_guest_supplement": "../net-socket-gap/userland-failure.json",
+  "supplemental_full_guest_kernels": [
+    "6.12.115",
+    "7.2.14"
+  ],
+  "clippy_all_targets_deny_warnings": true,
+  "cargo_json_artifacts_recorded": true,
+  "test_and_daemon_stripped": true,
+  "log_sha256": "9d2af7464b1c01cfb27810cc04fe458550a522604a2392eff19e69f3889f23e4",
+  "build_info": {
+    "format_version": 1,
+    "binary": "hpsd",
+    "architecture": "x86_64",
+    "platform": "linux",
+    "source_revision": "862ddad624403e6f81bc994a7fe262ac04b7fb01",
+    "source_dirty": false,
+    "version": {
+      "service": "honk-proxy-server",
+      "version": "0.1.0",
+      "api_version": "v1",
+      "web_build_id": "7c94170ee16c7b9c2f8e0aa08c219e172c2a7b6bb4834c71b2cf96a2fb4316e1"
+    }
+  }
+}

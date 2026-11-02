@@ -1,0 +1,125 @@
+HPS_GUEST_ARTIFACT=test-capture_monitor-1d5384e9f3d99bd4:b690e93f23f2e0d6b0adb6682d2775420ccf115b0a47aab9637be4b4c8550f9a
+HPS_GUEST_ARTIFACT=test-cases:b5cabb6ec43437380506c8ec1284522c4ba676d6a0df8f44a946c241a11afb82
+HPS_GUEST_ARTIFACT=test-gateway-d539eee9b39163b1:571995045c2d191deeb0d589c3dcfdcf020a65c63bc17ebb146f92e0ccef664a
+HPS_GUEST_ARTIFACT=test-hps_platform-b59c719681f5d45b:f62081b580296aac8b4717e002b6269d49ca6ece3c90bec01055cd2a66832420
+HPS_GUEST_ARTIFACT=test-linux_capture-f6fe85ee37fccb0b:f39e5bee95a704b7ab046f86921dd47714cc17a507c751fb16c2b3f923973551
+HPS_GUEST_ARTIFACT=test-transparent-7a0210cd3911b6be:5843e22ff727849cc68fa15f9ccc30b5573661eb57bae3e65a373f6b1e787dd8
+HPS_GUEST_ARTIFACT=hpsd:1a45262f4e476c2729f67c8240a3c4f20db29381a385bd1405882e7245612bfc
+HPS_GUEST_ARTIFACT=hps-ebpf:fa5449609f86a6b50300a83a6e10d2f2150aa42eaa6676c8e64dd1581bbd5286
+HPS_GUEST_ARTIFACT=hps-ebpf-legacy:ae2c694f313abbc61c7c7a36dee119bb06dadaff3336d6ccf73ddac0a59143e3
+HPS_KERNEL_APK_SHA256=e8213dee682105c1507b4742f365bfc3c2ccd91cdba9aa3e036b73b13a1879ae
+HPS_GUEST_EPOCH=1793630675
+modprobe: module ipv6 not found in modules.dep
+7.2.14-0-stable
+HPS_CASE_START=transparent::tcp_tests::real_transparent_tcp_shared_engine
+
+running 1 test
+{"business_bytes_down":114,"business_bytes_up":102,"client_pid":503,"forwarding_verified":true,"full_transparent_datapath_ready":false,"http_upstream":true,"https_upstream":true,"ipv4":true,"ipv6":true,"kernel":"7.2.14-0-stable","object_sha256":"fa5449609f86a6b50300a83a6e10d2f2150aa42eaa6676c8e64dd1581bbd5286","process_rules_and_fixed_groups":true,"revision":7,"scope":"local_tcp_shared_engine_only","socks5_upstream":true,"suspended_connects_rejected":2,"verified_flows":6}
+test transparent::tcp_tests::real_transparent_tcp_shared_engine ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 14 filtered out; finished in 2.46s
+
+HPS_CASE_EXIT=transparent::tcp_tests::real_transparent_tcp_shared_engine:0
+HPS_CASE_START=transparent::udp_tests::real_transparent_udp_shared_engine
+
+running 1 test
+{"business_bytes_down":128,"business_bytes_up":144,"client_pid":512,"connected_and_unconnected_udp":true,"daemon_in_selected_cgroup_bypassed":true,"forwarding_verified":true,"full_transparent_datapath_ready":false,"idle_sessions_released":8,"ipv4":true,"ipv6":true,"kernel":"7.2.14-0-stable","mode":"direct","object_sha256":"fa5449609f86a6b50300a83a6e10d2f2150aa42eaa6676c8e64dd1581bbd5286","original_reply_source":true,"process_rule":true,"revision":7,"scope":"local_udp_shared_engine_only","verified_flows":8}
+{"business_bytes_down":128,"business_bytes_up":144,"client_pid":514,"connected_and_unconnected_udp":true,"daemon_in_selected_cgroup_bypassed":true,"forwarding_verified":true,"full_transparent_datapath_ready":false,"idle_sessions_released":8,"ipv4":true,"ipv6":true,"kernel":"7.2.14-0-stable","mode":"socks5","object_sha256":"fa5449609f86a6b50300a83a6e10d2f2150aa42eaa6676c8e64dd1581bbd5286","original_reply_source":true,"process_rule":true,"revision":7,"scope":"local_udp_shared_engine_only","verified_flows":8}
+test transparent::udp_tests::real_transparent_udp_shared_engine ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 14 filtered out; finished in 7.36s
+
+HPS_CASE_EXIT=transparent::udp_tests::real_transparent_udp_shared_engine:0
+HPS_CASE_START=transparent::generation_tests::real_flow_identity_and_generation_retirement
+
+running 1 test
+{"abi_version":4,"caller_retry_after_exact_retirement":true,"capacity_rejected_without_eviction":1,"conflicting_socket_cookies_rejected":2,"exact_retirements":69,"flow_capacity":64,"full_transparent_datapath_ready":false,"ipv4":true,"ipv6":true,"kernel":"7.2.14-0-stable","new_revision":8,"object_sha256":"fa5449609f86a6b50300a83a6e10d2f2150aa42eaa6676c8e64dd1581bbd5286","old_revision":7,"process_comm_latched_at_first_send":true,"scope":"kernel_flow_identity_only","stale_retirement_preserved_new_flow":true,"suspend_cleared_on_activate":true,"suspended_sends_rejected":2,"verified_datagrams":73}
+test transparent::generation_tests::real_flow_identity_and_generation_retirement ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 14 filtered out; finished in 2.50s
+
+HPS_CASE_EXIT=transparent::generation_tests::real_flow_identity_and_generation_retirement:0
+HPS_CASE_START=transparent::generation_tests::real_policy_publication_observes_only_complete_snapshots
+
+running 1 test
+{"abi_version":4,"full_transparent_datapath_ready":false,"kernel":"7.2.14-0-stable","object_sha256":"fa5449609f86a6b50300a83a6e10d2f2150aa42eaa6676c8e64dd1581bbd5286","reader_lookups":[10000,10000],"scope":"kernel_policy_publication_only","torn_snapshots":0,"updates":10000}
+test transparent::generation_tests::real_policy_publication_observes_only_complete_snapshots ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 14 filtered out; finished in 1.66s
+
+HPS_CASE_EXIT=transparent::generation_tests::real_policy_publication_observes_only_complete_snapshots:0
+HPS_CASE_START=transparent::inspection::real_legacy_capture_object_is_rejected_before_any_link
+
+running 1 test
+{"full_transparent_datapath_ready":false,"kernel":"7.2.14-0-stable","legacy_object_sha256":"ae2c694f313abbc61c7c7a36dee119bb06dadaff3336d6ccf73ddac0a59143e3","rejected_before_attach":true,"required_abi":4,"scope":"legacy_transparent_abi_rejection_only"}
+test transparent::inspection::real_legacy_capture_object_is_rejected_before_any_link ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 14 filtered out; finished in 1.21s
+
+HPS_CASE_EXIT=transparent::inspection::real_legacy_capture_object_is_rejected_before_any_link:0
+HPS_CASE_START=transparent::inspection::tests::real_scope_queries_detect_detached_hooks_and_keep_hot_metadata_independent
+
+running 1 test
+{"cgroup_and_tcx_links_repaired_in_place":true,"detached_program":"hps_tp_send4","detachment_detected":true,"foreign_namespace_refused":true,"full_transparent_datapath_ready":false,"kernel":"7.2.14-0-stable","maps_released":true,"metadata_independent_of_route_mutex":true,"object_sha256":"fa5449609f86a6b50300a83a6e10d2f2150aa42eaa6676c8e64dd1581bbd5286","original_journal_preserved":true,"program_fd_remained_open":true,"repair_kept_policy_suspended":true,"retirement_barrier":"protocol_zero_packet_socket_release","same_maps_after_repair":true,"scope":"actual_capture_attachment_inspection_and_repair_only","settled_revision":7}
+{"cgroup_and_tcx_links_repaired_in_place":true,"detached_program":"hps_tp_create","detachment_detected":true,"foreign_namespace_refused":true,"full_transparent_datapath_ready":false,"kernel":"7.2.14-0-stable","maps_released":true,"metadata_independent_of_route_mutex":true,"object_sha256":"fa5449609f86a6b50300a83a6e10d2f2150aa42eaa6676c8e64dd1581bbd5286","original_journal_preserved":true,"program_fd_remained_open":true,"repair_kept_policy_suspended":true,"retirement_barrier":"protocol_zero_packet_socket_release","same_maps_after_repair":true,"scope":"actual_capture_attachment_inspection_and_repair_only","settled_revision":7}
+test transparent::inspection::tests::real_scope_queries_detect_detached_hooks_and_keep_hot_metadata_independent ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 14 filtered out; finished in 3.35s
+
+HPS_CASE_EXIT=transparent::inspection::tests::real_scope_queries_detect_detached_hooks_and_keep_hot_metadata_independent:0
+HPS_CASE_START=real_transparent_supervisor
+
+running 1 test
+{"actual_process_rule":true,"business_bytes_down":24,"business_bytes_up":24,"candidate_process_simulation_matches_actual_context":true,"client_pid":551,"deferred_desired_head_preserved":false,"diagnostics_kernel_rules_routes_and_control_unchanged":true,"diagnostics_owned_ids_and_live_counters_verified":true,"dns_resolver_restored":false,"dns_tcp_udp_queries":0,"failed_activation_recorded":false,"final_desired_revision":3,"full_transparent_datapath_ready":false,"ipv4":true,"ipv6":true,"kernel":"7.2.14-0-stable","new_connections_rejected":8,"old_connections_retained":4,"old_revision":1,"owned_program_count":8,"owned_programs_released":true,"persistent_restart":true,"policy_map_frozen":false,"scope":"daemon_transparent_local_only","tcp":true,"udp":true}
+test real_transparent_supervisor ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 15.65s
+
+HPS_CASE_EXIT=real_transparent_supervisor:0
+HPS_CASE_START=real_transparent_publication_failure_restores_deferred_head
+
+running 1 test
+{"actual_process_rule":true,"business_bytes_down":16,"business_bytes_up":16,"candidate_process_simulation_matches_actual_context":false,"client_pid":563,"deferred_desired_head_preserved":true,"diagnostics_kernel_rules_routes_and_control_unchanged":true,"diagnostics_owned_ids_and_live_counters_verified":true,"dns_resolver_restored":false,"dns_tcp_udp_queries":0,"failed_activation_recorded":true,"final_desired_revision":2,"full_transparent_datapath_ready":false,"ipv4":true,"ipv6":true,"kernel":"7.2.14-0-stable","new_connections_rejected":0,"old_connections_retained":4,"old_revision":1,"owned_program_count":8,"owned_programs_released":true,"persistent_restart":true,"policy_map_frozen":true,"scope":"daemon_transparent_publication_failure","tcp":true,"udp":true}
+test real_transparent_publication_failure_restores_deferred_head ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 10.33s
+
+HPS_CASE_EXIT=real_transparent_publication_failure_restores_deferred_head:0
+HPS_CASE_START=real_transparent_dns_coexist_and_publication_rollback
+
+running 1 test
+{"actual_process_rule":true,"business_bytes_down":16,"business_bytes_up":16,"candidate_process_simulation_matches_actual_context":false,"client_pid":575,"deferred_desired_head_preserved":true,"diagnostics_kernel_rules_routes_and_control_unchanged":true,"diagnostics_owned_ids_and_live_counters_verified":true,"dns_resolver_restored":true,"dns_tcp_udp_queries":8,"failed_activation_recorded":true,"final_desired_revision":2,"full_transparent_datapath_ready":false,"ipv4":true,"ipv6":true,"kernel":"7.2.14-0-stable","new_connections_rejected":0,"old_connections_retained":4,"old_revision":1,"owned_program_count":16,"owned_programs_released":true,"persistent_restart":true,"policy_map_frozen":true,"scope":"daemon_dns_transparent_rollback","tcp":true,"udp":true}
+test real_transparent_dns_coexist_and_publication_rollback ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 17.41s
+
+HPS_CASE_EXIT=real_transparent_dns_coexist_and_publication_rollback:0
+HPS_CASE_START=real_capture_monitor_suspends_after_route_loss
+
+running 1 test
+{"bounded_retries":3,"explicit_inbounds_preserved":true,"fault_suspended":true,"full_transparent_datapath_ready":false,"identity_change_refused":true,"in_place_repaired_same_programs_and_maps":true,"initial_ready_verified":true,"ipv4_tcp_udp_denied":true,"ipv6_tcp_udp_denied":true,"kernel":"7.2.14-0-stable","kernel_rejections":4,"manual_recheck_recovered":true,"object_sha256":"fa5449609f86a6b50300a83a6e10d2f2150aa42eaa6676c8e64dd1581bbd5286","persistent_restart_recovered":true,"route_loss_detected":true,"scope":"daemon_capture_monitor_and_repair_only","stale_epoch_refused":true,"stopped_not_ready":true,"user_stop_start_verified":true}
+test real_capture_monitor_suspends_after_route_loss ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 17.60s
+
+HPS_CASE_EXIT=real_capture_monitor_suspends_after_route_loss:0
+HPS_CASE_START=real_gateway_shared_engine
+
+running 1 test
+{"bypassed_tcp_flows":2,"carrier_loss_suspended_with_links_retained":true,"full_transparent_datapath_ready":false,"gateway_process_unknown":true,"interface_down_suspended":true,"interface_rename_suspended":true,"interface_restore_recheck_ready":true,"ipv4_ipv6_tcp_udp":true,"kernel":"7.2.14-0-stable","object_sha256":"fa5449609f86a6b50300a83a6e10d2f2150aa42eaa6676c8e64dd1581bbd5286","scope":"actual_gateway_shared_engine_only","source_rules_and_fixed_groups":true,"tcp_http_upstream_flows":2,"tcp_payload_bytes_per_flow_each_direction":262144,"udp_payload_bytes_per_flow_each_direction":1200,"udp_socks5_associations":2}
+test real_gateway_shared_engine ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 5.41s
+
+HPS_CASE_EXIT=real_gateway_shared_engine:0
+HPS_CASE_START=real_hpsd_sigkill_recovery_preserves_foreign_rules
+
+running 1 test
+{"actual_process_killed":true,"epoch_changed":true,"foreign_priority_conflict_refused":true,"foreign_rule_preserved":true,"full_transparent_datapath_ready":false,"graceful_shutdown_owned_rules_removed":true,"kernel":"7.2.14-0-stable","object_sha256":"fa5449609f86a6b50300a83a6e10d2f2150aa42eaa6676c8e64dd1581bbd5286","old_programs_released":true,"owned_route_residue_detected":true,"persisted_revision_recovered":1,"readyz_requires_actual_capture_and_forwarding":true,"real_tcp_udp_before_and_after_restart":true,"scope":"standalone_hpsd_sigkill_recovery_only","signal":9}
+test real_hpsd_sigkill_recovery_preserves_foreign_rules ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 10.31s
+
+HPS_CASE_EXIT=real_hpsd_sigkill_recovery_preserves_foreign_rules:0
+HPS_SELF_TEST_EXIT=0
+[  100.530348] reboot: Power down

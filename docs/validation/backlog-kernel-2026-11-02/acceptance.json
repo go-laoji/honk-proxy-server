@@ -1,0 +1,63 @@
+{
+  "full_transparent_datapath_ready": true,
+  "ebpf_abi": 4,
+  "ebpf_object_sha256": "fa5449609f86a6b50300a83a6e10d2f2150aa42eaa6676c8e64dd1581bbd5286",
+  "total_actual_kernel_cases": 52,
+  "minimum_verified_kernel": "6.12.115",
+  "architectures": [
+    "aarch64",
+    "x86_64"
+  ],
+  "kernels": [
+    "6.12.115",
+    "7.2.14"
+  ],
+  "reports": [
+    {
+      "report": "aarch64/core/aarch64-6.12.115.json",
+      "sha256": "28b460ff8d41dd2c035e107b03f5f868cefb3672a0dfd93cf35e7f9d37ddcb59",
+      "passed": 12
+    },
+    {
+      "report": "aarch64/nonlocal/aarch64-6.12.115.json",
+      "sha256": "9f2bfb7b736859ae3a405e7866092abf5668bcd12a262c1601de385c899e56aa",
+      "passed": 1
+    },
+    {
+      "report": "aarch64/core/aarch64-7.2.14.json",
+      "sha256": "ec9792f46ae8eb648410daad06df0f2a89005efee54ca417b41e372e1f37428c",
+      "passed": 12
+    },
+    {
+      "report": "aarch64/nonlocal/aarch64-7.2.14.json",
+      "sha256": "fd28ce0fdde7beec5dfca63a7d540fa436fd3c3ffbe918aa2c8bb4d6e3fe3bfa",
+      "passed": 1
+    },
+    {
+      "report": "x86_64/core/x86_64-6.12.115.json",
+      "sha256": "b871ac1f9cbf4a4800faf5127307d69efe9ca55734158be6d13b3d59c295f43e",
+      "passed": 12
+    },
+    {
+      "report": "x86_64/nonlocal/x86_64-6.12.115.json",
+      "sha256": "42b80dea4ffa6b6c03efaf76b1e730d321c31afe91bb6b2b4e94c64060d04e52",
+      "passed": 1
+    },
+    {
+      "report": "x86_64/core/x86_64-7.2.14.json",
+      "sha256": "142925067c07738094561eace8b5a6f314ef91763bfe24439695c431c169d741",
+      "passed": 12
+    },
+    {
+      "report": "x86_64/nonlocal/x86_64-7.2.14.json",
+      "sha256": "b8de34b0b9eef4ade025c15ec4232bf1b551450ca94f526f61adcf182df8bace",
+      "passed": 1
+    }
+  ],
+  "source_revision": "862ddad624403e6f81bc994a7fe262ac04b7fb01",
+  "web_build_id": "7c94170ee16c7b9c2f8e0aa08c219e172c2a7b6bb4834c71b2cf96a2fb4316e1",
+  "new_live_diagnostics_evidence_count": 12,
+  "host_mac_network_configuration_written": false,
+  "net_socket_userland_difference_cases_counted_in_core52": false,
+  "release_daemon_extra_cases_counted_in_core52": false
+}

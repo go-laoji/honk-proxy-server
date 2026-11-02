@@ -1,0 +1,36 @@
+{
+  "architecture": "aarch64",
+  "actual_kernel": "7.2.14",
+  "image": "hps-ebpf-arm-kernel72:dev",
+  "cases": [
+    "real_nonlocal_destination_policy_route"
+  ],
+  "passed": 1,
+  "evidence": [
+    {
+      "actual_target_in_separate_network_namespace": true,
+      "bytes_each_direction": 9216,
+      "captured_process_verified": true,
+      "full_transparent_datapath_ready": false,
+      "http_upstream_flows": 2,
+      "ipv4_ipv6_tcp_udp": true,
+      "kernel": "7.2.14-0-stable",
+      "object_sha256": "fa5449609f86a6b50300a83a6e10d2f2150aa42eaa6676c8e64dd1581bbd5286",
+      "original_reply_source": true,
+      "scope": "nonlocal_target_policy_route_only",
+      "socks5_udp_associations": 2,
+      "targets_not_assigned_in_proxy_namespace": true,
+      "unmarked_daemon_egress_through_veth": true
+    }
+  ],
+  "serial_log": "aarch64-7.2.14.log",
+  "guest_artifacts_sha256": {
+    "test-cases": "e23072acce320e4d1b2fc545d7efefadeb1e55c05a13695a52abe57c5ea7700a",
+    "test-nonlocal-c3209a88236d2491": "b451239c0746dca547be399ca8bfc3578991941435f6208be87363ea27bf67f5",
+    "hpsd": "98744c863abb38df1f22dd8eefea998ca85645580ec6a8582ce1c3a98d140479",
+    "hps-ebpf": "fa5449609f86a6b50300a83a6e10d2f2150aa42eaa6676c8e64dd1581bbd5286",
+    "hps-ebpf-legacy": "ae2c694f313abbc61c7c7a36dee119bb06dadaff3336d6ccf73ddac0a59143e3"
+  },
+  "kernel_apk_sha256": "f21725368f0d34e519ce25d2534947eed6adabf91276ebfa8c96ecfb3f9ed36c",
+  "full_transparent_datapath_ready": false
+}
