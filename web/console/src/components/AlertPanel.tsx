@@ -180,7 +180,7 @@ export default function AlertPanel() {
               className="btn"
               disabled={busy || !!candidate}
               onClick={() => {
-                setSettings(feed?.settings);
+                setSettings(undefined);
                 setError("");
                 setRefresh((n) => n + 1);
               }}

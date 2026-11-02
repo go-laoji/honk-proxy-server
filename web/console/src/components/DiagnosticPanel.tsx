@@ -229,6 +229,22 @@ export default function DiagnosticPanel() {
               ? "按原请求恢复提交"
               : "创建诊断包"}
         </button>
+        {request.current && !busy && (
+          <>
+            <a
+              className="btn"
+              href={`./tasks.html?request_id=${encodeURIComponent(request.current.id)}&epoch=${encodeURIComponent(request.current.epoch)}`}
+            >
+              按原请求查询任务
+            </a>
+            <button
+              className="btn"
+              onClick={() => window.location.assign("./events.html")}
+            >
+              重新开始诊断请求
+            </button>
+          </>
+        )}
         {task && (
           <a
             className="btn"
