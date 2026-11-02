@@ -17,3 +17,9 @@
 - 继续缩小产品的写入范围，只允许修改已存在服务的 Proxies 子路径，移除整份 NetworkServices 写入能力。
 
 宿主不再执行网络写入验收。未在隔离系统复验的实际代理写入明确保留未验证，#21 不能沿用该无效测试计为完成。
+
+## 第二批修复与安全验证
+
+授权与只读路径改用同一个 `SCPreferencesCreateWithAuthorization` 构造入口，共享同一个 prefsID，避免条件分支丢失配置范围。产品只允许已有 UUID 服务的 `/NetworkServices/<UUID>/Proxies` 路径，使用 SDK 的 PathSet/PathRemove，完全移除整份 NetworkServices 替换。测试构建不包含持久提交路径；Cargo 开发环境也强制设置网络写入禁用标志。
+
+新增 SDK 验证仅在自建只读偏好文件的会话内存中暂存/移除 Proxies，验证另一服务、DNS、IPv4 字段不变，并在关闭/重新打开后确认文件逐字节未变。这不创建可写会话、不持久提交、不应用系统配置，也不作为实际 OS 写入验收。原值、部分提交失败、外部更改拒绝覆盖继续通过无 OS 副作用的事务后端验证。

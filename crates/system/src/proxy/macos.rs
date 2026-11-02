@@ -1,11 +1,11 @@
 //! SystemConfiguration sessions hold the native preferences lock across comparison and commit.
 use super::*;
-#[cfg(not(test))]
 use core_foundation::data::CFData;
 use core_foundation::{
     base::{CFRelease, TCFType},
+    dictionary::CFDictionaryRef,
     propertylist,
-    string::CFString,
+    string::{CFString, CFStringRef},
 };
 use security_framework_sys::authorization::{
     AuthorizationCreate, AuthorizationFree, AuthorizationRef,
@@ -13,11 +13,35 @@ use security_framework_sys::authorization::{
 use std::ptr;
 use system_configuration_sys::preferences::*;
 
+#[link(name = "SystemConfiguration", kind = "framework")]
+unsafe extern "C" {
+    fn SCPreferencesPathSetValue(
+        prefs: SCPreferencesRef,
+        path: CFStringRef,
+        value: CFDictionaryRef,
+    ) -> u8;
+    fn SCPreferencesPathRemoveValue(prefs: SCPreferencesRef, path: CFStringRef) -> u8;
+}
+
+fn proxy_path(service: &str) -> Result<String> {
+    let valid = service.len() == 36
+        && service.bytes().enumerate().all(|(i, b)| {
+            if [8, 13, 18, 23].contains(&i) {
+                b == b'-'
+            } else {
+                b.is_ascii_hexdigit()
+            }
+        });
+    if !valid {
+        return Err("expected an existing network service UUID".into());
+    }
+    Ok(format!("/NetworkServices/{service}/Proxies"))
+}
+
 pub(super) struct Session {
     prefs: SCPreferencesRef,
     auth: AuthorizationRef,
     locked: bool,
-    #[cfg(not(test))]
     private: bool,
 }
 impl Session {
@@ -48,17 +72,15 @@ impl Session {
                 return Err(format!("OS authorization unavailable: {error}"));
             }
         }
+        // One native constructor for both modes: the preference scope can never
+        // diverge merely because an authorization reference became available.
         let prefs = unsafe {
-            if auth.is_null() {
-                SCPreferencesCreate(ptr::null(), name.as_concrete_TypeRef(), prefs_id)
-            } else {
-                SCPreferencesCreateWithAuthorization(
-                    ptr::null(),
-                    name.as_concrete_TypeRef(),
-                    prefs_id,
-                    auth.cast(),
-                )
-            }
+            SCPreferencesCreateWithAuthorization(
+                ptr::null(),
+                name.as_concrete_TypeRef(),
+                prefs_id,
+                auth.cast(),
+            )
         };
         if prefs.is_null() {
             if !auth.is_null() {
@@ -72,7 +94,6 @@ impl Session {
             prefs,
             auth,
             locked: false,
-            #[cfg(not(test))]
             private: private.is_some(),
         };
         if writing {
@@ -94,38 +115,65 @@ impl Session {
         plist::Value::from_reader_xml(std::io::Cursor::new(data.bytes()))
             .map_err(|_| "invalid network preferences".into())
     }
-    fn commit(&mut self, network: &plist::Value) -> Result<()> {
+    fn commit_proxy(&mut self, service: &str, value: Option<&plist::Value>) -> Result<()> {
         #[cfg(test)]
         {
-            let _ = network;
+            let _ = (service, value);
             Err("macOS network preference writes are forbidden in host tests".into())
         }
         #[cfg(not(test))]
-        self.commit_authorized(network)
+        self.commit_authorized(service, value)
     }
     #[cfg(not(test))]
-    fn commit_authorized(&mut self, network: &plist::Value) -> Result<()> {
+    fn commit_authorized(&mut self, service: &str, value: Option<&plist::Value>) -> Result<()> {
         if !self.locked {
             return Err("a writable preferences session is required".into());
         }
-        let mut bytes = Vec::new();
-        network
-            .to_writer_xml(&mut bytes)
-            .map_err(|_| "cannot serialize OS settings")?;
-        let (value, _) = propertylist::create_with_data(CFData::from_buffer(&bytes), 0)
-            .map_err(|_| "cannot create OS settings")?;
-        let key = CFString::new("NetworkServices");
-        let set = unsafe { SCPreferencesSetValue(self.prefs, key.as_concrete_TypeRef(), value) };
-        unsafe {
-            CFRelease(value);
-        }
-        if set == 0 || unsafe { SCPreferencesCommitChanges(self.prefs) } == 0 {
+        self.stage_proxy(service, value)?;
+        if unsafe { SCPreferencesCommitChanges(self.prefs) } == 0 {
             return Err("OS proxy commit refused; original backup retained".into());
         }
         if !self.private && unsafe { SCPreferencesApplyChanges(self.prefs) } == 0 {
             return Err(
                 "OS proxy commit succeeded but apply failed; original backup retained".into(),
             );
+        }
+        Ok(())
+    }
+    /// Only edits this session's in-memory dictionary. Persistent publication is
+    /// separate and is never compiled into the host test build.
+    fn stage_proxy(&mut self, service: &str, value: Option<&plist::Value>) -> Result<()> {
+        #[cfg(test)]
+        if !self.private {
+            return Err("host tests cannot stage default network preferences".into());
+        }
+        let path = CFString::new(&proxy_path(service)?);
+        let existing = self.read(service)?; // Never creates or replaces a network service.
+        if value.is_none() && existing.is_none() {
+            return Ok(());
+        }
+        let changed = if let Some(value) = value {
+            if value.as_dictionary().is_none() {
+                return Err("proxy settings must be a dictionary".into());
+            }
+            let mut bytes = Vec::new();
+            value
+                .to_writer_xml(&mut bytes)
+                .map_err(|_| "cannot serialize proxy settings")?;
+            let (cf_value, _) = propertylist::create_with_data(CFData::from_buffer(&bytes), 0)
+                .map_err(|_| "cannot create proxy settings")?;
+            let result = unsafe {
+                SCPreferencesPathSetValue(self.prefs, path.as_concrete_TypeRef(), cf_value.cast())
+            };
+            unsafe {
+                CFRelease(cf_value);
+            }
+            result
+        } else {
+            unsafe { SCPreferencesPathRemoveValue(self.prefs, path.as_concrete_TypeRef()) }
+        };
+        if changed == 0 {
+            return Err("OS proxy staging refused; no persistent commit performed".into());
         }
         Ok(())
     }
@@ -171,18 +219,7 @@ impl Backend for Session {
         Ok(value.get("Proxies").cloned())
     }
     fn write(&mut self, service: &str, value: Option<&plist::Value>) -> Result<()> {
-        let mut network = self.network()?;
-        let dictionary = network
-            .as_dictionary_mut()
-            .and_then(|n| n.get_mut(service))
-            .and_then(plist::Value::as_dictionary_mut)
-            .ok_or("OS network service disappeared; backup retained")?;
-        if let Some(value) = value {
-            dictionary.insert("Proxies".into(), value.clone());
-        } else {
-            dictionary.remove("Proxies");
-        }
-        self.commit(&network)
+        self.commit_proxy(service, value)
     }
 }
 
@@ -196,7 +233,7 @@ mod tests {
         let mut readonly = Session::open(false).unwrap();
         assert!(
             readonly
-                .commit(&plist::Value::Dictionary(plist::Dictionary::new()))
+                .write("00000000-0000-4000-8000-000000000001", None)
                 .is_err()
         );
     }
@@ -223,6 +260,57 @@ mod tests {
         let services = readonly.services().unwrap();
         assert_eq!(services.len(), 1);
         assert_eq!(services[0].id, "hps-readonly-fixture");
+    }
+    #[test]
+    fn native_proxy_path_stages_and_restores_only_in_private_session_memory() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("readonly-native-path.plist");
+        let selected = "00000000-0000-4000-8000-000000000001";
+        let other = "00000000-0000-4000-8000-000000000002";
+        let mut service = plist::Dictionary::new();
+        service.insert(
+            "DNS".into(),
+            plist::Value::String("preserve-dns-fixture".into()),
+        );
+        service.insert(
+            "IPv4".into(),
+            plist::Value::String("preserve-address-fixture".into()),
+        );
+        let mut services = plist::Dictionary::new();
+        services.insert(selected.into(), plist::Value::Dictionary(service.clone()));
+        services.insert(other.into(), plist::Value::Dictionary(service));
+        let mut fixture = plist::Dictionary::new();
+        fixture.insert("NetworkServices".into(), plist::Value::Dictionary(services));
+        let fixture = plist::Value::Dictionary(fixture);
+        fixture.to_file_xml(&path).unwrap();
+        let original_file = std::fs::read(&path).unwrap();
+        let mut session = Session::create(false, Some(path.to_str().unwrap())).unwrap();
+        let original = session.network().unwrap();
+        let input = Apply {
+            network_service: selected.into(),
+            http: Some(18983),
+            socks5: None,
+        };
+        let value = applied(None, &input).unwrap();
+        session.stage_proxy(selected, Some(&value)).unwrap();
+        assert_eq!(session.read(selected).unwrap(), Some(value));
+        assert_eq!(session.read(other).unwrap(), None);
+        let current = session.network().unwrap();
+        let selected_before = original.as_dictionary().unwrap()[selected]
+            .as_dictionary()
+            .unwrap();
+        let selected_after = current.as_dictionary().unwrap()[selected]
+            .as_dictionary()
+            .unwrap();
+        assert_eq!(selected_before.get("DNS"), selected_after.get("DNS"));
+        assert_eq!(selected_before.get("IPv4"), selected_after.get("IPv4"));
+        assert!(session.stage_proxy("../other", None).is_err());
+        session.stage_proxy(selected, None).unwrap();
+        assert_eq!(session.network().unwrap(), original);
+        drop(session);
+        assert_eq!(std::fs::read(&path).unwrap(), original_file);
+        let reopened = Session::create(false, Some(path.to_str().unwrap())).unwrap();
+        assert_eq!(reopened.read(selected).unwrap(), None);
     }
     #[test]
     fn actual_network_services_are_readable_without_elevation() {
