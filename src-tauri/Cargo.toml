@@ -25,6 +25,7 @@ hps-client = { path = "../crates/client" }
 hps-web-assets = { path = "../crates/web-assets" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+url = "2"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

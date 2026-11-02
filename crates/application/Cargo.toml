@@ -10,6 +10,7 @@ hps-domain.workspace = true
 hps-engine.workspace = true
 hps-storage.workspace = true
 hps-provider.workspace = true
+hps-health.workspace = true
 tokio-util = { version = "0.7", features = ["rt"] }
 tokio.workspace = true
 uuid.workspace = true

@@ -166,6 +166,9 @@ async fn handle(mut request: Request<Incoming>, session: Session) -> Response<Bo
         *request.uri_mut() = uri;
     }
     *request.version_mut() = http::Version::HTTP_11;
+    let upstream_id = connected.upstream_id;
+    let identity = connected.identity;
+    let absolute_form = connected.absolute_form;
     let io = ActiveIo::new(connected.io, session.activity.clone());
     let (mut sender, connection) = match hyper::client::conn::http1::Builder::new()
         .max_buf_size(session.limits.max_header_bytes)
@@ -192,6 +195,35 @@ async fn handle(mut request: Request<Incoming>, session: Session) -> Response<Bo
         )
     });
     let response = sender.send_request(request).await;
+    if response.is_err() {
+        session.dialer.traffic_feedback(
+            &upstream_id,
+            &identity,
+            hps_domain::ProbePhase::TargetHttp,
+            "upstream_response_failed",
+            false,
+        );
+    }
+    if let Ok(response) = &response {
+        let auth = absolute_form && response.status() == StatusCode::PROXY_AUTHENTICATION_REQUIRED;
+        session.dialer.traffic_feedback(
+            &upstream_id,
+            &identity,
+            if auth {
+                hps_domain::ProbePhase::Authentication
+            } else {
+                hps_domain::ProbePhase::TargetHttp
+            },
+            if auth {
+                "upstream_authentication_failed"
+            } else if matches!(response.status().as_u16(), 403 | 429) {
+                "target_rejected"
+            } else {
+                "target_response"
+            },
+            auth,
+        );
+    }
     let mut response = match response {
         Ok(response)
             if response.status() != StatusCode::PROXY_AUTHENTICATION_REQUIRED

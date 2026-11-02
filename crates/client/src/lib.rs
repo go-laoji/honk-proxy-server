@@ -99,6 +99,34 @@ impl HpsClient {
             .map_err(|_| ClientError::InvalidEndpoint)?;
         Self::decode(self.http.post(url).json(body).send().await?).await
     }
+    pub async fn health(
+        &self,
+        after: Option<&str>,
+        limit: u32,
+    ) -> Result<hps_domain::HealthOverview<hps_config::HealthConfig>, ClientError> {
+        let mut query = url::form_urlencoded::Serializer::new(String::new());
+        query.append_pair("limit", &limit.to_string());
+        if let Some(after) = after {
+            query.append_pair("after", after);
+        }
+        self.get_json(&format!("api/v1/health?{}", query.finish()))
+            .await
+    }
+    pub async fn probe_health(
+        &self,
+        input: &hps_domain::HealthProbeInput,
+    ) -> Result<hps_domain::HealthTask, ClientError> {
+        self.post_body("api/v1/health/probe", input).await
+    }
+    pub async fn health_task(&self, id: i64) -> Result<hps_domain::HealthTask, ClientError> {
+        self.get_json(&format!("api/v1/health/tasks/{id}")).await
+    }
+    pub async fn save_health(
+        &self,
+        input: &hps_config::HealthSave,
+    ) -> Result<hps_domain::ConfigActivationResult, ClientError> {
+        self.post_body("api/v1/health/save", input).await
+    }
     pub async fn providers(
         &self,
     ) -> Result<Vec<hps_domain::ProviderView<hps_config::ProviderConfig>>, ClientError> {

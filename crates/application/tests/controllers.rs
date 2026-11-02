@@ -113,6 +113,10 @@ fn config(server: &Server, mode: RefillMode) -> DaemonConfig {
     provider.refill.daily_request_budget = 3;
     provider.refill.daily_node_budget = 6;
     let mut config = DaemonConfig {
+        health: hps_config::HealthConfig {
+            enabled: false,
+            ..Default::default()
+        },
         providers: vec![provider],
         proxy: ProxyConfig {
             inbounds: vec![support::inbound("http", ProxyProtocol::Http, None)],

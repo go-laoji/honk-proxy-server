@@ -212,6 +212,7 @@ export interface ProviderControllerStatus {
   max_nodes: number;
   current_inventory: number;
   projected_inventory: number;
+  pending_health_nodes?: number;
   inflight_nodes: number;
   demand_active: boolean;
   refilling: boolean;
@@ -232,4 +233,112 @@ export interface ProviderControllerStatus {
 export interface ControllerEvaluation {
   status: ProviderControllerStatus;
   task: ExtractionTask | null;
+}
+
+export type HealthVerdict =
+  | "unknown"
+  | "queued"
+  | "probing"
+  | "healthy"
+  | "degraded"
+  | "failed"
+  | "unsupported"
+  | "expired"
+  | "skipped";
+export interface ProbeProfile {
+  transport: "tcp" | "udp";
+  family: "ipv4" | "ipv6";
+  enabled: boolean;
+  url: string;
+  tls_server_name: string | null;
+  ca_certificate: string | null;
+  expected_status: number | null;
+}
+export interface HealthConfig {
+  enabled: boolean;
+  profiles: ProbeProfile[];
+  max_parallel: number;
+  queue_capacity: number;
+  timeout_ms: number;
+  interval_secs: number;
+  max_staleness_secs: number;
+  min_probe_margin_secs: number;
+  daily_probe_budget: number;
+  retry_initial_secs: number;
+  retry_max_secs: number;
+  traffic_failure_threshold: number;
+  max_header_bytes: number;
+}
+export interface ProbeResult {
+  node_id: string;
+  identity: string;
+  profile_fingerprint: string;
+  transport: "tcp" | "udp";
+  family: "ipv4" | "ipv6";
+  verdict: HealthVerdict;
+  phase: string;
+  error_code: string | null;
+  endpoint_reachable: boolean;
+  authenticated: boolean | null;
+  tunnel_established: boolean;
+  http_status: number | null;
+  target_ok: boolean | null;
+  latency_ms: number;
+  checked_at: number;
+}
+export interface NodeHealth {
+  node_id: string;
+  provider_id: string | null;
+  protocol: string;
+  host: string;
+  port: number;
+  enabled: boolean;
+  remaining_secs: number | null;
+  eligible: boolean;
+  last_traffic: {
+    phase: string;
+    error_code: string;
+    invalidated: boolean;
+    observed_at: number;
+  } | null;
+  results: ProbeResult[];
+}
+export interface HealthRun {
+  id: number;
+  node_id: string;
+  identity: string;
+  profile_fingerprint: string;
+  state: string;
+  created_at: number;
+  started_at: number | null;
+  finished_at: number | null;
+  result: ProbeResult | null;
+}
+export interface HealthTask {
+  id: number;
+  request_id: string;
+  trigger: string;
+  state: string;
+  created_at: number;
+  total: number;
+  completed: number;
+  healthy: number;
+  failed: number;
+  skipped: number;
+  merged: number;
+  runs: HealthRun[];
+}
+export interface HealthOverview {
+  running_revision: number;
+  configuration: HealthConfig;
+  nodes: NodeHealth[];
+  total_nodes: number;
+  next_after: string | null;
+  queued: number;
+  probing: number;
+  day_started_at: number;
+  resets_at: number;
+  used_probes: number;
+  budget: number;
+  tasks: HealthTask[];
 }

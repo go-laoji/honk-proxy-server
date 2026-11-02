@@ -1,5 +1,6 @@
 //! Bounded asynchronous facade over one SQLite owner thread.
 pub mod controller;
+pub mod health;
 pub mod provider;
 use fs2::FileExt;
 use hps_config::DaemonConfig;
@@ -37,6 +38,8 @@ pub enum StorageError {
     ProviderBudgetExceeded,
     #[error("provider pool storage budget exceeded")]
     PoolFull,
+    #[error("health probe queue or daily budget exhausted")]
+    HealthCapacity,
     #[error("storage worker is unavailable")]
     Closed,
 }
@@ -359,7 +362,7 @@ fn migrate(connection: &mut Connection, bootstrap: &str) -> Result<(), StorageEr
         [],
         |row| row.get(0),
     )?;
-    if version > 5 {
+    if version > 6 {
         return Err(StorageError::SchemaTooNew);
     }
     let transaction =
@@ -402,6 +405,18 @@ fn migrate(connection: &mut Connection, bootstrap: &str) -> Result<(), StorageEr
             [unix_now()],
         )?;
     }
+    if version < 6 {
+        transaction.execute_batch(include_str!("../migrations/0006_health.up.sql"))?;
+        transaction.execute(
+            "INSERT INTO schema_migrations(version,applied_at) VALUES(6,?1)",
+            [unix_now()],
+        )?;
+    }
+    transaction.execute("UPDATE health_runs SET state='interrupted',finished_at=?1 WHERE state IN ('queued','probing')",[unix_now()])?;
+    transaction
+        .execute_batch("CREATE INDEX IF NOT EXISTS health_state_age ON health_state(checked_at)")?;
+    // Fresh proof is reacquired after every process start; persisted results remain diagnostic history.
+    transaction.execute("UPDATE health_state SET result=json_set(result,'$.verdict','unknown','$.error_code','process_restarted'),next_due_at=?1 WHERE json_extract(result,'$.verdict')='healthy'",[unix_now()])?;
     transaction.execute("UPDATE provider_control SET paused_reason='process_interrupted' WHERE last_task_id IN (SELECT id FROM provider_tasks WHERE state='outcome_unknown' AND error_code='process_interrupted' AND (provider_control.acknowledged_at IS NULL OR provider_control.acknowledged_at<provider_tasks.finished_at))",[])?;
     let observed: Option<(i64, bool)> = transaction
         .query_row(
@@ -411,6 +426,7 @@ fn migrate(connection: &mut Connection, bootstrap: &str) -> Result<(), StorageEr
         )
         .optional()?;
     if observed.is_some_and(|(time, _)| unix_now() < time) {
+        transaction.execute("DELETE FROM health_state", [])?;
         transaction.execute(
             "UPDATE provider_leases SET state='clock_rollback' WHERE state='active'",
             [],

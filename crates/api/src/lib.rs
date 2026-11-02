@@ -16,6 +16,7 @@ use std::{
 };
 
 mod configuration;
+mod health;
 mod providers;
 #[cfg(feature = "web-ui")]
 mod web;
@@ -145,6 +146,7 @@ pub fn router(state: Arc<AppState>) -> Router {
     let router = router
         .merge(configuration::router())
         .merge(providers::router())
+        .merge(health::router())
         .layer(axum::extract::DefaultBodyLimit::max(4 * 1024 * 1024));
     #[cfg(feature = "web-ui")]
     let router = router.fallback(web::serve);
@@ -176,7 +178,7 @@ async fn ready(State(state): State<Arc<AppState>>) -> (StatusCode, Json<serde_js
             StatusCode::SERVICE_UNAVAILABLE
         },
         Json(
-            serde_json::json!({"ready":ready,"reason":if ready {"explicit ingress running with eligible configured upstream; health is not implied"} else {"no ready inbound/upstream or runtime stopping"}}),
+            serde_json::json!({"ready":ready,"reason":if ready {if state.effective_config().health.enabled {"explicit ingress running with fresh healthy upstream"} else {"explicit ingress running; health checking explicitly disabled"}} else {"no ready inbound/upstream or runtime stopping"}}),
         ),
     )
 }
@@ -275,6 +277,9 @@ fn application_error(error: ApplicationError) -> (StatusCode, Json<ApiError>) {
         }
         ApplicationError::Storage(StorageError::ProviderBudgetExceeded) => {
             (StatusCode::TOO_MANY_REQUESTS, "provider_budget_exhausted")
+        }
+        ApplicationError::Storage(StorageError::HealthCapacity) => {
+            (StatusCode::TOO_MANY_REQUESTS, "health_capacity_or_budget")
         }
         ApplicationError::ExtractionCapacity => {
             (StatusCode::SERVICE_UNAVAILABLE, "supplier_fetch_capacity")

@@ -351,6 +351,8 @@ pub struct ProviderControllerStatus {
     pub max_nodes: u32,
     pub current_inventory: u32,
     pub projected_inventory: u32,
+    #[serde(default)]
+    pub pending_health_nodes: u32,
     pub inflight_nodes: u32,
     pub demand_active: bool,
     pub refilling: bool,
@@ -372,4 +374,136 @@ pub struct ProviderControllerStatus {
 pub struct ControllerEvaluation {
     pub status: ProviderControllerStatus,
     pub task: Option<ExtractionTask>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HealthTransport {
+    Tcp,
+    Udp,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IpFamily {
+    Ipv4,
+    Ipv6,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HealthVerdict {
+    Unknown,
+    Queued,
+    Probing,
+    Healthy,
+    Degraded,
+    Failed,
+    Unsupported,
+    Expired,
+    Skipped,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProbePhase {
+    TargetResolve,
+    EndpointConnect,
+    UpstreamTls,
+    Authentication,
+    ProxyTunnel,
+    TargetTls,
+    TargetHttp,
+    Complete,
+    Admission,
+    Local,
+    Unsupported,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProbeResult {
+    pub node_id: String,
+    pub identity: String,
+    pub profile_fingerprint: String,
+    pub transport: HealthTransport,
+    pub family: IpFamily,
+    pub verdict: HealthVerdict,
+    pub phase: ProbePhase,
+    pub error_code: Option<String>,
+    pub endpoint_reachable: bool,
+    pub authenticated: Option<bool>,
+    pub tunnel_established: bool,
+    pub http_status: Option<u16>,
+    pub target_ok: Option<bool>,
+    pub latency_ms: u64,
+    pub checked_at: i64,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HealthProbeInput {
+    pub request_id: String,
+    #[serde(default)]
+    pub node_ids: Vec<String>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthRun {
+    pub id: i64,
+    pub node_id: String,
+    pub identity: String,
+    pub profile_fingerprint: String,
+    pub state: String,
+    pub created_at: i64,
+    pub started_at: Option<i64>,
+    pub finished_at: Option<i64>,
+    pub result: Option<ProbeResult>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthTask {
+    pub id: i64,
+    pub request_id: String,
+    pub trigger: String,
+    pub state: String,
+    pub created_at: i64,
+    pub total: u32,
+    pub completed: u32,
+    pub healthy: u32,
+    pub failed: u32,
+    pub skipped: u32,
+    pub merged: u32,
+    pub runs: Vec<HealthRun>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NodeHealth {
+    pub node_id: String,
+    pub provider_id: Option<String>,
+    pub protocol: String,
+    pub host: String,
+    pub port: u16,
+    pub enabled: bool,
+    pub remaining_secs: Option<u64>,
+    pub eligible: bool,
+    pub last_traffic: Option<TrafficFeedback>,
+    pub results: Vec<ProbeResult>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthOverview<C> {
+    pub running_revision: i64,
+    pub configuration: C,
+    pub nodes: Vec<NodeHealth>,
+    pub next_after: Option<String>,
+    pub total_nodes: usize,
+    pub queued: u32,
+    pub probing: u32,
+    pub day_started_at: i64,
+    pub resets_at: i64,
+    pub used_probes: u32,
+    pub budget: u32,
+    pub tasks: Vec<HealthTask>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrafficFeedback {
+    pub node_id: String,
+    pub identity: String,
+    pub phase: ProbePhase,
+    pub error_code: String,
+    pub invalidated: bool,
+    pub observed_at: i64,
 }

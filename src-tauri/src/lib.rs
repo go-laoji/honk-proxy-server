@@ -48,10 +48,41 @@ fn supported_api(path: &str) -> bool {
             | "api/v1/config/workspace"
             | "api/v1/config/export"
             | "api/v1/providers"
-    ) || supported_provider_get(path)
+    ) || supported_health_get(path)
+        || supported_provider_get(path)
         || path
             .strip_prefix("api/v1/config/revisions/")
             .is_some_and(|id| id.parse::<i64>().is_ok_and(|id| id > 0))
+}
+
+fn supported_health_get(path: &str) -> bool {
+    let (base, query) = path
+        .split_once('?')
+        .map_or((path, None), |(base, q)| (base, Some(q)));
+    if let Some(id) = base.strip_prefix("api/v1/health/tasks/") {
+        return query.is_none() && id.parse::<i64>().is_ok_and(|id| id > 0);
+    }
+    if base != "api/v1/health" {
+        return false;
+    }
+    query.is_none_or(|query| {
+        let mut keys = std::collections::HashSet::new();
+        !query.is_empty()
+            && url::form_urlencoded::parse(query.as_bytes()).all(|(key, value)| {
+                keys.insert(key.to_string())
+                    && match key.as_ref() {
+                        "limit" => value.parse::<u32>().is_ok_and(|n| (1..=200).contains(&n)),
+                        "after" => {
+                            !value.is_empty()
+                                && value.len() <= 128
+                                && value
+                                    .bytes()
+                                    .all(|b| b.is_ascii_alphanumeric() || b"_:-".contains(&b))
+                        }
+                        _ => false,
+                    }
+            })
+    })
 }
 
 fn valid_resource_id(id: &str) -> bool {
@@ -92,7 +123,9 @@ fn supported_provider_get(path: &str) -> bool {
 fn supported_action(path: &str) -> bool {
     if matches!(
         path,
-        "api/v1/config/validate"
+        "api/v1/health/probe"
+            | "api/v1/health/save"
+            | "api/v1/config/validate"
             | "api/v1/config/draft"
             | "api/v1/config/revisions"
             | "api/v1/config/activate"
@@ -230,6 +263,13 @@ mod tests {
     #[test]
     fn transport_accepts_implemented_api_only() {
         assert!(supported_api("api/v1/status"));
+        assert!(supported_api("api/v1/health?after=lease%3A12&limit=50"));
+        assert!(supported_api("api/v1/health/tasks/12"));
+        assert!(supported_action("api/v1/health/probe"));
+        assert!(supported_action("api/v1/health/save"));
+        assert!(!supported_api("api/v1/health?limit=10000"));
+        assert!(!supported_api("api/v1/health?url=http://external"));
+        assert!(!supported_api("api/v1/health/tasks/1/../2"));
         assert!(supported_api(
             "api/v1/providers/source/leases?before=200&limit=50"
         ));

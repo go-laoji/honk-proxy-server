@@ -7,3 +7,6 @@ enabled = false
 [proxy.limits]
 max_connections = 8
 bytes_per_second = 65536
+
+[health]
+enabled = false

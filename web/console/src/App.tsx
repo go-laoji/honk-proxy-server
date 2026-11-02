@@ -34,6 +34,7 @@ import SettingsPage from "./pages/SettingsPage";
 import LinuxPage from "./pages/LinuxPage";
 import InboundsPage from "./pages/InboundsPage";
 const ProvidersPage = lazy(() => import("./pages/ProvidersPage"));
+const HealthPage = lazy(() => import("./pages/HealthPage"));
 const ConfigPage = lazy(() => import("./pages/ConfigPage"));
 
 const icons: Record<
@@ -246,6 +247,13 @@ export default function App() {
               <Suspense fallback={<p className="muted">正在读取供应商…</p>}>
                 <ProvidersPage
                   detailPage={current.id === "provider-detail"}
+                  serviceEndpoint={service.data.endpoint}
+                  refreshService={service.refresh}
+                />
+              </Suspense>
+            ) : current.id === "health" ? (
+              <Suspense fallback={<p className="muted">正在读取健康检测…</p>}>
+                <HealthPage
                   serviceEndpoint={service.data.endpoint}
                   refreshService={service.refresh}
                 />

@@ -100,7 +100,7 @@ async fn untrusted_or_wrong_name_tls_and_upstream_407_fail_without_retry() {
     .unwrap();
     assert!(matches!(
         dialer.connect(&target, false).await,
-        Err(ProxyError::Upstream)
+        Err(ProxyError::Authentication)
     ));
     assert_eq!(refused.requests.lock().unwrap().len(), 1);
     assert!(unused.requests.lock().unwrap().is_empty());

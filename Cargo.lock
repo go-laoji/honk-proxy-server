@@ -708,6 +708,7 @@ dependencies = [
  "hps-config",
  "hps-domain",
  "hps-engine",
+ "hps-health",
  "hps-provider",
  "hps-storage",
  "http",
@@ -752,6 +753,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
+ "url",
 ]
 
 [[package]]
@@ -824,6 +826,27 @@ dependencies = [
  "tracing",
  "webpki-roots",
  "x509-parser",
+]
+
+[[package]]
+name = "hps-health"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "hps-config",
+ "hps-domain",
+ "hps-engine",
+ "http",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "rcgen",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tokio",
+ "tokio-rustls",
+ "url",
 ]
 
 [[package]]

@@ -148,7 +148,7 @@
 
 ## 10. 健康检查
 
-对应 `health.html`，API 域为 health/tasks。CLI 对应 health/node probe。
+对应 `health.html`，API 域为 health/tasks。CLI 对应 health。HEALTH-01–05 与 NODE-05 已在 T08 交付，见 [使用说明](health-usage.md)；UDP 维度如实报告 unsupported，完整历史曲线由 T18 接续。
 
 | 编号 | 优先级 | 功能 | 验收要点 |
 | --- | --- | --- | --- |

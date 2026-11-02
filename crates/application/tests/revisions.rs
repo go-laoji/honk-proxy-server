@@ -50,6 +50,10 @@ async fn same_socket_handoff_retains_old_flow_and_counts_it_against_reduced_limi
     let b = support::http_proxy(None, None, 200).await;
     let echo = support::echo(false).await;
     let config = DaemonConfig {
+        health: hps_config::HealthConfig {
+            enabled: false,
+            ..Default::default()
+        },
         proxy: ProxyConfig {
             inbounds: vec![support::inbound("http", ProxyProtocol::Http, None)],
             upstreams: vec![support::upstream(a.address, ProxyProtocol::Http)],
@@ -112,6 +116,10 @@ async fn occupied_candidate_and_changed_tls_files_leave_both_head_and_running_ge
     let upstream = support::http_proxy(None, None, 200).await;
     let echo = support::echo(false).await;
     let config = DaemonConfig {
+        health: hps_config::HealthConfig {
+            enabled: false,
+            ..Default::default()
+        },
         proxy: ProxyConfig {
             inbounds: vec![support::inbound("http", ProxyProtocol::Http, None)],
             upstreams: vec![support::upstream(upstream.address, ProxyProtocol::Http)],
@@ -178,13 +186,17 @@ async fn occupied_candidate_and_changed_tls_files_leave_both_head_and_running_ge
 async fn pending_restart_recovers_desired_and_rollback_conflicts_are_explicit() {
     let directory = tempfile::tempdir().unwrap();
     let supervisor = Supervisor::boot(
-        Store::open(Some(directory.path()), DaemonConfig::default()).unwrap(),
+        Store::open(Some(directory.path()), legacy_config()).unwrap(),
         StartupOverrides::default(),
     )
     .await
     .unwrap();
     supervisor.confirm_startup().await.unwrap();
     let candidate = DaemonConfig {
+        health: hps_config::HealthConfig {
+            enabled: false,
+            ..Default::default()
+        },
         management_listen: "127.0.0.1:0".parse().unwrap(),
         log_filter: "warn".into(),
         ..Default::default()
@@ -216,7 +228,7 @@ async fn pending_restart_recovers_desired_and_rollback_conflicts_are_explicit() 
     ));
     supervisor.shutdown().await.unwrap();
     let restored = Supervisor::boot(
-        Store::open(Some(directory.path()), DaemonConfig::default()).unwrap(),
+        Store::open(Some(directory.path()), legacy_config()).unwrap(),
         StartupOverrides::default(),
     )
     .await
@@ -246,7 +258,7 @@ async fn pending_restart_recovers_desired_and_rollback_conflicts_are_explicit() 
 
 #[tokio::test]
 async fn draft_conflict_redacted_round_trip_and_secret_change_diff_never_expose_credentials() {
-    let mut config = DaemonConfig::default();
+    let mut config = legacy_config();
     let mut upstream = support::upstream("127.0.0.1:18080".parse().unwrap(), ProxyProtocol::Http);
     upstream.credentials = Some(UpstreamCredentials {
         username: "supplier".into(),
@@ -343,6 +355,10 @@ async fn stopping_inbound_cancels_its_connections_in_draining_generations() {
     let upstream = support::http_proxy(None, None, 200).await;
     let echo = support::echo(false).await;
     let mut config = DaemonConfig {
+        health: hps_config::HealthConfig {
+            enabled: false,
+            ..Default::default()
+        },
         proxy: ProxyConfig {
             inbounds: vec![support::inbound("http", ProxyProtocol::Http, None)],
             upstreams: vec![support::upstream(upstream.address, ProxyProtocol::Http)],
@@ -383,7 +399,7 @@ async fn stopping_inbound_cancels_its_connections_in_draining_generations() {
 
 #[tokio::test]
 async fn retention_is_bounded_and_keeps_runtime_generation_and_foreign_keys_valid() {
-    let mut config = DaemonConfig::default();
+    let mut config = legacy_config();
     config.retention.config_versions = 10;
     let service = Supervisor::boot(
         Store::open(None, config.clone()).unwrap(),
@@ -424,13 +440,17 @@ async fn retention_is_bounded_and_keeps_runtime_generation_and_foreign_keys_vali
 async fn dropped_caller_does_not_abandon_activation_queued_behind_database_lock() {
     let directory = tempfile::tempdir().unwrap();
     let service = Supervisor::boot(
-        Store::open(Some(directory.path()), DaemonConfig::default()).unwrap(),
+        Store::open(Some(directory.path()), legacy_config()).unwrap(),
         StartupOverrides::default(),
     )
     .await
     .unwrap();
     service.confirm_startup().await.unwrap();
     let config = DaemonConfig {
+        health: hps_config::HealthConfig {
+            enabled: false,
+            ..Default::default()
+        },
         instance_name: "survives-disconnect".into(),
         ..Default::default()
     };
@@ -461,12 +481,12 @@ async fn dropped_caller_does_not_abandon_activation_queued_behind_database_lock(
 #[tokio::test]
 async fn refreshed_redacted_draft_preserves_new_and_rotated_credentials_without_stale_reference() {
     let service = Supervisor::boot(
-        Store::open(None, DaemonConfig::default()).unwrap(),
+        Store::open(None, legacy_config()).unwrap(),
         StartupOverrides::default(),
     )
     .await
     .unwrap();
-    let mut config = DaemonConfig::default();
+    let mut config = legacy_config();
     let mut upstream = support::upstream("127.0.0.1:18080".parse().unwrap(), ProxyProtocol::Http);
     upstream.credentials = Some(UpstreamCredentials {
         username: "supplier".into(),
@@ -541,4 +561,14 @@ async fn refreshed_redacted_draft_preserves_new_and_rotated_credentials_without_
         Err(ApplicationError::Storage(StorageError::Conflict))
     ));
     service.shutdown().await.unwrap();
+}
+
+fn legacy_config() -> DaemonConfig {
+    DaemonConfig {
+        health: hps_config::HealthConfig {
+            enabled: false,
+            ..Default::default()
+        },
+        ..Default::default()
+    }
 }

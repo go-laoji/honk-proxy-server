@@ -2,6 +2,7 @@
 mod capacity;
 mod demand;
 pub mod dial;
+pub mod health;
 mod http_proxy;
 pub mod pool;
 pub mod runtime;
@@ -23,6 +24,18 @@ pub enum ProxyError {
     InvalidTarget,
     #[error("upstream connection or handshake timed out")]
     Timeout,
+    #[error("local socket or memory resource exhausted")]
+    LocalResource,
+    #[error("upstream endpoint connection failed")]
+    Endpoint,
+    #[error("upstream TLS handshake failed")]
+    UpstreamTls,
+    #[error("upstream authentication failed")]
+    Authentication,
+    #[error("upstream CONNECT rejected with status {0}")]
+    Policy(u16),
+    #[error("upstream rejected target connection")]
+    TargetConnect,
     #[error("upstream connection or handshake failed")]
     Upstream,
     #[error("invalid TLS certificate, key, trust roots or server name")]
