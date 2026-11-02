@@ -7,6 +7,9 @@ mod management;
 #[derive(Parser)]
 #[command(name = "hpsd", version, about = "Headless honk proxy service")]
 struct Args {
+    /// Print compiled package metadata without opening configuration, sockets or storage.
+    #[arg(long)]
+    build_info: bool,
     #[arg(long)]
     config: Option<PathBuf>,
     #[arg(long)]
@@ -24,6 +27,16 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
+    if args.build_info {
+        println!(
+            "{}",
+            serde_json::to_string(&hps_domain::compiled_build_info(
+                "hpsd",
+                hps_api::build_version()
+            ))?
+        );
+        return Ok(());
+    }
     let mut config = match args.config {
         Some(path) => DaemonConfig::load(&path)?,
         None => DaemonConfig::default(),

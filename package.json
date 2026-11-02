@@ -31,5 +31,10 @@
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.3",
     "vite": "^8.0.16"
+  },
+  "packageManager": "pnpm@12.10.1",
+  "engines": {
+    "node": ">=24.15.0",
+    "pnpm": "12.10.1"
   }
 }

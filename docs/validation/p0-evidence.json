@@ -1,0 +1,247 @@
+{
+  "format_version": 1,
+  "applicable_feature_count": 80,
+  "unconditional_all_platform_p0_pass": false,
+  "macos_actual_proxy_persistent_change_verified": false,
+  "paid_supplier_account_call_verified": false,
+  "boundaries": {
+    "SYS-05": "Actual launchd/systemd lifecycle, safe GUI/native bridge, transaction/SDK staging verified; host macOS persistent proxy writes prohibited and not verified. The invalidated old test is excluded.",
+    "HEALTH-02": "TCP v4/v6 results and real traffic feedback verified; active UDP probe explicitly unsupported, never inferred healthy.",
+    "PROV-08": "Official documented contract/fault cases; paid quota/whitelist/account calls unverified. Free source fetched/parsed, health not inferred.",
+    "LINUX-01..06": "Actual 52 kernel cases; only a byte-identical accepted eBPF object can ship."
+  },
+  "groups": [
+    {
+      "task": "T01",
+      "issue": 6,
+      "features": [
+        "INST-01",
+        "INST-02",
+        "INST-04",
+        "DASH-01",
+        "SYS-04"
+      ],
+      "implementation": "crates/api/src/lib.rs",
+      "regression": "crates/api/src/lib.rs",
+      "evidence": "docs/validation/runtime-foundation-2026-11-01.md",
+      "validation_scope": "see_actual_evidence_and_explicit_protocol_limits"
+    },
+    {
+      "task": "T03",
+      "issue": 8,
+      "features": [
+        "LINUX-01",
+        "LINUX-02"
+      ],
+      "implementation": "crates/platform/src/lib.rs",
+      "regression": "crates/platform/tests/transparent.rs",
+      "evidence": "docs/validation/linux-ebpf-core-2026-11-01.md",
+      "validation_scope": "see_actual_evidence_and_explicit_protocol_limits"
+    },
+    {
+      "task": "T04",
+      "issue": 9,
+      "features": [
+        "IN-01",
+        "IN-03",
+        "IN-04",
+        "IN-05",
+        "IN-06",
+        "SYS-02"
+      ],
+      "implementation": "crates/engine/src/lib.rs",
+      "regression": "crates/engine/tests/runtime.rs",
+      "evidence": "docs/validation/explicit-proxy-2026-11-01.md",
+      "validation_scope": "see_actual_evidence_and_explicit_protocol_limits"
+    },
+    {
+      "task": "T05",
+      "issue": 10,
+      "features": [
+        "CFG-01",
+        "CFG-02",
+        "CFG-03",
+        "CFG-04",
+        "CFG-05",
+        "CFG-06",
+        "SYS-01",
+        "SYS-03"
+      ],
+      "implementation": "crates/application/src/lib.rs",
+      "regression": "crates/application/tests/revisions.rs",
+      "evidence": "docs/validation/configuration-2026-11-01.md",
+      "validation_scope": "see_actual_evidence_and_explicit_protocol_limits"
+    },
+    {
+      "task": "T06",
+      "issue": 11,
+      "features": [
+        "PROV-01",
+        "PROV-02",
+        "PROV-04",
+        "PROV-05",
+        "PROV-06",
+        "PROV-07",
+        "PROV-08",
+        "PROV-10",
+        "PROV-11",
+        "PROV-12"
+      ],
+      "implementation": "crates/provider/src/lib.rs",
+      "regression": "crates/application/tests/providers.rs",
+      "evidence": "docs/validation/provider-leases-2026-11-01.md",
+      "validation_scope": "see_actual_evidence_and_explicit_protocol_limits"
+    },
+    {
+      "task": "T07",
+      "issue": 12,
+      "features": [
+        "PROV-03",
+        "PROV-09"
+      ],
+      "implementation": "crates/application/src/controller.rs",
+      "regression": "crates/application/tests/controllers.rs",
+      "evidence": "docs/validation/replenishment-2026-11-01.md",
+      "validation_scope": "see_actual_evidence_and_explicit_protocol_limits"
+    },
+    {
+      "task": "T08",
+      "issue": 13,
+      "features": [
+        "HEALTH-01",
+        "HEALTH-02",
+        "HEALTH-03",
+        "HEALTH-04",
+        "HEALTH-05",
+        "NODE-05"
+      ],
+      "implementation": "crates/application/src/health.rs",
+      "regression": "crates/health/tests/probes.rs",
+      "evidence": "docs/validation/health-2026-11-01.md",
+      "validation_scope": "see_actual_evidence_and_explicit_protocol_limits"
+    },
+    {
+      "task": "T09",
+      "issue": 14,
+      "features": [
+        "DNS-01",
+        "DNS-02",
+        "DNS-03",
+        "DNS-04"
+      ],
+      "implementation": "crates/dns/src/lib.rs",
+      "regression": "crates/dns/tests/resolution.rs",
+      "evidence": "docs/validation/dns-2026-11-02.md",
+      "validation_scope": "see_actual_evidence_and_explicit_protocol_limits"
+    },
+    {
+      "task": "T10",
+      "issue": 15,
+      "features": [
+        "GROUP-01",
+        "GROUP-02",
+        "GROUP-03",
+        "GROUP-04",
+        "GROUP-05"
+      ],
+      "implementation": "crates/engine/src/selection.rs",
+      "regression": "crates/engine/tests/groups.rs",
+      "evidence": "docs/validation/groups-2026-11-02.md",
+      "validation_scope": "see_actual_evidence_and_explicit_protocol_limits"
+    },
+    {
+      "task": "T11",
+      "issue": 16,
+      "features": [
+        "RULE-01",
+        "RULE-02",
+        "RULE-03",
+        "RULE-04",
+        "RULE-05",
+        "RULE-06"
+      ],
+      "implementation": "crates/engine/src/routing.rs",
+      "regression": "crates/engine/tests/routing.rs",
+      "evidence": "docs/validation/routing-rules-2026-11-02.md",
+      "validation_scope": "see_actual_evidence_and_explicit_protocol_limits"
+    },
+    {
+      "task": "T12",
+      "issue": 17,
+      "features": [
+        "NODE-01",
+        "NODE-02",
+        "NODE-03",
+        "NODE-04",
+        "NODE-06",
+        "DASH-02"
+      ],
+      "implementation": "crates/application/src/nodes.rs",
+      "regression": "crates/engine/tests/nodes.rs",
+      "evidence": "docs/validation/node-management-2026-11-02.md",
+      "validation_scope": "see_actual_evidence_and_explicit_protocol_limits"
+    },
+    {
+      "task": "T13",
+      "issue": 18,
+      "features": [
+        "CONN-01",
+        "CONN-02",
+        "CONN-03",
+        "CONN-04",
+        "DASH-03",
+        "DASH-04"
+      ],
+      "implementation": "crates/application/src/connections.rs",
+      "regression": "crates/engine/tests/connections.rs",
+      "evidence": "docs/validation/connections-2026-11-02.md",
+      "validation_scope": "see_actual_evidence_and_explicit_protocol_limits"
+    },
+    {
+      "task": "T14",
+      "issue": 19,
+      "features": [
+        "TASK-01",
+        "TASK-02",
+        "TASK-03",
+        "TASK-04",
+        "LOG-01",
+        "LOG-02",
+        "LOG-03",
+        "LOG-04"
+      ],
+      "implementation": "crates/application/src/tasks.rs",
+      "regression": "crates/storage/tests/tasks.rs",
+      "evidence": "docs/validation/tasks-events-2026-11-02.md",
+      "validation_scope": "see_actual_evidence_and_explicit_protocol_limits"
+    },
+    {
+      "task": "T15",
+      "issue": 20,
+      "features": [
+        "LINUX-03",
+        "LINUX-04",
+        "LINUX-05",
+        "LINUX-06"
+      ],
+      "implementation": "crates/application/src/transparent.rs",
+      "regression": "tests/linux/ebpf/capture-matrix.json",
+      "evidence": "docs/validation/linux-transparent-2026-11-02.md",
+      "validation_scope": "see_actual_evidence_and_explicit_protocol_limits"
+    },
+    {
+      "task": "T16",
+      "issue": 21,
+      "features": [
+        "INST-03",
+        "SYS-05"
+      ],
+      "implementation": "crates/system/src/lib.rs",
+      "regression": "crates/system/src/proxy.rs",
+      "evidence": "docs/validation/desktop-service-2026-11-02.md",
+      "validation_scope": "implemented_and_validated_with_documented_platform_limits"
+    }
+  ],
+  "joint_kernel_evidence": "docs/validation/linux-transparent-acceptance-2026-11-02.json",
+  "safe_desktop_evidence": "docs/validation/desktop-service-2026-11-02.json"
+}

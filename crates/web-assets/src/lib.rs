@@ -12,3 +12,7 @@ pub fn content_type(path: &str) -> &'static str {
         _ => "application/octet-stream",
     }
 }
+
+#[cfg(test)]
+#[path = "../verify.rs"]
+mod verify;

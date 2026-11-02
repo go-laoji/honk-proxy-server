@@ -84,7 +84,9 @@ pub(super) async fn profiles_change(
 }
 #[derive(serde::Serialize)]
 pub(super) struct Context {
-    network_changes_disabled:bool,
+    network_changes_disabled: bool,
+    bundled_daemon: Option<String>,
+    bundled_config: Option<String>,
     endpoint: String,
     profile_id: Option<String>,
     local: bool,
@@ -134,7 +136,21 @@ pub(super) async fn local_context(
             (None, None, None, vec![])
         };
         Ok(Context {
-            network_changes_disabled:std::env::var_os("HPS_FORBID_HOST_NETWORK_CHANGES").is_some(),
+            network_changes_disabled: std::env::var_os("HPS_FORBID_HOST_NETWORK_CHANGES").is_some(),
+            bundled_daemon: app
+                .path()
+                .resource_dir()
+                .ok()
+                .map(|p| p.join("bin/hpsd"))
+                .filter(|p| p.is_file())
+                .map(|p| p.to_string_lossy().into_owned()),
+            bundled_config: app
+                .path()
+                .resource_dir()
+                .ok()
+                .map(|p| p.join("config/hps.toml"))
+                .filter(|p| p.is_file())
+                .map(|p| p.to_string_lossy().into_owned()),
             endpoint: target.endpoint,
             profile_id: target.profile_id,
             local: target.local,

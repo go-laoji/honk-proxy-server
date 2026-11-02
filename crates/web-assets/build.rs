@@ -1,42 +1,45 @@
-use std::{
-    env, fs,
-    path::{Path, PathBuf},
-};
+use std::{env, fs, path::PathBuf};
 
-fn collect(root: &Path, dir: &Path, out: &mut Vec<(String, PathBuf)>) {
-    for entry in fs::read_dir(dir).expect("read web asset directory") {
-        let path = entry.expect("read web asset").path();
-        if path.is_dir() {
-            collect(root, &path, out);
-        } else if path.is_file() {
-            out.push((
-                path.strip_prefix(root)
-                    .unwrap()
-                    .to_string_lossy()
-                    .replace('\\', "/"),
-                path,
-            ));
-        }
-    }
-}
+#[path = "verify.rs"]
+mod verify;
 
 fn main() {
-    let root = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("../../dist");
+    let repository = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("../..");
+    println!("cargo:rerun-if-env-changed=HPS_WEB_ASSETS_DIR");
+    let root = env::var_os("HPS_WEB_ASSETS_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| repository.join("dist"));
     println!("cargo:rerun-if-changed={}", root.display());
-    let manifest = fs::read_to_string(root.join("web-manifest.json"))
-        .expect("shared web assets missing: run `pnpm build` before building the web-ui feature; use --no-default-features for headless builds");
-    let manifest: serde_json::Value = serde_json::from_str(&manifest).expect("valid web manifest");
-    let id = manifest["web_build_id"].as_str().expect("web build ID");
-    let pages = manifest["pages"].as_array().expect("web page list");
+    let source_manifest = repository.join("web/console/pages.manifest.json");
+    println!("cargo:rerun-if-changed={}", source_manifest.display());
+    let source: serde_json::Value =
+        serde_json::from_slice(&fs::read(source_manifest).expect("authoritative page manifest"))
+            .expect("valid page manifest");
+    let source_pages = source
+        .as_array()
+        .expect("page array")
+        .iter()
+        .map(|p| {
+            (
+                p["id"].as_str().expect("page id").to_owned(),
+                p["file"].as_str().expect("page file").to_owned(),
+            )
+        })
+        .collect::<Vec<_>>();
+    let bundle = verify::verify(&root, &source_pages)
+        .unwrap_or_else(|error| panic!("invalid shared web artifact: {error}"));
+    let id = &bundle.build_id;
+    let pages = &bundle.pages;
     let mut source = format!("pub const BUILD_ID: &str = {id:?};\npub const PAGES: &[&str] = &[\n");
     for page in pages {
-        source.push_str(&format!("{:?},\n", page.as_str().unwrap()));
+        source.push_str(&format!("{:?},\n", page));
     }
     source.push_str("];\npub fn get(path: &str) -> Option<&'static [u8]> {\nmatch path {\n");
-    let mut files = vec![];
-    collect(&root, &root, &mut files);
-    files.sort_by(|a, b| a.0.cmp(&b.0));
-    for (relative, path) in files {
+    let frozen = PathBuf::from(env::var("OUT_DIR").unwrap()).join("verified-web");
+    for (relative, bytes) in bundle.files {
+        let path = frozen.join(&relative);
+        fs::create_dir_all(path.parent().unwrap()).expect("create immutable web build directory");
+        fs::write(&path, bytes).expect("freeze verified web asset");
         source.push_str(&format!(
             "{relative:?} => Some(include_bytes!({:?})),\n",
             path.canonicalize().unwrap()

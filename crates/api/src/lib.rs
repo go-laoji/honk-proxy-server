@@ -29,6 +29,24 @@ mod tasks;
 #[cfg(feature = "web-ui")]
 mod web;
 
+pub fn build_version() -> VersionInfo {
+    VersionInfo {
+        service: "honk-proxy-server".into(),
+        version: env!("CARGO_PKG_VERSION").into(),
+        api_version: hps_domain::API_VERSION.into(),
+        web_build_id: {
+            #[cfg(feature = "web-ui")]
+            {
+                Some(hps_web_assets::BUILD_ID.into())
+            }
+            #[cfg(not(feature = "web-ui"))]
+            {
+                None
+            }
+        },
+    }
+}
+
 pub struct AppState {
     pub config: DaemonConfig,
     pub engine: Option<Arc<Engine>>,
@@ -79,21 +97,7 @@ impl AppState {
     }
 
     pub fn version(&self) -> VersionInfo {
-        VersionInfo {
-            service: "honk-proxy-server".into(),
-            version: env!("CARGO_PKG_VERSION").into(),
-            api_version: hps_domain::API_VERSION.into(),
-            web_build_id: {
-                #[cfg(feature = "web-ui")]
-                {
-                    Some(hps_web_assets::BUILD_ID.into())
-                }
-                #[cfg(not(feature = "web-ui"))]
-                {
-                    None
-                }
-            },
-        }
+        build_version()
     }
 
     pub fn status(&self) -> ServiceStatus {

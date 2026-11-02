@@ -163,6 +163,16 @@
       "issues": [
         20
       ]
+    },
+    {
+      "order": 17,
+      "branch": "feature/desktop-service",
+      "feature_head": "0321fe773cb8b9ad83702d425db86089b645530b",
+      "merge_commit": "43363f7c2d87a9815b7b4c14b5712564b50ad53b",
+      "tree_unchanged_from_feature": true,
+      "issues": [
+        21
+      ]
     }
   ],
   "issue_states": [
@@ -272,8 +282,8 @@
       "closed_at": "2026-11-02T06:22:07Z"
     }
   ],
-  "develop_head": "a197cbe2dae460cbd4d091ca73923b4d5bac1fce",
-  "active_sync_commit": "8464c564997f47be65166afca06f1c100d3acf93",
+  "develop_head": "43363f7c2d87a9815b7b4c14b5712564b50ad53b",
+  "active_sync_commit": "0fb0fcf65aa6e3c1606a31d358b16e05ea4af2dc",
   "active_source_tree_unchanged": true,
   "restored_work_files": 6,
   "preserved_original_untracked_files": 21,
@@ -309,5 +319,5 @@
   ],
   "retained": [],
   "second_batch_joint_acceptance_commit": "4680e2c1829278743ab06e31877ee37b9ff037bd",
-  "active_feature": "feature/desktop-service"
+  "active_feature": "feature/release-packaging"
 }

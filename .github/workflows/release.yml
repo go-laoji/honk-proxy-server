@@ -1,0 +1,103 @@
+name: Release candidates and quality gates
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  HPS_FORBID_HOST_NETWORK_CHANGES: '1'
+jobs:
+  web:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288 # v5
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24.15.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck && pnpm format:check && pnpm build
+      - run: python3 scripts/verify-p0-evidence.py
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: shared-web
+          path: dist/
+          if-no-files-found: error
+  ebpf:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - run: docker build -f packaging/Dockerfile.builder -t hps-ci-builder .
+      - run: |
+          mkdir -p target/ci/objects
+          docker run --rm --cpus 2 --memory 4g -v "$PWD:/work:ro" -v "$PWD/target/ci/objects:/out" hps-ci-builder sh /work/scripts/ci-ebpf.sh
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: kernel-objects
+          path: target/ci/objects/
+          if-no-files-found: error
+  kernel:
+    needs: [web, ebpf]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            architecture: x86_64
+          - runner: ubuntu-24.04-arm
+            architecture: aarch64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: shared-web
+          path: dist
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: kernel-objects
+          path: target/ci/objects
+      - run: scripts/ci-kernel.sh "$PWD/target/ci/kernel" "$PWD/target/ci/objects"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: kernel-${{ matrix.architecture }}
+          path: target/ci/kernel/
+          if-no-files-found: error
+  kernel-gate:
+    needs: kernel
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: kernel-aarch64
+          path: target/ci/reports/aarch64
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: kernel-x86_64
+          path: target/ci/reports/x86_64
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: kernel-objects
+          path: target/ci/verified-kernel
+      - run: python3 scripts/aggregate-kernel-release.py --reports target/ci/reports --object target/ci/verified-kernel/hps-ebpf.elf --output target/ci/verified-kernel/acceptance.json
+      - run: rm target/ci/verified-kernel/hps-ebpf-abi3.elf
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: verified-kernel
+          path: target/ci/verified-kernel/
+          if-no-files-found: error
+  headless:
+    needs: [web, kernel-gate]
+    uses: ./.github/workflows/headless.yml
+  desktop:
+    needs: [web, kernel-gate]
+    uses: ./.github/workflows/desktop.yml

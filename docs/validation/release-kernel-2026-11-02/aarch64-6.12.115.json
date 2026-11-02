@@ -1,0 +1,38 @@
+{
+  "architecture": "aarch64",
+  "actual_kernel": "6.12.115",
+  "image": "hps-ebpf-kernel612:dev",
+  "cases": [
+    "real_hpsd_sigkill_recovery_preserves_foreign_rules"
+  ],
+  "passed": 1,
+  "evidence": [
+    {
+      "actual_process_killed": true,
+      "epoch_changed": true,
+      "foreign_priority_conflict_refused": true,
+      "foreign_rule_preserved": true,
+      "full_transparent_datapath_ready": false,
+      "graceful_shutdown_owned_rules_removed": true,
+      "kernel": "6.12.115-0-virt",
+      "object_sha256": "fa5449609f86a6b50300a83a6e10d2f2150aa42eaa6676c8e64dd1581bbd5286",
+      "old_programs_released": true,
+      "owned_route_residue_detected": true,
+      "persisted_revision_recovered": 1,
+      "readyz_requires_actual_capture_and_forwarding": true,
+      "real_tcp_udp_before_and_after_restart": true,
+      "scope": "standalone_hpsd_sigkill_recovery_only",
+      "signal": 9
+    }
+  ],
+  "serial_log": "aarch64-6.12.115.log",
+  "guest_artifacts_sha256": {
+    "test-cases": "393c052bc185d9d17a1476190ed43d4ff3c1b7c53934f2bd317c768d32385d87",
+    "test-linux_capture-3f1a2c4413315411": "d089cf104fe5e20bdc5b38aa4d61aab35120e3880c2bd3cf5a207eec09688c69",
+    "hpsd": "1a7c24ef692345f42f915f96f357f28243c414be50cbe9532988880d49ac19a9",
+    "hps-ebpf": "fa5449609f86a6b50300a83a6e10d2f2150aa42eaa6676c8e64dd1581bbd5286",
+    "hps-ebpf-legacy": "ae2c694f313abbc61c7c7a36dee119bb06dadaff3336d6ccf73ddac0a59143e3"
+  },
+  "kernel_apk_sha256": "445dd29708c1df38c6643e2d6e7b4ac86ff6ab1e26e14f6c512c1e64794b51ef",
+  "full_transparent_datapath_ready": false
+}

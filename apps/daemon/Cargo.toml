@@ -9,6 +9,8 @@ name = "hpsd"
 path = "src/main.rs"
 
 [dependencies]
+hps-domain.workspace = true
+serde_json.workspace = true
 hps-api.workspace = true
 hps-config.workspace = true
 hps-engine.workspace = true
@@ -26,11 +28,9 @@ default = ["web-ui"]
 web-ui = ["hps-api/web-ui"]
 
 [dev-dependencies]
-hps-domain.workspace = true
 hps-net.workspace = true
 toml.workspace = true
 hps-client.workspace = true
-serde_json.workspace = true
 rcgen = "0.14"
 tempfile = "3"
 reqwest.workspace = true
