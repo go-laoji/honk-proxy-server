@@ -61,7 +61,13 @@ export default function LinuxPage({
             </p>
           </div>
           <button className="btn" disabled={loading} onClick={refresh}>
-            <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
+            <span
+              className="action-icon inline-flex"
+              data-spinning={loading}
+              aria-hidden="true"
+            >
+              <RefreshCw size={15} />
+            </span>
             刷新预检
           </button>
         </div>

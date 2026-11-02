@@ -1,0 +1,107 @@
+{
+  "date": "2026-11-02",
+  "issue": 27,
+  "branch": "feature/console-color-motion",
+  "ui_code_revision": "4886e8f195e83c0c5927c2286d5d7e93bfeb8d38",
+  "web_build_id": "2ef9e4298ab0f893540f3efe3ae48e19c11f411074d4e3dfd91d0e44b108dab5",
+  "shared_mpa_pages": 18,
+  "direction": "approved LIGHT reference: cold white sidebar, full-row soft-blue selection, thin blue card borders, truthful subtle chart areas",
+  "colors": {
+    "primary": "#2563EB",
+    "primary_hover": "#1D4ED8",
+    "light_page": "#F4F7FC",
+    "light_surface": "#FFFFFF",
+    "dark_page": "#0B1220",
+    "dark_surface": "#111C30",
+    "dark_border": "#24334D",
+    "dark_accent": "#60A5FA",
+    "dark_upload_detail": "#38BDF8",
+    "light_upload_contrast": "#0284C7",
+    "light_sidebar": "#FCFDFF",
+    "light_nav_active": "#DBE8FF",
+    "light_card_outline": "#C5D5F4",
+    "dark_nav_active": "#203F73",
+    "dark_card_outline": "#314B72"
+  },
+  "checks": {
+    "typescript": true,
+    "prettier": true,
+    "production_mpa_build": true,
+    "mac_daemon_embeds_exact_web_build": true,
+    "browser_full_suite_passed": 27,
+    "key_text_contrast_minimum": 4.5,
+    "themes": [
+      "light",
+      "dark"
+    ],
+    "viewports": [
+      [
+        1440,
+        1000
+      ],
+      [
+        390,
+        844
+      ]
+    ],
+    "actual_refresh_respects_reduced_motion": true,
+    "mobile_overflow_checked": true,
+    "visual_and_motion_tests_within_full_suite": 2,
+    "browser_full_suite_source_revision": "731cc741175b9196318e50e143f95966c95a5514",
+    "browser_full_suite_web_build_id": "696f528484ee157e7eb462e6258433b14bc3f29fa3382bb0504e2b42919fe352",
+    "final_border_adjustment_targeted_passed": 3,
+    "targeted_not_added_to_full_count": true
+  },
+  "screenshots": {
+    "mobile-dark-navigation.png": {
+      "path": "target/validation/console-color-motion-2026-11-02/mobile-dark-navigation.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "fc016aa006d4a121568949829ff2fb6cb6cb8cf7456e6fd0d414983acf06e975"
+    },
+    "mobile-dark-settings.png": {
+      "path": "target/validation/console-color-motion-2026-11-02/mobile-dark-settings.png",
+      "width": 390,
+      "height": 2138,
+      "sha256": "7d70400d4a7c50ff731e13fc8add2e9a45b61790c8cb0ad2700ff922fe8e879f"
+    },
+    "overview-dark-viewport.png": {
+      "path": "target/validation/console-color-motion-2026-11-02/overview-dark-viewport.png",
+      "width": 1440,
+      "height": 1000,
+      "sha256": "97128d5259f5f5dba8ff58ef074231ef7453734f45590d59fec9d2e78ee79960"
+    },
+    "overview-dark.png": {
+      "path": "target/validation/console-color-motion-2026-11-02/overview-dark.png",
+      "width": 1440,
+      "height": 2258,
+      "sha256": "9ba222e0f19d00507c4f56309706afaf3f14faec68f0afa8456c45d189f015fc"
+    },
+    "overview-light-viewport.png": {
+      "path": "target/validation/console-color-motion-2026-11-02/overview-light-viewport.png",
+      "width": 1440,
+      "height": 1000,
+      "sha256": "23e72aed5142bea1e0ba8b1dfb65837e157af651f51ad2532fc40d756385513d"
+    },
+    "overview-light.png": {
+      "path": "target/validation/console-color-motion-2026-11-02/overview-light.png",
+      "width": 1440,
+      "height": 2258,
+      "sha256": "ced69619194ca3e02b6f6c8b8db976e9d07d65eca771d946edc2ac7271381703"
+    }
+  },
+  "full_suite_log_sha256": "e8466730ea9e41d1607473f40bc988a125a23234279f570f74dbf238499f7700",
+  "native_desktop_window_tested": false,
+  "installed_bundle_overwritten": false,
+  "new_logo_or_favicon_integrated": false,
+  "host_network_configuration_written": false,
+  "docker_or_x86_build_started": false,
+  "feature_finished": false,
+  "pushed": false,
+  "record_finalized_at_utc": "2026-11-02T16:11:05.622424+00:00",
+  "filename_date_basis": "task start date, 2026-11-02; final record completed 2026-11-03 Asia/Shanghai",
+  "approved_reference": "brand-visual-direction-v2.png LIGHT region",
+  "approved_reference_sha256": "30c14226ab54a0d683bbcb3af09e40a0a03950ccef7a24cd6eb1dbf248038711",
+  "logo_resources_owned_by_separate_task": true,
+  "final_targeted_log_sha256": "a111158fdb2a1dc62b3cf6f91a1ff14411f9a1e2559c56709e1c7b373d8f6b7d"
+}

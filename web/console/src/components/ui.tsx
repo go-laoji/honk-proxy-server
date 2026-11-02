@@ -8,12 +8,8 @@ export function Badge({
   active?: boolean;
 }) {
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${active ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"}`}
-    >
-      <span
-        className={`size-1.5 rounded-full ${active ? "bg-emerald-500" : "bg-slate-400"}`}
-      />
+    <span className="status-badge" data-active={active}>
+      <span className="status-dot" aria-hidden="true" />
       {children}
     </span>
   );
@@ -24,17 +20,21 @@ export function Stat({
   value,
   detail,
   icon: Icon,
+  tone = "brand",
 }: {
   title: string;
   value: string;
   detail: string;
   icon: ComponentType<{ size?: number; className?: string }>;
+  tone?: "brand" | "blue" | "neutral";
 }) {
   return (
-    <div className="panel p-5">
+    <div className="panel stat-card p-5" data-tone={tone}>
       <div className="flex items-center justify-between">
         <p className="muted text-sm">{title}</p>
-        <Icon size={18} className="text-slate-400" />
+        <span className="stat-icon" aria-hidden="true">
+          <Icon size={18} />
+        </span>
       </div>
       <p className="mt-4 text-2xl font-semibold tracking-tight">{value}</p>
       <p className="muted mt-2 text-xs leading-5">{detail}</p>
