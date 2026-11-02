@@ -28,7 +28,7 @@ pub(crate) async fn serve(
         .selection_context
         .source_ip
         .ok_or(ProxyError::InvalidTarget)?;
-    if !requested_ip.is_unspecified() && requested_ip != peer_ip {
+    if !requested_ip.is_unspecified() && requested_ip.to_canonical() != peer_ip.to_canonical() {
         control.write_all(&[5, 2, 0, 1, 0, 0, 0, 0, 0, 0]).await?;
         return Err(ProxyError::Rejected);
     }
@@ -61,7 +61,7 @@ pub(crate) async fn serve(
             Some(_) = tasks.join_next(), if !tasks.is_empty() => { targets.retain(|_, tx| !tx.is_closed()); },
             received = socket.recv_from(&mut packet) => {
                 let (length, peer) = received?;
-                if peer.ip() != peer_ip || locked_peer.is_some_and(|expected| expected != peer) { continue; }
+                if peer.ip().to_canonical() != peer_ip.to_canonical() || locked_peer.is_some_and(|expected| expected != peer) { continue; }
                 // RSV/FRAG/address/size validation occurs before endpoint pinning.
                 let Ok((target, payload)) = udp::decode_datagram(&packet[..length]) else { continue; };
                 let payload = payload.to_vec();

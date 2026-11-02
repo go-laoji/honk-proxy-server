@@ -9,6 +9,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[derive(Clone)]
 pub(crate) struct Choice {
     pub upstream: Arc<Upstream>,
     pub reasons: Vec<String>,
@@ -65,8 +66,25 @@ impl Selector {
         let Some(group) = self.config.groups.iter().find(|g| &g.id == id) else {
             return false;
         };
-        group.pinned_node.is_none()
-            && (group.include_all || group.providers.iter().any(|id| id == provider))
+        // A nested path may request only sources it explicitly contains. Never refill a pinned scope.
+        self.group_allows_refill(group, provider, protocol, 0)
+    }
+    fn group_allows_refill(
+        &self,
+        group: &GroupConfig,
+        provider: &str,
+        protocol: Option<hps_config::ProxyProtocol>,
+        depth: usize,
+    ) -> bool {
+        depth < 8
+            && group.pinned_node.is_none()
+            && (group.include_all
+                || group.providers.iter().any(|id| id == provider)
+                || group
+                    .groups
+                    .iter()
+                    .filter_map(|id| self.config.groups.iter().find(|g| &g.id == id))
+                    .any(|g| self.group_allows_refill(g, provider, protocol, depth + 1)))
             && (group.protocols.is_empty()
                 || protocol.is_some_and(|p| group.protocols.contains(&p)))
             && group.tags.iter().all(|tag| {
@@ -76,11 +94,69 @@ impl Selector {
                     .is_some_and(|tags| tags.contains(tag))
             })
     }
+
     pub fn new(config: SelectionConfig) -> Self {
         Self {
             config,
             state: Mutex::default(),
         }
+    }
+    fn expand_group(
+        &self,
+        id: &str,
+        choices: &[Choice],
+        query: &SelectionQuery,
+        cache: &mut HashMap<String, HashSet<String>>,
+        depth: usize,
+    ) {
+        if cache.contains_key(id) || depth >= 8 {
+            return;
+        }
+        let Some(group) = self.config.groups.iter().find(|g| g.id == id) else {
+            return;
+        };
+        for child in &group.groups {
+            self.expand_group(child, choices, query, cache, depth + 1);
+        }
+        let mut nodes = HashSet::new();
+        for choice in choices {
+            let up = &choice.upstream;
+            if !choice.reasons.is_empty()
+                || (query.transport == SelectionTransport::Udp
+                    && up.config.protocol != hps_config::ProxyProtocol::Socks5)
+                || (group.strategy == GroupStrategy::Latency && choice.latency.is_none())
+            {
+                continue;
+            }
+            let provider = up.source.as_ref().map(|(id, _)| id);
+            let member = group.include_all
+                || group.members.contains(&up.config.id)
+                || provider.is_some_and(|id| group.providers.contains(id))
+                || group.groups.iter().any(|id| {
+                    cache
+                        .get(id)
+                        .is_some_and(|nodes| nodes.contains(&up.config.id))
+                });
+            let tags = self.config.node_tags.get(&up.config.id);
+            let source_tags = provider.and_then(|id| self.config.provider_tags.get(id));
+            if member
+                && (group.protocols.is_empty() || group.protocols.contains(&up.config.protocol))
+                && group.tags.iter().all(|tag| {
+                    tags.is_some_and(|t| t.contains(tag))
+                        || source_tags.is_some_and(|t| t.contains(tag))
+                })
+            {
+                nodes.insert(up.config.id.clone());
+            }
+        }
+        if let Some(pin) = &group.pinned_node {
+            if nodes.contains(pin) {
+                nodes.retain(|id| id == pin);
+            } else {
+                nodes.retain(|id| group.fallback_nodes.contains(id));
+            }
+        }
+        cache.insert(id.to_owned(), nodes);
     }
     pub fn last(&self) -> HashMap<String, String> {
         self.state.lock().unwrap().last.clone()
@@ -130,6 +206,12 @@ impl Selector {
                     .collect::<HashSet<_>>()
             })
             .unwrap_or_default();
+        let mut nested = HashMap::new();
+        if let Some(group) = group {
+            for child in &group.groups {
+                self.expand_group(child, &choices, query, &mut nested, 0);
+            }
+        }
         let mut rows = Vec::with_capacity(choices.len());
         for choice in &choices {
             let up = &choice.upstream;
@@ -157,7 +239,12 @@ impl Selector {
             if let Some(group) = group {
                 let member = group.include_all
                     || members.contains(up.config.id.as_str())
-                    || provider.is_some_and(|id| group.providers.contains(id));
+                    || provider.is_some_and(|id| group.providers.contains(id))
+                    || group.groups.iter().any(|id| {
+                        nested
+                            .get(id)
+                            .is_some_and(|nodes| nodes.contains(&up.config.id))
+                    });
                 if !member {
                     reasons.push("not_member".into());
                 }
@@ -190,6 +277,22 @@ impl Selector {
                 reasons,
                 remaining_secs: choice.remaining.map(|r| r.as_secs()),
                 latency_ms: choice.latency,
+                member_groups: group
+                    .map(|g| {
+                        g.groups
+                            .iter()
+                            .filter(|id| {
+                                nested
+                                    .get(*id)
+                                    .is_some_and(|nodes| nodes.contains(&up.config.id))
+                            })
+                            .cloned()
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                score: group
+                    .filter(|g| g.strategy == GroupStrategy::Score)
+                    .map(|g| score(g, choice)),
                 weight: group
                     .and_then(|g| g.weights.get(&up.config.id))
                     .copied()
@@ -210,6 +313,8 @@ impl Selector {
                 remaining_secs: None,
                 latency_ms: None,
                 weight: 1,
+                member_groups: vec![],
+                score: None,
             });
         }
         if let Some(group) = group {
@@ -234,6 +339,8 @@ impl Selector {
                         remaining_secs: None,
                         latency_ms: None,
                         weight: 1,
+                        member_groups: vec![],
+                        score: None,
                     });
                 }
             }
@@ -299,6 +406,14 @@ impl Selector {
                     .iter()
                     .copied()
                     .min_by_key(|&i| (rows[i].latency_ms.unwrap_or(u64::MAX), i)),
+                GroupStrategy::Score => eligible.iter().copied().max_by(|&a, &b| {
+                    rows[a]
+                        .score
+                        .as_ref()
+                        .map(|s| s.total)
+                        .cmp(&rows[b].score.as_ref().map(|s| s.total))
+                        .then_with(|| b.cmp(&a))
+                }),
                 GroupStrategy::RoundRobin => {
                     Some(eligible[(cursor % eligible.len() as u64) as usize])
                 }
@@ -407,6 +522,7 @@ impl Selector {
                     GroupStrategy::Latency => "latency",
                     GroupStrategy::RoundRobin => "round_robin",
                     GroupStrategy::Weighted => "weighted",
+                    GroupStrategy::Score => "score",
                 }
                 .into(),
                 selected,
@@ -421,6 +537,70 @@ impl Selector {
             },
             upstream,
         )
+    }
+}
+fn score(group: &GroupConfig, choice: &Choice) -> hps_domain::CandidateScore {
+    use hps_domain::{CandidateScore, ScoreComponent};
+    let policy = &group.score;
+    let weight_sum = u64::from(policy.latency_weight)
+        + u64::from(policy.lifetime_weight)
+        + u64::from(policy.priority_weight);
+    let values = [
+        (
+            "fresh_health_probe_latency_ms",
+            choice.latency,
+            choice.latency.map(|ms| {
+                1000u64.saturating_sub(ms.saturating_mul(1000) / policy.latency_ceiling_ms)
+            }),
+            policy.latency_weight,
+        ),
+        (
+            "admission_remaining_lifetime_secs",
+            choice.remaining.map(|d| d.as_secs()),
+            choice
+                .remaining
+                .map(|d| d.as_secs().saturating_mul(1000) / policy.lifetime_target_secs),
+            policy.lifetime_weight,
+        ),
+        (
+            "configured_operator_priority",
+            group
+                .weights
+                .get(&choice.upstream.config.id)
+                .map(|v| u64::from(*v)),
+            group
+                .weights
+                .get(&choice.upstream.config.id)
+                .map(|v| u64::from(*v)),
+            policy.priority_weight,
+        ),
+    ];
+    let components = values
+        .into_iter()
+        .filter(|(_, _, _, weight)| *weight > 0)
+        .map(|(source, observed, normalized, weight)| {
+            let normalized = normalized.map(|n| n.min(1000) as u16);
+            let missing_penalty = if normalized.is_none() {
+                policy.missing_evidence_penalty
+            } else {
+                0
+            };
+            let contribution = (u64::from(normalized.unwrap_or(0)) * u64::from(weight)
+                / weight_sum.max(1)) as i64
+                - i64::from(missing_penalty);
+            ScoreComponent {
+                source: source.into(),
+                observed,
+                normalized,
+                weight,
+                contribution,
+                missing_penalty,
+            }
+        })
+        .collect::<Vec<_>>();
+    CandidateScore {
+        total: components.iter().map(|c| c.contribution).sum(),
+        components,
     }
 }
 fn session_key(group: &GroupConfig, query: &SelectionQuery) -> Option<String> {
@@ -669,5 +849,78 @@ mod tests {
         assert_eq!(d.reason, "unknown_group");
         s.retire();
         assert_eq!(s.decide(choices(), &other, true).0.sessions, 0);
+    }
+    #[test]
+    fn nested_candidates_keep_child_filters_pin_fallback_and_parent_udp_scope() {
+        let mut child = group(GroupStrategy::Fixed);
+        child.id = "child".into();
+        child.pinned_node = Some("a".into());
+        child.fallback_nodes = vec!["b".into()];
+        let parent = GroupConfig {
+            id: "parent".into(),
+            groups: vec!["child".into()],
+            ..Default::default()
+        };
+        let selector = Selector::new(SelectionConfig {
+            groups: vec![parent, child],
+            default_group: Some("parent".into()),
+            ..Default::default()
+        });
+        let decision = selector
+            .decide(choices(), &SelectionQuery::default(), false)
+            .0;
+        assert_eq!(decision.selected.as_deref(), Some("a"));
+        assert_eq!(decision.eligible, 1);
+        assert_eq!(decision.candidates[0].member_groups, vec!["child"]);
+        let mut failed = choices();
+        failed[0].reasons.push("health_unavailable".into());
+        let decision = selector.decide(failed, &SelectionQuery::default(), false).0;
+        assert_eq!(decision.selected.as_deref(), Some("b"));
+        assert_eq!(decision.eligible, 1);
+        let decision = selector
+            .decide(
+                choices(),
+                &SelectionQuery {
+                    transport: SelectionTransport::Udp,
+                    ..Default::default()
+                },
+                false,
+            )
+            .0;
+        assert!(decision.selected.is_none());
+    }
+    #[test]
+    fn advanced_score_lists_sources_components_and_missing_evidence_penalties() {
+        let mut group = group(GroupStrategy::Score);
+        group.weights.insert("a".into(), 1000);
+        group.weights.insert("b".into(), 100);
+        let selector = selector(group);
+        let mut nodes = choices();
+        nodes[0].latency = None;
+        let decision = selector.decide(nodes, &SelectionQuery::default(), false).0;
+        let a = decision
+            .candidates
+            .iter()
+            .find(|n| n.node_id == "a")
+            .unwrap()
+            .score
+            .as_ref()
+            .unwrap();
+        assert_eq!(a.components[0].source, "fresh_health_probe_latency_ms");
+        assert!(a.components[0].observed.is_none());
+        assert_eq!(a.components[0].missing_penalty, 250);
+        assert_eq!(
+            a.total,
+            a.components.iter().map(|c| c.contribution).sum::<i64>()
+        );
+        assert!(decision.candidates.iter().all(|n| {
+            n.score
+                .as_ref()
+                .unwrap()
+                .components
+                .iter()
+                .all(|c| !c.source.contains("cost") && !c.source.contains("region"))
+        }));
+        assert_eq!(decision.selected.as_deref(), Some("b"));
     }
 }

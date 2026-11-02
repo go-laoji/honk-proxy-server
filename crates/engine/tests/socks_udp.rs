@@ -178,3 +178,58 @@ async fn udp_associate_rejects_foreign_source_and_no_udp_capability() {
     assert_eq!(code, 7);
     entry.shutdown().await;
 }
+
+#[tokio::test]
+async fn udp_targets_share_global_entry_limits_and_inbound_stop_releases_all() {
+    let mut config = ProxyConfig::default();
+    let mut inbound = support::inbound("socks", ProxyProtocol::Socks5, None);
+    inbound.max_connections = 3;
+    config.inbounds.push(inbound);
+    config.limits.max_connections = 4;
+    config.routing.default_action = RouteAction::Direct;
+    let entry = Engine::new(config).unwrap();
+    entry.start_enabled().await.unwrap();
+    let socket = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    let (tcp, relay, code) = associate(&entry, socket.local_addr().unwrap()).await;
+    assert_eq!(code, 0);
+    let mut origins = Vec::new();
+    let mut tasks = Vec::new();
+    for _ in 0..3 {
+        let (origin, task) = echo(false).await;
+        origins.push(origin);
+        tasks.push(task);
+    }
+    let mut buffer = [0; 200];
+    for origin in origins.iter().take(2) {
+        let target = Target::new(&origin.ip().to_string(), origin.port()).unwrap();
+        socket
+            .send_to(&encode_datagram(&target, b"admitted").unwrap(), relay)
+            .await
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(3), socket.recv(&mut buffer))
+            .await
+            .unwrap()
+            .unwrap();
+    }
+    assert_eq!(entry.status().active_connections, 3); // one TCP owner, two target flows
+    let third = Target::new(&origins[2].ip().to_string(), origins[2].port()).unwrap();
+    socket
+        .send_to(&encode_datagram(&third, b"over-budget").unwrap(), relay)
+        .await
+        .unwrap();
+    assert!(
+        tokio::time::timeout(Duration::from_millis(80), socket.recv(&mut buffer))
+            .await
+            .is_err()
+    );
+    assert_eq!(entry.status().active_connections, 3);
+    entry.stop("socks").await.unwrap();
+    assert_eq!(entry.status().active_connections, 0);
+    let rebound = UdpSocket::bind(relay).await.unwrap();
+    drop(rebound);
+    drop(tcp);
+    for task in tasks {
+        task.abort();
+    }
+    entry.shutdown().await;
+}
