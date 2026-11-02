@@ -50,12 +50,45 @@ impl Supervisor {
         let document = self.store.revision(viewed).await?;
         let delta = changes(&current.base_config, &document.config);
         let other = !only_routing_changed(&current.base_config, &document.config)?;
-        Ok(RulesOverview{running_revision:current.revision,desired_revision:workspace.desired.revision.id,viewed_revision:viewed,
-            viewed_parent_revision:document.revision.parent_id,configuration:document.config.proxy.routing,active_configuration:current.base_config.proxy.routing.clone(),
-            candidates:workspace.revisions.into_iter().filter(|r|r.note=="Routing rules candidate"&&r.applied_at.is_none()).take(50).map(revision_view).collect(),
-            changes:delta,other_configuration_changes:other,capabilities:RuleCapabilities{local_process_available:false,
-                local_process_reason:"No attached and verified local Linux process-origin data plane; remote explicit-proxy clients and gateway processes cannot be inferred".into(),
-                udp_data_plane_available:false,kernel_rule_revision:None,kernel_rules_ready:false}})
+        let capture = if let Some(capture) = &current.transparent {
+            capture.status(current.revision).await
+        } else {
+            hps_domain::LinuxCaptureStatus::unconfigured(current.revision)
+        };
+        let local_process = capture.ready
+            && capture
+                .scope
+                .as_ref()
+                .is_some_and(|s| s.local_cgroup.is_some());
+        let udp = capture.ready && capture.scope.as_ref().is_some_and(|s| s.udp);
+        Ok(RulesOverview {
+            running_revision: current.revision,
+            desired_revision: workspace.desired.revision.id,
+            viewed_revision: viewed,
+            viewed_parent_revision: document.revision.parent_id,
+            configuration: document.config.proxy.routing,
+            active_configuration: current.base_config.proxy.routing.clone(),
+            candidates: workspace
+                .revisions
+                .into_iter()
+                .filter(|r| r.note == "Routing rules candidate" && r.applied_at.is_none())
+                .take(50)
+                .map(revision_view)
+                .collect(),
+            changes: delta,
+            other_configuration_changes: other,
+            capabilities: RuleCapabilities {
+                local_process_available: local_process,
+                local_process_reason: if local_process {
+                    "Verified local cgroup capture is ready; explicit and gateway client processes remain unknown".into()
+                } else {
+                    capture.reason.unwrap_or_else(|| "No ready local cgroup capture; explicit and gateway client processes remain unknown".into())
+                },
+                udp_data_plane_available: udp,
+                kernel_rule_revision: capture.kernel_revision,
+                kernel_rules_ready: capture.ready,
+            },
+        })
     }
     pub async fn save_rules(
         self: &Arc<Self>,
@@ -249,7 +282,7 @@ impl Supervisor {
             tokio::task::spawn_blocking(move || {
                 let _permit = worker_permit;
                 let resolver = dns::prepare(&config, Some(&old))?;
-                let candidate = Engine::with_previous(config.proxy.clone(), Some(&old.engine))?;
+                let candidate = prepare_proxy_engine(&config, Some(&old.engine))?;
                 let profiles = prepare_network(&config, &candidate, &resolver)?;
                 let reuse = candidate.preparation_fingerprint()
                     == old.engine.preparation_fingerprint()
@@ -288,7 +321,7 @@ impl Supervisor {
             );
         }
         if input.context.process.is_some() {
-            result.notes.push("Declared process context is hypothetical; actual process origin remains unavailable until attached and verified".into());
+            result.notes.push("Declared process context is hypothetical; production process identity comes only from verified local kernel metadata".into());
         }
         Ok(result)
     }

@@ -223,7 +223,7 @@
       "acceptance": "无账号条件或功能权限；模拟与实际决策一致；用户态和eBPF原子版本一致；目标不支持条件不能误显示支持。",
       "issue": 16,
       "url": "https://github.com/go-laoji/honk-proxy-server/issues/16",
-      "status": "in_progress"
+      "status": "completed"
     },
     {
       "id": "T12",
@@ -270,7 +270,7 @@
       "acceptance": "实际转发计数；不解析HTTPS正文；主动断开范围明确；重连补快照、切页取消，不无限内存增长。",
       "issue": 18,
       "url": "https://github.com/go-laoji/honk-proxy-server/issues/18",
-      "status": "in_progress"
+      "status": "completed"
     },
     {
       "id": "T14",
@@ -317,7 +317,7 @@
       "acceptance": "以6.12 LTS及当前可用Linux内核为初始验证目标，完成x86_64/aarch64真实出口矩阵；失败不假报ready；清理不损伤其他网络对象；异常退出可恢复。最终最低内核要求由本项目程序与测试决定。",
       "issue": 20,
       "url": "https://github.com/go-laoji/honk-proxy-server/issues/20",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "T16",

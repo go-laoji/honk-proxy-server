@@ -94,6 +94,7 @@ export const taskKinds: Record<string, string> = {
   dns_diagnostic: "DNS 诊断",
   provider_diagnostic: "供应商诊断",
   rules_diagnostic: "规则模拟",
+  linux_capture_control: "透明代理启停与恢复",
   group_diagnostic: "分组模拟",
 };
 export const taskStates: Record<string, string> = {
@@ -163,6 +164,8 @@ export function sourceLink(
   task: TaskInfo,
   epoch: string,
 ): { label: string; href: string } | null {
+  if (task.kind === "linux_capture_control")
+    return { label: "透明代理运行控制", href: "./linux.html" };
   const source = task.source_ref?.split(":");
   if (source?.[0] === "provider" && task.resource_id)
     return {

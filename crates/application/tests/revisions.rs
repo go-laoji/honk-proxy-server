@@ -572,3 +572,21 @@ fn legacy_config() -> DaemonConfig {
         ..Default::default()
     }
 }
+
+#[cfg(not(target_os = "linux"))]
+#[tokio::test]
+async fn transparent_capture_is_explicitly_rejected_on_non_linux_before_starting_runtime() {
+    let config = DaemonConfig {
+        linux_capture: Some(hps_config::LinuxCaptureConfig {
+            object: "/fixture/hps-ebpf".into(),
+            local_cgroup: Some("/fixture/cgroup".into()),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let store = Store::open(None, config).unwrap();
+    let result = Supervisor::boot(store, StartupOverrides::default()).await;
+    assert!(
+        matches!(result,Err(ApplicationError::Capture(message))if message.contains("requires Linux"))
+    );
+}

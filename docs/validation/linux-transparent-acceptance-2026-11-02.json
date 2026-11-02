@@ -1,0 +1,39 @@
+{
+  "issues": [
+    16,
+    18,
+    20
+  ],
+  "scope": "joint_linux_transparent_routing_and_connections",
+  "ebpf_abi": 4,
+  "ebpf_object_sha256": "fa5449609f86a6b50300a83a6e10d2f2150aa42eaa6676c8e64dd1581bbd5286",
+  "core_matrix_passed": 48,
+  "nonlocal_matrix_passed": 4,
+  "total_actual_kernel_cases": 52,
+  "architectures": [
+    "aarch64",
+    "x86_64"
+  ],
+  "kernels": [
+    "6.12.115",
+    "7.2.14"
+  ],
+  "minimum_verified_kernel": "6.12.115",
+  "actual_cli_and_browser_control_verified": true,
+  "candidate_simulation_and_atomic_publication_verified": true,
+  "actual_connection_metadata_bytes_and_owner_cancellation_verified": true,
+  "interface_link_route_faults_and_bounded_recovery_verified": true,
+  "standalone_daemon_sigkill_and_foreign_ownership_verified": true,
+  "no_project_login_or_permissions": true,
+  "web_build_id": "228c6cbfff44c5726202acd4b9d89386bd0d1abe7607a168ade9141ad168dfb0",
+  "core_implementation_commit": "d60934d",
+  "nonlocal_validation_commit": "94be157",
+  "console_commit": "21bb9cb",
+  "full_transparent_datapath_ready": true,
+  "boundaries": [
+    "paid_supplier_account_call_not_verified",
+    "active_udp_health_probe_unsupported",
+    "strict_persistent_crash_kill_switch_reserved_for_linux07",
+    "desktop_system_service_and_packaging_are_following_issues"
+  ]
+}

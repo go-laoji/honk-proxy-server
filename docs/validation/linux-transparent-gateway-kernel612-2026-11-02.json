@@ -1,0 +1,14 @@
+{
+  "bypassed_tcp_flows": 2,
+  "full_transparent_datapath_ready": false,
+  "gateway_process_unknown": true,
+  "ipv4_ipv6_tcp_udp": true,
+  "kernel": "6.12.115-0-virt",
+  "object_sha256": "fa5449609f86a6b50300a83a6e10d2f2150aa42eaa6676c8e64dd1581bbd5286",
+  "scope": "actual_gateway_shared_engine_only",
+  "source_rules_and_fixed_groups": true,
+  "tcp_http_upstream_flows": 2,
+  "tcp_payload_bytes_per_flow_each_direction": 262144,
+  "udp_payload_bytes_per_flow_each_direction": 1200,
+  "udp_socks5_associations": 2
+}

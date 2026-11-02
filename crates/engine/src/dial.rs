@@ -16,6 +16,8 @@ use tokio_rustls::{
     TlsConnector,
     rustls::{ClientConfig, pki_types::ServerName},
 };
+mod datagram;
+pub use datagram::DatagramConnection;
 
 pub(crate) struct Upstream {
     pub(crate) config: UpstreamConfig,
@@ -79,6 +81,7 @@ pub struct Dialer {
     min_lifetime: u64,
     max_header: usize,
     resolver: std::sync::RwLock<Option<Arc<dyn hps_net::NameResolver>>>,
+    capabilities: crate::routing::RoutingCapabilities,
 }
 #[derive(Debug)]
 pub struct DialFailure {
@@ -217,16 +220,28 @@ impl Dialer {
         }
     }
     pub fn new(config: &ProxyConfig) -> Result<Self, ProxyError> {
+        Self::with_routing_capabilities(config, crate::routing::RoutingCapabilities::default())
+    }
+    pub fn for_datagrams(config: &ProxyConfig) -> Result<Self, ProxyError> {
+        Self::with_routing_capabilities(
+            config,
+            crate::routing::RoutingCapabilities {
+                local_process: false,
+                udp: true,
+            },
+        )
+    }
+    pub(crate) fn with_routing_capabilities(
+        config: &ProxyConfig,
+        capabilities: crate::routing::RoutingCapabilities,
+    ) -> Result<Self, ProxyError> {
         let mut scope = Sha256::new();
         scope.update(
             serde_json::to_vec(&(&config.selection, &config.routing, &config.inbounds))
                 .map_err(|_| ProxyError::RuleConfiguration)?,
         );
         let refill_fingerprint = format!("{:x}", scope.finalize());
-        let router = crate::routing::Router::compile(
-            config,
-            crate::routing::RoutingCapabilities::default(),
-        )?;
+        let router = crate::routing::Router::compile(config, capabilities)?;
         let upstreams = config
             .upstreams
             .iter()
@@ -254,6 +269,7 @@ impl Dialer {
             min_lifetime: config.limits.min_remaining_lifetime_secs,
             max_header: config.limits.max_header_bytes,
             resolver: Default::default(),
+            capabilities,
         })
     }
     pub fn probe_plans(self: &Arc<Self>) -> Vec<ProbePlan> {
@@ -405,7 +421,7 @@ impl Dialer {
         };
         let health_evaluated_at_unix = selection.as_ref().map(|_| crate::routing::unix_now());
         hps_domain::RouteSimulation {
-            action_supported: context.transport == hps_domain::SelectionTransport::Tcp || decision.action == hps_domain::RouteAction::Reject,
+            action_supported: context.transport == hps_domain::SelectionTransport::Tcp || self.capabilities.udp || decision.action == hps_domain::RouteAction::Reject,
             decision,
             selection,
             health_evaluated_at_unix,
@@ -413,12 +429,21 @@ impl Dialer {
         }
     }
     pub fn can_forward(&self, inbound: &str, protocol: &str) -> bool {
+        self.can_forward_transport(inbound, protocol, hps_domain::SelectionTransport::Tcp)
+    }
+    pub fn can_forward_transport(
+        &self,
+        inbound: &str,
+        protocol: &str,
+        transport: hps_domain::SelectionTransport,
+    ) -> bool {
         self.router
-            .potential_actions(inbound, protocol)
+            .potential_actions(inbound, protocol, transport)
             .iter()
             .any(|action| {
                 let mut query = hps_domain::SelectionQuery {
-                    inbound: Some(inbound.into()),
+                    inbound: (!inbound.is_empty()).then(|| inbound.into()),
+                    transport,
                     ..Default::default()
                 };
                 match action {
@@ -553,27 +578,34 @@ impl Dialer {
                 Ok(connected)
             }
             Err(error) => {
-                let (phase, code, rejected) = match &error {
-                    ProxyError::Rejected => ("routing", "rule_rejected", true),
-                    ProxyError::NoUpstream => ("admission", "no_eligible_upstream", false),
-                    ProxyError::UnsupportedRule => ("routing", "unsupported_transport", false),
-                    ProxyError::Disconnected => ("dialing", "connection_disconnected", false),
-                    ProxyError::LocalResource => ("local", "local_resource_exhausted", false),
-                    ProxyError::Dns => ("dns", "endpoint_dns_failed", false),
-                    ProxyError::Endpoint => ("endpoint_connect", "endpoint_connect_failed", false),
-                    ProxyError::UpstreamTls => ("upstream_tls", "upstream_tls_failed", false),
-                    ProxyError::Authentication => {
-                        ("authentication", "upstream_authentication_failed", false)
-                    }
-                    ProxyError::TargetConnect => ("target_connect", "target_connect_failed", false),
-                    ProxyError::Timeout => ("dialing", "connect_timeout", false),
-                    ProxyError::Policy(_) => ("target_connect", "upstream_target_policy", false),
-                    _ => ("dialing", "proxy_handshake_failed", false),
-                };
-                observation.fail_unless_recorded(phase, code, rejected);
+                self.record_connection_error(&observation, &error);
                 Err(error)
             }
         }
+    }
+    fn record_connection_error(
+        &self,
+        observation: &crate::connections::ConnectionGuard,
+        error: &ProxyError,
+    ) {
+        let (phase, code, rejected) = match error {
+            ProxyError::Rejected => ("routing", "rule_rejected", true),
+            ProxyError::NoUpstream => ("admission", "no_eligible_upstream", false),
+            ProxyError::UnsupportedRule => ("routing", "unsupported_transport", false),
+            ProxyError::Disconnected => ("dialing", "connection_disconnected", false),
+            ProxyError::LocalResource => ("local", "local_resource_exhausted", false),
+            ProxyError::Dns => ("dns", "endpoint_dns_failed", false),
+            ProxyError::Endpoint => ("endpoint_connect", "endpoint_connect_failed", false),
+            ProxyError::UpstreamTls => ("upstream_tls", "upstream_tls_failed", false),
+            ProxyError::Authentication => {
+                ("authentication", "upstream_authentication_failed", false)
+            }
+            ProxyError::TargetConnect => ("target_connect", "target_connect_failed", false),
+            ProxyError::Timeout => ("dialing", "connect_timeout", false),
+            ProxyError::Policy(_) => ("target_connect", "upstream_target_policy", false),
+            _ => ("dialing", "proxy_handshake_failed", false),
+        };
+        observation.fail_unless_recorded(phase, code, rejected);
     }
     async fn connect_decided(
         &self,
@@ -592,6 +624,70 @@ impl Dialer {
         if decision.action == hps_domain::RouteAction::Direct {
             return self.connect_direct(target, decision.clone()).await;
         }
+        let (upstream, demand) = self.admit_route(target, context, decision, observation)?;
+        let progress = Progress::new();
+        let outcome = tokio::time::timeout(
+            self.timeout,
+            self.connect_selected(&upstream, target, http_forward, &progress),
+        )
+        .await
+        .unwrap_or(Err(ProxyError::Timeout));
+        if let Err(error) = &outcome {
+            self.record_attempt_failure(&upstream, &progress, error);
+        }
+        if let Ok(connected) = &outcome {
+            self.traffic_feedback(
+                &connected.upstream_id,
+                &connected.identity,
+                if connected.absolute_form {
+                    ProbePhase::EndpointConnect
+                } else {
+                    ProbePhase::ProxyTunnel
+                },
+                if connected.absolute_form {
+                    "endpoint_connected"
+                } else {
+                    "tunnel_established"
+                },
+                false,
+            );
+        }
+        outcome.map(|mut connected| {
+            connected.io = demand.wrap(connected.io);
+            connected.routing = Some(decision.clone());
+            connected
+        })
+    }
+    fn record_attempt_failure(&self, upstream: &Upstream, progress: &Progress, error: &ProxyError) {
+        let phase = *progress.phase.lock().unwrap();
+        let (code, global) = match error {
+            ProxyError::LocalResource => ("local_resource_exhausted", false),
+            ProxyError::Endpoint => ("endpoint_connect_failed", true),
+            ProxyError::Dns => ("endpoint_dns_failed", false),
+            ProxyError::UpstreamTls => ("upstream_tls_failed", true),
+            ProxyError::Authentication => ("upstream_authentication_failed", true),
+            ProxyError::Timeout => (
+                "proxy_handshake_timeout",
+                matches!(
+                    phase,
+                    ProbePhase::EndpointConnect
+                        | ProbePhase::UpstreamTls
+                        | ProbePhase::Authentication
+                ),
+            ),
+            ProxyError::Policy(_) => ("proxy_target_policy", false),
+            ProxyError::TargetConnect => ("proxy_target_connect_failed", false),
+            _ => ("proxy_protocol_failed", false),
+        };
+        self.traffic_feedback(&upstream.config.id, &upstream.identity, phase, code, global);
+    }
+    fn admit_route(
+        &self,
+        target: &Target,
+        context: &hps_domain::RoutingContext,
+        decision: &hps_domain::RouteDecision,
+        observation: &crate::connections::ConnectionGuard,
+    ) -> Result<(Arc<Upstream>, crate::demand::DemandGuard), ProxyError> {
         let mut query = hps_domain::SelectionQuery {
             inbound: context.inbound.clone(),
             source_ip: context.source_ip,
@@ -663,58 +759,7 @@ impl Dialer {
             observation.fail("admission", "node_no_longer_eligible", false);
             return Err(ProxyError::NoUpstream);
         }
-        let progress = Progress::new();
-        let outcome = tokio::time::timeout(
-            self.timeout,
-            self.connect_selected(&upstream, target, http_forward, &progress),
-        )
-        .await
-        .unwrap_or(Err(ProxyError::Timeout));
-        if let Err(error) = &outcome {
-            let phase = *progress.phase.lock().unwrap();
-            let (code, global) = match error {
-                ProxyError::LocalResource => ("local_resource_exhausted", false),
-                ProxyError::Endpoint => ("endpoint_connect_failed", true),
-                ProxyError::Dns => ("endpoint_dns_failed", false),
-                ProxyError::UpstreamTls => ("upstream_tls_failed", true),
-                ProxyError::Authentication => ("upstream_authentication_failed", true),
-                ProxyError::Timeout => (
-                    "proxy_handshake_timeout",
-                    matches!(
-                        phase,
-                        ProbePhase::EndpointConnect
-                            | ProbePhase::UpstreamTls
-                            | ProbePhase::Authentication
-                    ),
-                ),
-                ProxyError::Policy(_) => ("proxy_target_policy", false),
-                ProxyError::TargetConnect => ("proxy_target_connect_failed", false),
-                _ => ("proxy_protocol_failed", false),
-            };
-            self.traffic_feedback(&upstream.config.id, &upstream.identity, phase, code, global);
-        }
-        if let Ok(connected) = &outcome {
-            self.traffic_feedback(
-                &connected.upstream_id,
-                &connected.identity,
-                if connected.absolute_form {
-                    ProbePhase::EndpointConnect
-                } else {
-                    ProbePhase::ProxyTunnel
-                },
-                if connected.absolute_form {
-                    "endpoint_connected"
-                } else {
-                    "tunnel_established"
-                },
-                false,
-            );
-        }
-        outcome.map(|mut connected| {
-            connected.io = demand.wrap(connected.io);
-            connected.routing = Some(decision.clone());
-            connected
-        })
+        Ok((upstream, demand))
     }
     async fn connect_direct(
         &self,
@@ -763,13 +808,11 @@ impl Dialer {
         })
     }
 
-    async fn connect_selected(
+    async fn connect_endpoint(
         &self,
         upstream: &Upstream,
-        target: &Target,
-        http_forward: bool,
         progress: &Progress,
-    ) -> Result<Connected, ProxyError> {
+    ) -> Result<TcpStream, ProxyError> {
         let config = &upstream.config;
         let resolver = self.resolver.read().unwrap().clone();
         let tcp = if config.host.parse::<std::net::IpAddr>().is_err()
@@ -795,6 +838,17 @@ impl Dialer {
         };
         progress.endpoint.store(true, Ordering::Relaxed);
         tcp.set_nodelay(true)?;
+        Ok(tcp)
+    }
+    async fn connect_selected(
+        &self,
+        upstream: &Upstream,
+        target: &Target,
+        http_forward: bool,
+        progress: &Progress,
+    ) -> Result<Connected, ProxyError> {
+        let config = &upstream.config;
+        let tcp = self.connect_endpoint(upstream, progress).await?;
         let mut io: BoxIo = if let Some(tls) = &upstream.tls {
             progress.stage(ProbePhase::UpstreamTls);
             let name = ServerName::try_from(
@@ -864,33 +918,7 @@ impl Dialer {
             }
             ProxyProtocol::Socks5 => {
                 progress.stage(ProbePhase::Authentication);
-                let methods: &[u8] = if config.credentials.is_some() {
-                    &[5, 2, 0, 2]
-                } else {
-                    &[5, 1, 0]
-                };
-                io.write_all(methods).await?;
-                io.flush().await?;
-                let mut choice = [0; 2];
-                io.read_exact(&mut choice).await?;
-                if choice == [5, 2] {
-                    let c = config
-                        .credentials
-                        .as_ref()
-                        .ok_or(ProxyError::Authentication)?;
-                    let mut auth = vec![1, c.username.len() as u8];
-                    auth.extend(c.username.as_bytes());
-                    auth.push(c.password.len() as u8);
-                    auth.extend(c.password.as_bytes());
-                    io.write_all(&auth).await?;
-                    io.flush().await?;
-                    io.read_exact(&mut choice).await?;
-                    if choice != [1, 0] {
-                        return Err(ProxyError::Authentication);
-                    }
-                } else if choice != [5, 0] {
-                    return Err(ProxyError::Authentication);
-                }
+                crate::socks_client::authenticate(&mut io, config.credentials.as_ref()).await?;
                 progress.stage(ProbePhase::ProxyTunnel);
                 let mut request = vec![5, 1, 0];
                 request.extend(target.socks_bytes());

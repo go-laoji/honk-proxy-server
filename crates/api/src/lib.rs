@@ -21,6 +21,7 @@ mod connections;
 mod dns;
 mod groups;
 mod health;
+mod linux;
 mod nodes;
 mod providers;
 mod rules;
@@ -161,6 +162,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .merge(nodes::router())
         .merge(rules::router())
         .merge(tasks::router())
+        .merge(linux::router())
         .layer(axum::extract::DefaultBodyLimit::max(4 * 1024 * 1024));
     #[cfg(feature = "web-ui")]
     let router = router.fallback(web::serve);
@@ -175,21 +177,53 @@ pub fn router(state: Arc<AppState>) -> Router {
 }
 
 async fn status(State(state): State<Arc<AppState>>) -> Json<ServiceStatus> {
-    Json(state.status())
+    let mut status = state.status();
+    if transparent_ready(&state).await {
+        status.proxy_ready = true;
+        status.engine_state = "running".into();
+    }
+    Json(status)
+}
+async fn transparent_ready(state: &AppState) -> bool {
+    let Some(application) = &state.application else {
+        return false;
+    };
+    let current = application.current();
+    let Some(config) = &current.config.linux_capture else {
+        return false;
+    };
+    let capture = application.linux_capture_status().await;
+    capture.ready
+        && capture.userspace_revision == current.revision
+        && current
+            .engine
+            .transparent_forwarding_available(config.tcp, config.udp)
 }
 async fn version(State(state): State<Arc<AppState>>) -> Json<VersionInfo> {
     Json(state.version())
 }
 async fn capabilities(State(state): State<Arc<AppState>>) -> Json<Capabilities> {
-    Json(if state.runtime_engine().is_some() {
+    let mut capabilities = if state.runtime_engine().is_some() {
         Capabilities::explicit_proxy()
     } else {
         Capabilities::foundation()
-    })
+    };
+    if let Some(application) = &state.application {
+        let capture = application.linux_capture_status().await;
+        capabilities.linux_ebpf.configured = capture.configured;
+        capabilities.linux_ebpf.attached = capture.links_present == Some(true);
+        capabilities.linux_ebpf.ready = capture.ready;
+        capabilities.linux_ebpf.reason = capture.reason.unwrap_or_else(|| {
+            "所选透明捕获范围的监听、链接、路由及内核代际均已核验；对象由配置路径加载".into()
+        });
+    }
+    Json(capabilities)
 }
 
 async fn ready(State(state): State<Arc<AppState>>) -> (StatusCode, Json<serde_json::Value>) {
-    let ready = state.runtime_engine().is_some_and(|engine| engine.ready());
+    let explicit = state.runtime_engine().is_some_and(|engine| engine.ready());
+    let transparent = transparent_ready(&state).await;
+    let ready = explicit || transparent;
     (
         if ready {
             StatusCode::OK
@@ -197,7 +231,7 @@ async fn ready(State(state): State<Arc<AppState>>) -> (StatusCode, Json<serde_js
             StatusCode::SERVICE_UNAVAILABLE
         },
         Json(
-            serde_json::json!({"ready":ready,"reason":if ready {if state.effective_config().health.enabled {"explicit ingress running with fresh healthy upstream"} else {"explicit ingress running; health checking explicitly disabled"}} else {"no ready inbound/upstream or runtime stopping"}}),
+            serde_json::json!({"ready":ready,"explicit_ready":explicit,"transparent_ready":transparent,"reason":if transparent {"verified transparent capture with an available forwarding path"} else if ready {if state.effective_config().health.enabled {"explicit ingress running with fresh healthy upstream"} else {"explicit ingress running; health checking explicitly disabled"}} else {"no ready inbound/upstream or runtime stopping"}}),
         ),
     )
 }
@@ -327,10 +361,7 @@ fn application_error(error: ApplicationError) -> (StatusCode, Json<ApiError>) {
             (StatusCode::TOO_MANY_REQUESTS, "rule_diagnostics_capacity")
         }
         ApplicationError::Provider(error) => (StatusCode::BAD_GATEWAY, error.code),
-        ApplicationError::Capture(_) => (
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "dns_capture_preparation_failed",
-        ),
+        ApplicationError::Capture(_) => (StatusCode::UNPROCESSABLE_ENTITY, "linux_capture_failed"),
         ApplicationError::Dns(error) => {
             use hps_dns::DnsError;
             match error {

@@ -231,6 +231,21 @@ impl Drop for Owner {
 #[derive(Clone)]
 pub struct ConnectionGuard(Arc<Owner>);
 impl ConnectionGuard {
+    pub(crate) fn datagram_bytes(&self, up: bool, bytes: usize) {
+        let (flow, total) = if up {
+            (
+                &self.0.record.up,
+                &self.0.registry.observations().totals.bytes_up,
+            )
+        } else {
+            (
+                &self.0.record.down,
+                &self.0.registry.observations().totals.bytes_down,
+            )
+        };
+        add(flow, bytes);
+        add(total, bytes);
+    }
     pub fn cancellation(&self) -> CancellationToken {
         self.0.record.cancel.clone()
     }

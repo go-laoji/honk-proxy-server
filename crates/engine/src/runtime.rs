@@ -20,6 +20,10 @@ use std::{
 use tokio::net::TcpListener;
 use tokio_rustls::TlsAcceptor;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
+#[cfg(target_os = "linux")]
+mod captured;
+#[cfg(target_os = "linux")]
+mod captured_udp;
 
 #[derive(Debug, thiserror::Error)]
 pub enum EngineError {
@@ -48,6 +52,14 @@ pub struct Engine {
     bandwidth: Arc<Pacer>,
     cancel: CancellationToken,
     generation: std::sync::atomic::AtomicI64,
+    capture_tracker: TaskTracker,
+    capture_registration: Mutex<()>,
+    #[cfg(target_os = "linux")]
+    capture_drain: tokio::sync::Mutex<()>,
+    #[cfg(target_os = "linux")]
+    capture_enabled: bool,
+    #[cfg(target_os = "linux")]
+    capture_udp_enabled: bool,
 }
 struct Entry {
     config: InboundConfig,
@@ -122,8 +134,31 @@ impl Engine {
         config: ProxyConfig,
         previous: Option<&Arc<Self>>,
     ) -> Result<Arc<Self>, EngineError> {
+        Self::prepare(
+            config,
+            previous,
+            crate::routing::RoutingCapabilities::default(),
+            false,
+        )
+    }
+    /// Linux capture owner calls this only after independently verifying the
+    /// required kernel programs. Explicit-only engines retain default limits.
+    #[cfg(target_os = "linux")]
+    pub fn with_capture(
+        config: ProxyConfig,
+        previous: Option<&Arc<Self>>,
+        capabilities: crate::routing::RoutingCapabilities,
+    ) -> Result<Arc<Self>, EngineError> {
+        Self::prepare(config, previous, capabilities, true)
+    }
+    fn prepare(
+        config: ProxyConfig,
+        previous: Option<&Arc<Self>>,
+        capabilities: crate::routing::RoutingCapabilities,
+        _capture_enabled: bool,
+    ) -> Result<Arc<Self>, EngineError> {
         config.validate().map_err(|_| EngineError::Configuration)?;
-        let mut dialer = Dialer::new(&config).map_err(|e| {
+        let mut dialer = Dialer::with_routing_capabilities(&config, capabilities).map_err(|e| {
             if matches!(
                 e,
                 crate::ProxyError::UnsupportedRule | crate::ProxyError::RuleConfiguration
@@ -207,6 +242,14 @@ impl Engine {
             limits: Arc::new(config.limits),
             cancel: CancellationToken::new(),
             generation: std::sync::atomic::AtomicI64::new(0),
+            capture_tracker: TaskTracker::new(),
+            capture_registration: Mutex::new(()),
+            #[cfg(target_os = "linux")]
+            capture_drain: tokio::sync::Mutex::new(()),
+            #[cfg(target_os = "linux")]
+            capture_enabled: _capture_enabled,
+            #[cfg(target_os = "linux")]
+            capture_udp_enabled: _capture_enabled && capabilities.udp,
         }))
     }
     pub fn preparation_fingerprint(&self) -> &str {
@@ -326,13 +369,19 @@ impl Engine {
         }
     }
     pub fn is_idle(&self) -> bool {
-        self.entries.values().all(|entry| entry.tracker.is_empty())
+        self.capture_tracker.is_empty()
+            && self.entries.values().all(|entry| entry.tracker.is_empty())
     }
     pub fn set_generation(&self, id: i64) {
-        self.dialer.set_revision(id);
-        let _ = self
-            .generation
-            .compare_exchange(0, id, Ordering::AcqRel, Ordering::Acquire);
+        let _registration = self.capture_registration.lock().unwrap();
+        if id > 0
+            && self
+                .generation
+                .compare_exchange(0, id, Ordering::AcqRel, Ordering::Acquire)
+                .is_ok()
+        {
+            self.dialer.set_revision(id);
+        }
     }
     pub fn generation(&self) -> i64 {
         self.generation.load(Ordering::Acquire)
@@ -436,10 +485,15 @@ impl Engine {
     }
     pub async fn shutdown(&self) {
         self.dialer.retire_selection();
-        self.cancel.cancel();
+        {
+            let _registration = self.capture_registration.lock().unwrap();
+            self.cancel.cancel();
+            self.capture_tracker.close();
+        }
         for id in self.entries.keys() {
             let _ = self.stop(id).await;
         }
+        self.capture_tracker.wait().await;
     }
     pub fn status(&self) -> ProxyStatus {
         ProxyStatus {
@@ -463,6 +517,18 @@ impl Engine {
                         .certificate
                         .is_none_or(|certificate| certificate.valid_now)
             })
+    }
+    /// Availability of a potential forwarding route is separate from verified
+    /// kernel capture readiness. The application must require both.
+    pub fn transparent_forwarding_available(&self, tcp: bool, udp: bool) -> bool {
+        !self.cancel.is_cancelled()
+            && ((tcp && self.dialer.can_forward("", "transparent"))
+                || (udp
+                    && self.dialer.can_forward_transport(
+                        "",
+                        "transparent",
+                        hps_domain::SelectionTransport::Udp,
+                    )))
     }
 }
 impl Entry {
@@ -504,5 +570,41 @@ impl Entry {
             certificate,
             last_error: self.last_error.lock().unwrap().clone(),
         }
+    }
+}
+
+#[cfg(test)]
+mod readiness_tests {
+    use super::*;
+    use hps_config::{RuleConditions, RuleConfig};
+    use hps_domain::{RouteAction, SelectionTransport};
+    #[tokio::test]
+    async fn transparent_forwarding_requires_a_route_for_the_actual_enabled_transport() {
+        let mut config = ProxyConfig::default();
+        config.routing.default_action = RouteAction::Reject;
+        config.routing.rules.push(RuleConfig {
+            id: "udp-only".into(),
+            enabled: true,
+            conditions: RuleConditions {
+                transports: vec![SelectionTransport::Udp],
+                ..Default::default()
+            },
+            action: RouteAction::Direct,
+        });
+        let engine = Engine::prepare(
+            config,
+            None,
+            crate::routing::RoutingCapabilities {
+                local_process: false,
+                udp: true,
+            },
+            true,
+        )
+        .unwrap();
+        assert!(!engine.ready());
+        assert!(!engine.transparent_forwarding_available(true, false));
+        assert!(engine.transparent_forwarding_available(false, true));
+        engine.shutdown().await;
+        assert!(!engine.transparent_forwarding_available(false, true));
     }
 }

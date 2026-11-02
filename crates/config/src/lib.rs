@@ -13,6 +13,8 @@ mod selection;
 pub use selection::*;
 mod routing;
 pub use routing::*;
+mod linux;
+pub use linux::*;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -26,6 +28,7 @@ pub struct DaemonConfig {
     pub providers: Vec<ProviderConfig>,
     pub health: HealthConfig,
     pub dns: DnsConfig,
+    pub linux_capture: Option<LinuxCaptureConfig>,
 }
 
 impl Default for DaemonConfig {
@@ -40,6 +43,7 @@ impl Default for DaemonConfig {
             providers: vec![],
             health: HealthConfig::default(),
             dns: DnsConfig::default(),
+            linux_capture: None,
         }
     }
 }
@@ -74,6 +78,11 @@ impl DaemonConfig {
     }
 
     pub fn resolve_paths(&mut self, parent: &Path) {
+        if let Some(capture) = &mut self.linux_capture
+            && capture.object.is_relative()
+        {
+            capture.object = parent.join(&capture.object);
+        }
         if let Some(capture) = &mut self.dns.capture
             && capture.object.is_relative()
         {
@@ -159,6 +168,9 @@ impl DaemonConfig {
     }
 
     pub fn validate(&self) -> Result<(), ConfigError> {
+        if let Some(capture) = &self.linux_capture {
+            capture.validate()?;
+        }
         if !(10..=10000).contains(&self.retention.config_versions)
             || !(1..=3650).contains(&self.retention.activity_days)
             || !(1..=3650).contains(&self.retention.task_days)

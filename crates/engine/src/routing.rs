@@ -26,7 +26,12 @@ pub struct Router {
     observe: bool,
 }
 impl Router {
-    pub fn potential_actions(&self, inbound: &str, protocol: &str) -> Vec<&RouteAction> {
+    pub fn potential_actions(
+        &self,
+        inbound: &str,
+        protocol: &str,
+        transport: hps_domain::SelectionTransport,
+    ) -> Vec<&RouteAction> {
         let mut actions = vec![];
         for rule in &self.rules {
             let c = &rule.rule.conditions;
@@ -34,8 +39,7 @@ impl Router {
                 || (!c.inbounds.is_empty() && !c.inbounds.iter().any(|id| id == inbound))
                 || (!c.inbound_protocols.is_empty()
                     && !c.inbound_protocols.iter().any(|p| p == protocol))
-                || (!c.transports.is_empty()
-                    && !c.transports.contains(&hps_domain::SelectionTransport::Tcp))
+                || (!c.transports.is_empty() && !c.transports.contains(&transport))
             {
                 continue;
             }

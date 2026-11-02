@@ -142,6 +142,7 @@ pub const TASK_KINDS: &[&str] = &[
     "dns_diagnostic",
     "provider_diagnostic",
     "rules_diagnostic",
+    "linux_capture_control",
     "group_diagnostic",
 ];
 pub const TASK_STATES: &[&str] = &[

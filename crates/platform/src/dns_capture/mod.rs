@@ -13,12 +13,9 @@ use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeSet,
     fs::{File, OpenOptions},
-    io::{Read, Write},
-    net::{Ipv4Addr, Ipv6Addr, UdpSocket},
-    os::{
-        fd::AsRawFd,
-        unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt},
-    },
+    io::Read,
+    net::{Ipv4Addr, Ipv6Addr},
+    os::unix::fs::{MetadataExt, OpenOptionsExt},
     path::{Path, PathBuf},
     sync::Mutex,
 };
@@ -310,68 +307,8 @@ fn words(bytes: [u8; 16]) -> [u32; 4] {
     std::array::from_fn(|i| u32::from_ne_bytes(bytes[i * 4..i * 4 + 4].try_into().unwrap()))
 }
 fn netns_cookie() -> Result<u64, String> {
-    let socket = UdpSocket::bind("127.0.0.1:0").map_err(|e| error("namespace socket", e))?;
-    let mut value = 0u64;
-    let mut len = std::mem::size_of_val(&value) as libc::socklen_t;
-    // SAFETY: live UDP descriptor and correctly sized output storage.
-    if unsafe {
-        libc::getsockopt(
-            socket.as_raw_fd(),
-            libc::SOL_SOCKET,
-            libc::SO_NETNS_COOKIE,
-            (&mut value as *mut u64).cast(),
-            &mut len,
-        )
-    } != 0
-    {
-        return Err(error("namespace cookie", std::io::Error::last_os_error()));
-    }
-    if value == 0 || len as usize != std::mem::size_of::<u64>() {
-        return Err("DNS capture invalid namespace cookie".into());
-    }
-    Ok(value)
+    crate::linux_objects::netns_cookie().map_err(|e| error("namespace cookie", e))
 }
 fn ownership(cookie: u64) -> Result<File, String> {
-    let path = Path::new("/run/hps");
-    std::fs::DirBuilder::new()
-        .recursive(true)
-        .mode(0o700)
-        .create(path)
-        .map_err(|e| error("ownership directory", e))?;
-    let metadata =
-        std::fs::symlink_metadata(path).map_err(|e| error("ownership directory metadata", e))?;
-    // This is OS object ownership, independent of the project's intentionally open management API.
-    if !metadata.is_dir()
-        || metadata.uid() != unsafe { libc::geteuid() }
-        || metadata.mode() & 0o077 != 0
-    {
-        return Err("DNS capture requires its own private /run/hps directory".into());
-    }
-    let mut file = OpenOptions::new()
-        .create(true)
-        .truncate(false)
-        .read(true)
-        .write(true)
-        .mode(0o600)
-        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK)
-        .open(path.join(format!("dns-netns-{cookie}.lock")))
-        .map_err(|e| error("ownership file", e))?;
-    let metadata = file
-        .metadata()
-        .map_err(|e| error("ownership file metadata", e))?;
-    if !metadata.is_file()
-        || metadata.uid() != unsafe { libc::geteuid() }
-        || metadata.nlink() != 1
-        || metadata.mode() & 0o077 != 0
-    {
-        return Err(
-            "DNS capture ownership file must be private and owned by the daemon OS user".into(),
-        );
-    }
-    fs2::FileExt::try_lock_exclusive(&file)
-        .map_err(|e| error("another DNS capture owns this network namespace", e))?;
-    file.set_len(0).map_err(|e| error("ownership record", e))?;
-    file.write_all(format!("{}\n", std::process::id()).as_bytes())
-        .map_err(|e| error("ownership record", e))?;
-    Ok(file)
+    crate::linux_objects::ownership("dns", cookie).map_err(|e| error("ownership", e))
 }

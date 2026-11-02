@@ -8,6 +8,11 @@ rust-version.workspace = true
 hps-domain.workspace = true
 
 [dev-dependencies]
+socket2 = {version="0.6",features=["all"]}
+hps-engine.workspace = true
+rcgen = "0.14"
+tempfile = "3"
+tokio-util = {version="0.7",features=["rt"]}
 serde_json.workspace = true
 hps-dns.workspace = true
 hps-net.workspace = true
@@ -16,6 +21,10 @@ hps-config.workspace = true
 hickory-proto = "0.26.3"
 
 [target.'cfg(target_os = "linux")'.dependencies]
+serde.workspace = true
+serde_json.workspace = true
+hps-config.workspace = true
+ipnet = "2.12.2"
 aya = "0.14"
 hps-ebpf-abi = {workspace = true,features = ["userspace"]}
 libc = "0.2"

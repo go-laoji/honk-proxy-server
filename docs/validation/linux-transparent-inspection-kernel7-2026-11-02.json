@@ -1,0 +1,32 @@
+[
+  {
+    "detached_program": "hps_tp_send4",
+    "detachment_detected": true,
+    "foreign_namespace_refused": true,
+    "full_transparent_datapath_ready": false,
+    "kernel": "7.0.14-linuxkit",
+    "maps_released": true,
+    "metadata_independent_of_route_mutex": true,
+    "object_sha256": "ae2c694f313abbc61c7c7a36dee119bb06dadaff3336d6ccf73ddac0a59143e3",
+    "original_journal_preserved": true,
+    "program_fd_remained_open": true,
+    "retirement_barrier": "protocol_zero_packet_socket_release",
+    "scope": "actual_capture_attachment_inspection_only",
+    "settled_revision": 7
+  },
+  {
+    "detached_program": "hps_tp_create",
+    "detachment_detected": true,
+    "foreign_namespace_refused": true,
+    "full_transparent_datapath_ready": false,
+    "kernel": "7.0.14-linuxkit",
+    "maps_released": true,
+    "metadata_independent_of_route_mutex": true,
+    "object_sha256": "ae2c694f313abbc61c7c7a36dee119bb06dadaff3336d6ccf73ddac0a59143e3",
+    "original_journal_preserved": true,
+    "program_fd_remained_open": true,
+    "retirement_barrier": "protocol_zero_packet_socket_release",
+    "scope": "actual_capture_attachment_inspection_only",
+    "settled_revision": 7
+  }
+]

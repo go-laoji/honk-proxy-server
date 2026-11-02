@@ -1,0 +1,17 @@
+{
+  "actual_process_killed": true,
+  "epoch_changed": true,
+  "foreign_priority_conflict_refused": true,
+  "foreign_rule_preserved": true,
+  "full_transparent_datapath_ready": false,
+  "graceful_shutdown_owned_rules_removed": true,
+  "kernel": "6.12.115-0-virt",
+  "object_sha256": "fa5449609f86a6b50300a83a6e10d2f2150aa42eaa6676c8e64dd1581bbd5286",
+  "old_programs_released": true,
+  "owned_route_residue_detected": true,
+  "persisted_revision_recovered": 1,
+  "readyz_requires_actual_capture_and_forwarding": true,
+  "real_tcp_udp_before_and_after_restart": true,
+  "scope": "standalone_hpsd_sigkill_recovery_only",
+  "signal": 9
+}

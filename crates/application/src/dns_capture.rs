@@ -103,6 +103,11 @@ impl PreparedCapture {
     }
 }
 impl CaptureRuntime {
+    pub fn restore_resolver(&self, resolver: &Resolver) {
+        for server in &self.servers {
+            server.replace_resolver(resolver.clone());
+        }
+    }
     pub fn start(&self, resolver: &Resolver) -> Result<(), ApplicationError> {
         for server in &self.servers {
             server.replace_resolver(resolver.clone());

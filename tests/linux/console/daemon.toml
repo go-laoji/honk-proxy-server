@@ -1,0 +1,16 @@
+instance_name = "Isolated Linux capture validation"
+management_listen = "0.0.0.0:17996"
+[health]
+enabled = false
+[dns]
+enabled = false
+[proxy.routing.default_action]
+kind = "direct"
+[linux_capture]
+object = "/target/t15-ebpf/bpfel-unknown-none/release/hps-ebpf"
+local_cgroup = "/tmp/hps-test-cgroup/hps-console-clients"
+tcp_port = 0
+udp_port = 0
+max_flows = 64
+max_pending = 16
+max_udp_sessions = 16

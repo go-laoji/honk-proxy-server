@@ -7,6 +7,8 @@ mod nodes;
 pub use nodes::*;
 mod connections;
 pub use connections::*;
+mod linux;
+pub use linux::*;
 mod tasks;
 pub use tasks::*;
 
@@ -116,7 +118,7 @@ impl Capabilities {
                 attached: false,
                 ready: false,
                 reason: if cfg!(target_os = "linux") {
-                    "完整透明 TCP/UDP 数据面尚未接入；DNS 捕获状态单独在 DNS 设置中显示"
+                    "透明捕获默认关闭，请在 Linux 页面配置并核验实际运行状态；DNS 捕获单独管理"
                 } else {
                     "真实 eBPF 数据面仅支持符合内核要求的 Linux"
                 }
@@ -159,6 +161,21 @@ pub struct LinuxPreflight {
     pub checks: Vec<EnvironmentCheck>,
     pub datapath_ready: bool,
     pub scope: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CaptureResourceUsage {
+    pub pending: usize,
+    pub max_pending: usize,
+    pub udp_sessions: usize,
+    pub max_udp_sessions: usize,
+    pub queued_datagrams: usize,
+    pub max_queued_datagrams: usize,
+    pub queued_bytes: usize,
+    pub max_queued_bytes: usize,
+    pub dropped_datagrams: u64,
+    pub invalid_replies: u64,
+    pub closed_udp_sessions: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

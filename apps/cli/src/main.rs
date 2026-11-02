@@ -507,6 +507,10 @@ enum ConfigCommand {
 #[derive(Subcommand)]
 enum LinuxCommand {
     Preflight,
+    Capture {
+        #[command(subcommand)]
+        command: CaptureCommand,
+    },
     #[command(
         about = "Run a local Linux eBPF self-test in a new cgroup; does not use --endpoint or enable proxy capture"
     )]
@@ -525,6 +529,32 @@ enum LinuxCommand {
         #[arg(long)]
         expect_denied: bool,
     },
+}
+#[derive(Subcommand)]
+enum CaptureCommand {
+    Status,
+    /// Save a candidate from a JSON capture object, or JSON null to disable.
+    Save {
+        path: PathBuf,
+        #[arg(long)]
+        expected_revision: i64,
+        #[arg(long)]
+        expected_epoch: String,
+    },
+    Control {
+        #[arg(value_enum)]
+        action: CaptureAction,
+        #[arg(long)]
+        expected_revision: i64,
+        #[arg(long)]
+        expected_epoch: String,
+    },
+}
+#[derive(Clone, clap::ValueEnum)]
+enum CaptureAction {
+    Start,
+    Stop,
+    Recheck,
 }
 #[derive(Subcommand)]
 enum InboundCommand {
@@ -1350,6 +1380,49 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
         Command::Linux {
             command: LinuxCommand::Preflight,
         } => serde_json::to_value(client.linux_preflight().await.map_err(client_error)?),
+        Command::Linux {
+            command: LinuxCommand::Capture { command },
+        } => match command {
+            CaptureCommand::Save {
+                path,
+                expected_revision,
+                expected_epoch,
+            } => {
+                let raw = read_policy_file(path)?;
+                let configuration = serde_json::from_str(&raw).map_err(|e| (2, e.to_string()))?;
+                serde_json::to_value(
+                    client
+                        .save_linux_capture(&hps_config::LinuxCaptureSave {
+                            expected_revision: *expected_revision,
+                            expected_epoch: expected_epoch.clone(),
+                            configuration,
+                        })
+                        .await
+                        .map_err(client_error)?,
+                )
+            }
+            CaptureCommand::Status => {
+                serde_json::to_value(client.linux_capture().await.map_err(client_error)?)
+            }
+            CaptureCommand::Control {
+                action,
+                expected_revision,
+                expected_epoch,
+            } => serde_json::to_value(
+                client
+                    .control_linux_capture(&hps_domain::LinuxCaptureRequest {
+                        expected_revision: *expected_revision,
+                        expected_epoch: expected_epoch.clone(),
+                        action: match action {
+                            CaptureAction::Start => hps_domain::LinuxCaptureAction::Start,
+                            CaptureAction::Stop => hps_domain::LinuxCaptureAction::Stop,
+                            CaptureAction::Recheck => hps_domain::LinuxCaptureAction::Recheck,
+                        },
+                    })
+                    .await
+                    .map_err(client_error)?,
+            ),
+        },
         Command::Config { command } => match command {
             ConfigCommand::Show => {
                 serde_json::to_value(client.config().await.map_err(client_error)?)

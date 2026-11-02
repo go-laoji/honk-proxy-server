@@ -1,0 +1,20 @@
+{
+  "actual_process_rule": true,
+  "business_bytes_down": 24,
+  "business_bytes_up": 24,
+  "client_pid": 369,
+  "full_transparent_datapath_ready": false,
+  "ipv4": true,
+  "ipv6": true,
+  "kernel": "6.12.115-0-virt",
+  "name_only_revision": 3,
+  "new_connections_rejected": 8,
+  "old_connections_retained": 4,
+  "old_revision": 1,
+  "owned_programs_released": true,
+  "persistent_restart": true,
+  "reject_revision": 2,
+  "scope": "daemon_transparent_local_only",
+  "tcp": true,
+  "udp": true
+}

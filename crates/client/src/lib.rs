@@ -567,6 +567,23 @@ impl HpsClient {
     pub async fn linux_preflight(&self) -> Result<hps_domain::LinuxPreflight, ClientError> {
         self.get_json("api/v1/linux/preflight").await
     }
+    pub async fn linux_capture(
+        &self,
+    ) -> Result<hps_domain::LinuxCaptureOverview<hps_config::LinuxCaptureConfig>, ClientError> {
+        self.get_json("api/v1/linux/capture").await
+    }
+    pub async fn control_linux_capture(
+        &self,
+        input: &hps_domain::LinuxCaptureRequest,
+    ) -> Result<hps_domain::LinuxCaptureStatus, ClientError> {
+        self.post_body("api/v1/linux/capture/control", input).await
+    }
+    pub async fn save_linux_capture(
+        &self,
+        input: &hps_config::LinuxCaptureSave,
+    ) -> Result<hps_domain::ConfigRevision, ClientError> {
+        self.post_body("api/v1/linux/capture/save", input).await
+    }
     pub async fn inbounds(&self) -> Result<hps_domain::ProxyStatus, ClientError> {
         self.get_json("api/v1/inbounds").await
     }

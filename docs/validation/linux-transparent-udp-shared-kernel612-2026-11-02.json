@@ -1,0 +1,42 @@
+[
+  {
+    "business_bytes_down": 128,
+    "business_bytes_up": 144,
+    "client_pid": 368,
+    "connected_and_unconnected_udp": true,
+    "daemon_in_selected_cgroup_bypassed": true,
+    "forwarding_verified": true,
+    "full_transparent_datapath_ready": false,
+    "idle_sessions_released": 8,
+    "ipv4": true,
+    "ipv6": true,
+    "kernel": "6.12.115-0-virt",
+    "mode": "direct",
+    "object_sha256": "466a946dd961ca1aff226bfb2e37484bf7fd7cce4f357b7acb55a7cce16e985d",
+    "original_reply_source": true,
+    "process_rule": true,
+    "revision": 7,
+    "scope": "local_udp_shared_engine_only",
+    "verified_flows": 8
+  },
+  {
+    "business_bytes_down": 128,
+    "business_bytes_up": 144,
+    "client_pid": 370,
+    "connected_and_unconnected_udp": true,
+    "daemon_in_selected_cgroup_bypassed": true,
+    "forwarding_verified": true,
+    "full_transparent_datapath_ready": false,
+    "idle_sessions_released": 8,
+    "ipv4": true,
+    "ipv6": true,
+    "kernel": "6.12.115-0-virt",
+    "mode": "socks5",
+    "object_sha256": "466a946dd961ca1aff226bfb2e37484bf7fd7cce4f357b7acb55a7cce16e985d",
+    "original_reply_source": true,
+    "process_rule": true,
+    "revision": 7,
+    "scope": "local_udp_shared_engine_only",
+    "verified_flows": 8
+  }
+]

@@ -1,0 +1,34 @@
+{
+  "disabled_no_capture": true,
+  "forwarding_verified": false,
+  "kernel": "7.0.14-linuxkit",
+  "map_ids": [
+    831,
+    835,
+    836,
+    837,
+    840,
+    841,
+    842,
+    843,
+    847,
+    848
+  ],
+  "maps_released": true,
+  "namespace_conflict_rejected": true,
+  "namespace_reacquired": true,
+  "object_sha256": "466a946dd961ca1aff226bfb2e37484bf7fd7cce4f357b7acb55a7cce16e985d",
+  "program_ids": [
+    816,
+    815,
+    814,
+    817,
+    818,
+    820,
+    819,
+    813
+  ],
+  "programs_released": true,
+  "scope": "disabled_loader_lifecycle_only",
+  "tcx_links": 2
+}

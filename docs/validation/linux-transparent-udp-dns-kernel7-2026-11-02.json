@@ -1,0 +1,64 @@
+{
+  "capture": {
+    "allocated_slots": 4,
+    "attached": true,
+    "cgroup": "/tmp/hps-test-cgroup/hps-dns-test-662",
+    "ipv4_alias_prefix": "127.77.0.0/16",
+    "ipv6_alias_prefix": "fd77:6870:7300::/112",
+    "map_ids": [
+      889,
+      890,
+      901,
+      902,
+      903
+    ],
+    "netns_cookie": 2198,
+    "object_sha256": "466a946dd961ca1aff226bfb2e37484bf7fd7cce4f357b7acb55a7cce16e985d",
+    "peers": 4,
+    "port": 44895,
+    "program_ids": [
+      841,
+      842,
+      843,
+      844,
+      845,
+      846,
+      847,
+      848
+    ],
+    "scope": "cgroup_local_application_dns",
+    "stats": [
+      {
+        "bypassed": 1,
+        "error_code": 0,
+        "error_phase": 0,
+        "errors": 0,
+        "family": "ipv4",
+        "redirected": 4,
+        "restored": 5
+      },
+      {
+        "bypassed": 0,
+        "error_code": 0,
+        "error_phase": 0,
+        "errors": 0,
+        "family": "ipv6",
+        "redirected": 4,
+        "restored": 5
+      }
+    ]
+  },
+  "cgroup_removed": true,
+  "daemon_pid_namespace_exclusion": true,
+  "full_transparent_datapath_ready": false,
+  "getpeername_restored": true,
+  "ipv4_udp_tcp": true,
+  "ipv6_owned_route": "fd77:6870:7300::/112",
+  "ipv6_udp_tcp": true,
+  "kernel": "7.0.14-linuxkit",
+  "maps_removed": true,
+  "namespace_ownership_reacquired": true,
+  "parallel_udp_peer_restoration": true,
+  "programs_removed": true,
+  "route_removed": true
+}

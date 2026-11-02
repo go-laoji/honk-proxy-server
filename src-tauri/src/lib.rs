@@ -88,6 +88,7 @@ fn supported_api(path: &str) -> bool {
             | "api/v1/capabilities"
             | "api/v1/config"
             | "api/v1/linux/preflight"
+            | "api/v1/linux/capture"
             | "api/v1/inbounds"
             | "api/v1/config/workspace"
             | "api/v1/config/export"
@@ -351,6 +352,8 @@ fn supported_action(path: &str) -> bool {
     if matches!(
         path,
         "api/v1/health/probe"
+            | "api/v1/linux/capture/control"
+            | "api/v1/linux/capture/save"
             | "api/v1/tasks"
             | "api/v1/rules/save"
             | "api/v1/rules/upsert"
@@ -553,6 +556,10 @@ mod tests {
     }
     #[test]
     fn transport_accepts_implemented_api_only() {
+        assert!(supported_api("api/v1/linux/capture"));
+        assert!(supported_action("api/v1/linux/capture/control"));
+        assert!(supported_action("api/v1/linux/capture/save"));
+        assert!(!supported_action("api/v1/linux/capture/unknown"));
         assert!(supported_api("api/v1/status"));
         let connection = "12345678-1234-4321-8234-123456789abc%3A00000000000000000001";
         assert!(supported_api(&format!("api/v1/connections/{connection}")));

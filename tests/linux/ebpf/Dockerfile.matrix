@@ -1,0 +1,12 @@
+# Runs real guest kernels under TCG. The host container architecture is explicit;
+# x86_64 guest userland comes from the separately built x86_64 Rust image.
+FROM rust:1.98.1-alpine@sha256:7cc1c22d77d9432f7fe012a70e6d3e555af54c2a6832700ed7d553f1769ae89f
+ARG HPS_GUEST_ARCH=x86_64
+ARG HPS_KERNEL_BRANCH=v3.22
+ARG HPS_KERNEL_REPO=main
+ARG HPS_KERNEL_PACKAGE=linux-virt-6.12.115-r0.apk
+RUN apk add --no-cache qemu-system-aarch64 qemu-system-x86_64 cpio tar gzip binutils zstd
+RUN mkdir -p /qemu/kernel && wget -q -O /qemu/kernel.apk "https://dl-cdn.alpinelinux.org/alpine/${HPS_KERNEL_BRANCH}/${HPS_KERNEL_REPO}/${HPS_GUEST_ARCH}/${HPS_KERNEL_PACKAGE}" && apk --keys-dir /usr/share/apk/keys verify /qemu/kernel.apk && tar --ignore-zeros -xzf /qemu/kernel.apk -C /qemu/kernel && sha256sum /qemu/kernel.apk > /qemu/kernel.sha256
+COPY run-kernel612.sh /usr/local/bin/hps-test-kernel-matrix
+ENV HPS_GUEST_ARCH=${HPS_GUEST_ARCH}
+ENTRYPOINT ["sh", "/usr/local/bin/hps-test-kernel-matrix"]

@@ -1,5 +1,7 @@
 //! Shared user-space transport for explicit and future transparent proxy ingress.
 mod capacity;
+#[cfg(target_os = "linux")]
+pub mod capture;
 pub mod connections;
 mod demand;
 pub mod dial;
@@ -11,9 +13,11 @@ pub mod routing;
 pub mod runtime;
 mod selection;
 mod socks;
+mod socks_client;
 pub mod target;
 pub mod tls;
 mod traffic;
+pub mod udp;
 
 pub use hps_net::{BoxIo, ProxyIo};
 
