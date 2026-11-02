@@ -253,3 +253,11 @@ Linux MPA 展示实际监听、链接/路由、内核与用户态代际、原位
 在编辑过程中由另一个请求实际发布实例设置 r2，界面保留未保存文本、禁用过期编辑保存，用户明确载入最新配置才重新编辑；保存绑定编辑基线，不能借状态刷新自动采用新 revision。随后保存持久禁用候选 r3 时，运行和期望仍为 r2；跳转真实配置工作区显式激活后，期望 r3、运行 r2，明确提示 linux_capture 需要重启，原捕获继续运行。窄屏布局、配置关联与实际接口状态均验证。
 
 最终共享 Web build ID `228c6cbfff44c5726202acd4b9d89386bd0d1abe7607a168ade9141ad168dfb0`。完整实际 Linux Playwright 1 passed（2.9s），Mac Linux MPA 读取回归 1 passed，生产构建/类型/格式检查通过，native bridge 7 项通过；Mac engine/application/API 普通回归 99 项、Clippy 通过。当前服务快照见 `linux-transparent-console-2026-11-02.json`。浏览器与 Desktop 源页共用，系统服务/窗口生命周期的独立产品验收继续归 T16。
+
+## 第 27 批：非本机目标的策略路由与联合完成
+
+增加独立目标 network namespace 与 veth。目标地址仅在目标 namespace 绑定，代理 namespace 通过实际 GETADDR 确认没有这些本机地址；main 表为正常 WAN 单播路由，捕获策略表将选定 cgroup 的流交给本机透明监听。Daemon 和指定上游通过不带捕获标记的 WAN veth 到达真实目标，目标核对实际 WAN 源地址；双栈 TCP 经 HTTP 上游，UDP 经 SOCKS5 association，各方向 9216 B，客户端仍看到原始回复源。四条连接均核对真实本机 PID、规则、出口及配置代际。
+
+实际 aarch64/x86_64 × 6.12.115/7.2.14 四组合全部通过此补充用例，见 `linux-transparent-nonlocal-2026-11-02/`。复用网络夹具后，原 LAN/接口故障用例在 Linux 7.0 再次通过，Clippy 通过。完整 48 项加本批 4 项合计 **52 项实际内核用例通过**，真实 Linux CLI/MPA、规则候选模拟/发布、连接计数与旧流保留也已完成，T11/T13/T15 联合门槛满足。
+
+最低已验证内核是 6.12.115；不继承参考项目支持范围。付费供应商真实账号调用未验证；主动 UDP 健康探测仍如实不支持，实际 UDP 数据面测试明确关闭该探测门槛。严格崩溃 kill switch、Desktop 系统服务和分包发布分别属于后续范围。单项证据的独立 scope 标志保留原意，不冒充全部产品/平台验收。

@@ -35,6 +35,8 @@ python3 tests/linux/ebpf/run-capture-matrix.py --work /absolute/immutable/source
 
 可选 `--architecture`、`--kernel` 只执行指定组合；子集结果不能替代完整四组合。可选 `--arm-daemon`、`--x86-daemon` 指定冻结的独立 hpsd，避免另一个功能构建替换测试输入。每个组合必须：全部 CASE_EXIT 为 0、每项恰好 `1 passed`、实际 kernel 字段匹配、整体 SELF_TEST_EXIT=0；零匹配、仅编译、其他架构容器或失败启动均不算通过。
 
+`nonlocal-matrix.json` 是补充的第 13 项，需另外构建 `cargo test --locked -p hps-application --test nonlocal --no-run --message-format=json`，再给 prepare-matrix.py 传 `--suite tests/linux/ebpf/nonlocal-matrix.json`，按相同四组合运行。它把目标放在独立 namespace，确认代理没有目标本机地址，验证实际私有捕获路由与未标记 WAN 出口。完整门槛为原矩阵 48 项加此补充 4 项，共 52 项。
+
 源码快照使用新 mtime（例如 `shutil.copy`），不在编译或打包期间覆盖输入。保留镜像架构专用本地别名可以避免经典 Docker image store 在同标签两个架构之间切换而重复拉取；不清理其他项目容器或卷。
 
 ## 实际 Linux 控制台
