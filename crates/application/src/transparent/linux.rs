@@ -181,6 +181,7 @@ impl Controller {
             Ok::<_, String>((
                 capture.published_policy()?,
                 capture.links_present()?,
+                capture.interfaces_ready()?,
                 capture.routes_present()?,
                 capture.program_ids()?,
                 capture.map_ids()?,
@@ -245,10 +246,11 @@ impl Controller {
                 view.state = "degraded".into();
                 view.reason = Some(error);
             }
-            Ok((policy, links, routes, programs, maps, stats, flows)) => {
+            Ok((policy, links, interfaces, routes, programs, maps, stats, flows)) => {
                 view.kernel_revision = policy.map(|(revision, _)| revision);
                 view.suspended = policy.is_some_and(|(_, suspended)| suspended);
                 view.links_present = Some(links);
+                view.interfaces_ready = Some(interfaces);
                 view.routes_present = Some(routes);
                 view.program_ids = programs;
                 view.map_ids = maps;
@@ -271,6 +273,7 @@ impl Controller {
                     })
                     .collect();
                 view.ready = links
+                    && interfaces
                     && routes
                     && !view.suspended
                     && policy.is_some_and(|(revision, _)| revision == view.userspace_revision)
@@ -722,6 +725,9 @@ impl Running {
         let (settled, flows) = tokio::task::spawn_blocking(move || {
             if !capture.links_present()? {
                 return Err("capture scope or an attached link was lost".into());
+            }
+            if !capture.interfaces_ready()? {
+                return Err("capture interface is down or lost operational carrier".into());
             }
             if !capture.routes_present()? {
                 return Err("capture owned routing objects were lost".into());

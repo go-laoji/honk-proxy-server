@@ -51,10 +51,66 @@ fn request(kind: u16, payload: &[u8], create: bool) {
     rtnetlink::exchange(kind, flags as u16, payload, false).unwrap();
 }
 fn up(name: &str) {
-    let mut payload = link_header(index(name));
-    payload[8..12].copy_from_slice(&(libc::IFF_UP as u32).to_ne_bytes());
+    set_up(index(name), true);
+}
+fn set_up(index: u32, enabled: bool) {
+    let mut payload = link_header(index);
+    payload[8..12].copy_from_slice(&(if enabled { libc::IFF_UP as u32 } else { 0 }).to_ne_bytes());
     payload[12..16].copy_from_slice(&(libc::IFF_UP as u32).to_ne_bytes());
     request(libc::RTM_NEWLINK, &payload, false);
+}
+fn rename(index: u32, name: &str) {
+    let mut payload = link_header(index);
+    let name = CString::new(name).unwrap();
+    rtnetlink::attribute(&mut payload, 3, name.as_bytes_with_nul());
+    request(libc::RTM_NEWLINK, &payload, false);
+}
+fn peer_up(namespace: &std::fs::File, enabled: bool) {
+    let namespace = namespace.try_clone().unwrap();
+    std::thread::spawn(move || {
+        assert_eq!(
+            unsafe { libc::setns(namespace.as_raw_fd(), libc::CLONE_NEWNET) },
+            0
+        );
+        set_up(index("hpsclient0"), enabled);
+    })
+    .join()
+    .unwrap();
+}
+async fn suspended(service: &std::sync::Arc<Supervisor>, links_expected: bool) {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let status = service.linux_capture_status().await;
+            if status.suspended
+                && !status.ready
+                && status.links_present == Some(links_expected)
+                && status.interfaces_ready == Some(false)
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+    })
+    .await
+    .unwrap();
+}
+async fn recheck(service: &std::sync::Arc<Supervisor>) {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while service.linux_capture_status().await.interfaces_ready != Some(true) {
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let status = service
+        .control_linux_capture(hps_domain::LinuxCaptureRequest {
+            expected_epoch: service.event_epoch().into(),
+            expected_revision: 1,
+            action: hps_domain::LinuxCaptureAction::Recheck,
+        })
+        .await
+        .unwrap();
+    assert!(status.ready, "{status:?}");
 }
 fn address(name: &str, ip: &str) {
     let ip = ip.parse::<IpAddr>().unwrap();
@@ -129,13 +185,16 @@ fn gateway_child() {
         .unwrap();
     let mut signal = [0];
     control.read_exact(&mut signal).unwrap();
-    assert_eq!(signal, [b'N']);
+    assert_eq!(signal, [b'P']);
     up("lo");
     up("hpsclient0");
     address("hpsclient0", "10.231.83.2");
     address("hpsclient0", "fd42:6870:7300:1::2");
     default_route("10.231.83.1");
     default_route("fd42:6870:7300:1::1");
+    control.write_all(b"I").unwrap();
+    control.read_exact(&mut signal).unwrap();
+    assert_eq!(signal, [b'N']);
     let targets: Vec<SocketAddr> =
         serde_json::from_str(&std::env::var("HPS_GATEWAY_TARGETS").unwrap()).unwrap();
     assert_eq!(targets.len(), 6);
@@ -327,6 +386,12 @@ async fn real_gateway_shared_engine() {
     ))
     .unwrap();
     let _veth = Veth::create(&namespace);
+    control.write_all(b"P").await.unwrap();
+    tokio::time::timeout(Duration::from_secs(5), control.read_exact(&mut signal))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(signal, [b'I']);
     config.linux_capture = Some(LinuxCaptureConfig {
         object: std::env::var("HPS_EBPF_OBJECT").unwrap().into(),
         local_cgroup: None,
@@ -406,11 +471,23 @@ async fn real_gateway_shared_engine() {
     assert_eq!(upstream.node_registry().connection_statistics().started, 2);
     let evidence = service.linux_capture_status().await;
     assert!(evidence.ready);
+    set_up(_veth.0, false);
+    suspended(&service, true).await;
+    set_up(_veth.0, true);
+    recheck(&service).await;
+    rename(_veth.0, "hpslan-renamed");
+    suspended(&service, false).await;
+    rename(_veth.0, "hpslan0");
+    recheck(&service).await;
+    peer_up(&namespace, false);
+    suspended(&service, true).await;
+    peer_up(&namespace, true);
+    recheck(&service).await;
     service.shutdown().await.unwrap();
     upstream.shutdown().await;
     socks.shutdown().await;
     println!(
         "{}",
-        serde_json::json!({"scope":"actual_gateway_shared_engine_only","kernel":std::fs::read_to_string("/proc/sys/kernel/osrelease").unwrap().trim(),"object_sha256":evidence.object_fingerprint,"ipv4_ipv6_tcp_udp":true,"tcp_http_upstream_flows":2,"udp_socks5_associations":2,"source_rules_and_fixed_groups":true,"gateway_process_unknown":true,"bypassed_tcp_flows":2,"tcp_payload_bytes_per_flow_each_direction":262144,"udp_payload_bytes_per_flow_each_direction":1200,"full_transparent_datapath_ready":false})
+        serde_json::json!({"scope":"actual_gateway_shared_engine_only","kernel":std::fs::read_to_string("/proc/sys/kernel/osrelease").unwrap().trim(),"object_sha256":evidence.object_fingerprint,"ipv4_ipv6_tcp_udp":true,"tcp_http_upstream_flows":2,"udp_socks5_associations":2,"source_rules_and_fixed_groups":true,"gateway_process_unknown":true,"interface_down_suspended":true,"carrier_loss_suspended_with_links_retained":true,"interface_rename_suspended":true,"interface_restore_recheck_ready":true,"bypassed_tcp_flows":2,"tcp_payload_bytes_per_flow_each_direction":262144,"udp_payload_bytes_per_flow_each_direction":1200,"full_transparent_datapath_ready":false})
     );
 }

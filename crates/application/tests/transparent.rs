@@ -161,6 +161,36 @@ async fn apply(service: &std::sync::Arc<Supervisor>, config: &DaemonConfig, expe
         .create_revision(input(config, expected))
         .await
         .unwrap();
+    let context = service
+        .current()
+        .engine
+        .node_registry()
+        .connection_records(true)
+        .1
+        .into_iter()
+        .find(|flow| {
+            flow.context.transport == hps_domain::SelectionTransport::Tcp
+                && flow.context.process.is_some()
+        })
+        .expect("actual captured process context")
+        .context;
+    let simulated = service
+        .simulate_rules(hps_domain::RulesSimulationInput {
+            revision: Some(revision.id),
+            context,
+        })
+        .await
+        .unwrap();
+    assert!(simulated.action_supported);
+    assert_eq!(simulated.decision.configuration_revision, revision.id);
+    assert_eq!(
+        simulated.decision.rule_id.as_deref(),
+        Some("captured-process")
+    );
+    assert_eq!(
+        simulated.decision.action,
+        config.proxy.routing.rules[0].action
+    );
     let result = service
         .activate(ConfigActivate {
             revision: revision.id,
@@ -530,7 +560,7 @@ async fn run_supervisor(freeze: bool, dns: bool) {
     restarted.shutdown().await.unwrap();
     println!(
         "{}",
-        serde_json::json!({"scope":if dns{"daemon_dns_transparent_rollback"}else if freeze{"daemon_transparent_publication_failure"}else{"daemon_transparent_local_only"},"kernel":std::fs::read_to_string("/proc/sys/kernel/osrelease").unwrap().trim(),"client_pid":pid,"ipv4":true,"ipv6":true,"tcp":true,"udp":true,"actual_process_rule":true,"old_revision":1,"final_desired_revision":expected_revision,"old_connections_retained":4,"new_connections_rejected":if freeze{0}else{8},"business_bytes_up":if freeze{16}else{24},"business_bytes_down":if freeze{16}else{24},"dns_tcp_udp_queries":if dns{8}else{0},"dns_resolver_restored":dns,"owned_program_count":if dns{16}else{8},"policy_map_frozen":freeze,"deferred_desired_head_preserved":freeze,"failed_activation_recorded":freeze,"persistent_restart":true,"owned_programs_released":true,"full_transparent_datapath_ready":false})
+        serde_json::json!({"scope":if dns{"daemon_dns_transparent_rollback"}else if freeze{"daemon_transparent_publication_failure"}else{"daemon_transparent_local_only"},"kernel":std::fs::read_to_string("/proc/sys/kernel/osrelease").unwrap().trim(),"client_pid":pid,"ipv4":true,"ipv6":true,"tcp":true,"udp":true,"actual_process_rule":true,"candidate_process_simulation_matches_actual_context":!freeze,"old_revision":1,"final_desired_revision":expected_revision,"old_connections_retained":4,"new_connections_rejected":if freeze{0}else{8},"business_bytes_up":if freeze{16}else{24},"business_bytes_down":if freeze{16}else{24},"dns_tcp_udp_queries":if dns{8}else{0},"dns_resolver_restored":dns,"owned_program_count":if dns{16}else{8},"policy_map_frozen":freeze,"deferred_desired_head_preserved":freeze,"failed_activation_recorded":freeze,"persistent_restart":true,"owned_programs_released":true,"full_transparent_datapath_ready":false})
     );
 }
 

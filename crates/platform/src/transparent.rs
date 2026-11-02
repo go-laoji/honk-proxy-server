@@ -550,7 +550,7 @@ impl Capture {
         if revision <= 0 {
             return Err("capture revision must be positive".into());
         }
-        if !self.links_present()? {
+        if !self.links_present()? || !self.interfaces_ready()? {
             return Err("capture links or scope identity are not ready".into());
         }
         let mut guard = self.state.lock().unwrap();
@@ -677,6 +677,9 @@ impl Capture {
     }
     pub fn links_present(&self) -> Result<bool, String> {
         inspection::links_present(self)
+    }
+    pub fn interfaces_ready(&self) -> Result<bool, String> {
+        inspection::interfaces_ready(self)
     }
     /// Establish a kernel network-RCU grace period after the current policy
     /// publication. Only then may a runtime scan the flow map and release older

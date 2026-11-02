@@ -79,6 +79,43 @@ pub(super) fn links_present(capture: &Capture) -> Result<bool, String> {
     }
     Ok(true)
 }
+pub(super) fn interfaces_ready(capture: &Capture) -> Result<bool, String> {
+    let guard = capture.state.lock().unwrap();
+    let Some(state) = guard.as_ref() else {
+        return Ok(false);
+    };
+    if !identity_present(capture, state)? {
+        return Ok(false);
+    }
+    let mut inspected = std::collections::BTreeSet::new();
+    for attachment in &capture.attachments {
+        if inspected.insert(attachment.index) && !interface_up(attachment.index)? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+fn interface_up(index: u32) -> Result<bool, String> {
+    let mut request = [0u8; 16];
+    request[4..8].copy_from_slice(&index.to_ne_bytes());
+    let replies = crate::rtnetlink::exchange(
+        libc::RTM_GETLINK,
+        (libc::NLM_F_REQUEST | libc::NLM_F_ACK) as u16,
+        &request,
+        false,
+    )
+    .map_err(|e| error("interface flags", e))?;
+    for message in replies {
+        if message.kind == libc::RTM_NEWLINK
+            && message.payload.len() >= 16
+            && crate::rtnetlink::u32n(&message.payload[4..]) == index
+        {
+            let required = (libc::IFF_UP | libc::IFF_RUNNING) as u32;
+            return Ok(crate::rtnetlink::u32n(&message.payload[8..]) & required == required);
+        }
+    }
+    Err("capture interface flag query returned no matching link".into())
+}
 pub(super) fn identity_present(capture: &Capture, state: &State) -> Result<bool, String> {
     use std::os::unix::fs::MetadataExt;
     if crate::linux_objects::netns_cookie().map_err(|e| error("current namespace", e))?

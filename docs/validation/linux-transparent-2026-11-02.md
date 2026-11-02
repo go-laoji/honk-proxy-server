@@ -227,3 +227,11 @@ Linux MPA 展示实际监听、链接/路由、内核与用户态代际、原位
 向测试子 Daemon 发送真实 SIGKILL 并确认 signal=9，核对全部自有 program ID 释放、自有 route/rule 残留仍可见；注入同优先级外部规则后，下一子进程明确失败，不 replace/delete 外部对象。移除冲突规则后再次启动，从 SQLite 恢复 revision=1、实例 epoch 变化、真实 TCP/UDP 再次通过。最后 SIGTERM 正常退出、自有路由移除，两次退出和失败启动全程保留另一条外部规则。所有规则经 Rust RTNL 以精确 identity 创建、检查和清理。
 
 证据：`linux-transparent-crash-kernel7-2026-11-02.json` 与 `linux-transparent-crash-kernel612-2026-11-02.json`。Linux headless Daemon Clippy、Mac headless 测试编译通过。此前 initrd 使用 generic ELF strip 会丢失机器标识，首次客体未执行测试；已恢复 ARM 原生 strip，x86 改用原生 x86 容器先 strip 副本。失败启动或零匹配从未计入通过。当前仍等待完整双架构/双内核矩阵和实际 Linux 界面操作。
+
+## 第 24 批：接口实际状态与候选进程模拟
+
+收尾复核发现，设备保持 ifindex/TCX 并不代表接口启用或载波可用。新增独立 `interfaces_ready` 事实，通过有界 RTNL 查询实际 `IFF_UP/IFF_RUNNING`；挂载事实继续由 `links_present` 独立报告，设备 down 时不能把仍保留的 link 描述成已卸载。启动/发布、运行监视与 ready 同时要求接口可用，接口故障先 suspend，恢复后复查才放行。
+
+实际 Linux 7.0.14/aarch64 验证：自有 veth 行政关闭、真实 peer 载波丢失、网卡改名均降级并暂停；关闭/载波场景保留真实 links，恢复原身份后 recheck 回到 ready。夹具先启动两端设备，再准备 Daemon，不能把关闭的 peer 当成服务可就绪。另从实际透明连接读取可信进程上下文，对候选规则执行模拟，核对 revision/首条命中/动作，再实际热发布，旧 4 流保留、新 8 流拒绝，模拟不改变当前流量。
+
+两项实际用例及 Linux Clippy 通过；Mac 普通回归通过，x86_64 编译通过。证据 `linux-transparent-interface-kernel7-2026-11-02.json`。此前完整四组合 48 项矩阵已经通过；新增接口状态核验仍需在相同矩阵复验，最终门槛继续保持开放。

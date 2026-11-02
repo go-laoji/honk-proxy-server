@@ -281,6 +281,24 @@ async fn real_transparent_tcp_shared_engine() {
     capture.activate(7, true).unwrap();
     control.write_all(b"A").await.unwrap();
     let (pid, output) = child.await.unwrap();
+    if !output.status.success() {
+        eprintln!(
+            "capture TCP failure: stats={:?}, flows={:?}, connections={:?}",
+            capture.stats().map(|stats| stats
+                .into_iter()
+                .map(|s| (
+                    s.captured_packets,
+                    s.rejected_packets,
+                    s.missing_process,
+                    s.errors,
+                    s.last_error,
+                    s.error_phase
+                ))
+                .collect::<Vec<_>>()),
+            capture.flows(),
+            engine.node_registry().connection_records(true)
+        );
+    }
     assert!(
         output.status.success(),
         "{}\n{}",
