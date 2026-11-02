@@ -86,19 +86,19 @@ fn excluded_port(port: u32) -> bool {
 }
 #[cgroup_sock_addr(connect4)]
 pub fn hps_tp_connect4(ctx: SockAddrContext) -> i32 {
-    mark_socket(ctx, 4)
+    mark_socket(ctx, 4, false)
 }
 #[cgroup_sock_addr(connect6)]
 pub fn hps_tp_connect6(ctx: SockAddrContext) -> i32 {
-    mark_socket(ctx, 6)
+    mark_socket(ctx, 6, false)
 }
 #[cgroup_sock_addr(sendmsg4)]
 pub fn hps_tp_send4(ctx: SockAddrContext) -> i32 {
-    mark_socket(ctx, 4)
+    mark_socket(ctx, 4, true)
 }
 #[cgroup_sock_addr(sendmsg6)]
 pub fn hps_tp_send6(ctx: SockAddrContext) -> i32 {
-    mark_socket(ctx, 6)
+    mark_socket(ctx, 6, true)
 }
 #[cgroup_sock(sock_release)]
 pub fn hps_tp_release(ctx: SockContext) -> i32 {
@@ -107,9 +107,43 @@ pub fn hps_tp_release(ctx: SockContext) -> i32 {
     let _ = HPS_TP_PROCESS.remove(&cookie);
     1
 }
+#[cgroup_sock(sock_create)]
+pub fn hps_tp_create(ctx: SockContext) -> i32 {
+    let Some(policy) = policy() else {
+        return 1;
+    };
+    if unsafe { bpf_get_netns_cookie(ctx.as_ptr()) } != policy.netns_cookie {
+        return 1;
+    }
+    let raw = unsafe { &mut *ctx.sock };
+    let family = match raw.family {
+        2 => 4,
+        10 => 6,
+        _ => return 1,
+    };
+    if raw.protocol != 17 || !enabled(&policy, family, 17) || raw.mark != 0 {
+        return 1;
+    }
+    let mut identity = bpf_pidns_info { pid: 0, tgid: 0 };
+    let known = unsafe {
+        bpf_get_ns_current_pid_tgid(
+            policy.pidns_device,
+            policy.pidns_inode,
+            &mut identity,
+            core::mem::size_of::<bpf_pidns_info>() as u32,
+        )
+    };
+    if known != 0 {
+        return 0;
+    }
+    if identity.tgid != policy.excluded_tgid {
+        raw.mark = policy.capture_mark;
+    }
+    1
+}
 
 #[inline(always)]
-fn mark_socket(ctx: SockAddrContext, family: u32) -> i32 {
+fn mark_socket(ctx: SockAddrContext, family: u32, sendmsg: bool) -> i32 {
     let Some(policy) = socket_policy(&ctx) else {
         return 1;
     };
@@ -193,10 +227,29 @@ fn mark_socket(ctx: SockAddrContext, family: u32) -> i32 {
             let _ = HPS_TP_MODES.insert(&cookie, &desired, 1);
             mode = unsafe { HPS_TP_MODES.get(&cookie) }.copied();
         }
-        if mode != Some(desired) || bypassed && mark == policy.capture_mark {
+        if mode != Some(desired) {
             stats.rejected_packets = stats.rejected_packets.wrapping_add(1);
             stats.unsupported_packets = stats.unsupported_packets.wrapping_add(1);
             stats.error_phase = 8;
+            return 0;
+        }
+        // sendmsg snapshots the routing mark before this hook on both families.
+        // A pre-existing unconnected socket must fail this first send rather
+        // than leak it to the main route. Newly created sockets are initialized
+        // by sock_create; setting the mark here permits a later caller retry.
+        if sendmsg && !bypassed && mark == 0 {
+            mark = policy.capture_mark;
+            let _ = unsafe {
+                bpf_setsockopt(
+                    ctx.as_ptr(),
+                    SOL_SOCKET,
+                    SO_MARK,
+                    core::ptr::addr_of_mut!(mark).cast(),
+                    4,
+                )
+            };
+            stats.rejected_packets = stats.rejected_packets.wrapping_add(1);
+            stats.error_phase = 9;
             return 0;
         }
     }

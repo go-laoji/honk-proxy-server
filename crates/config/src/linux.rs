@@ -89,6 +89,8 @@ impl LinuxCaptureConfig {
             || self.capture_mark == self.bypass_mark
             || !(256..=65535).contains(&self.routing_table)
             || !(1..32766).contains(&self.rule_priority)
+            || ((!self.bypass_cidrs.is_empty() || !self.bypass_ports.is_empty())
+                && !(2..32765).contains(&self.rule_priority))
             || !(64..=65536).contains(&self.max_flows)
             || !(1..=self.max_flows).contains(&self.max_pending)
             || !(1..=self.max_flows).contains(&self.max_udp_sessions)
@@ -170,6 +172,14 @@ mod tests {
         config = local();
         config.routing_table = 254;
         assert!(config.validate().is_err());
+        config = local();
+        config.rule_priority = 1;
+        assert!(config.validate().is_err());
+        config.rule_priority = 32765;
+        assert!(config.validate().is_err());
+        config.rule_priority = 1;
+        config.bypass_cidrs.clear();
+        assert!(config.validate().is_ok());
         config = local();
         config.max_pending = config.max_flows + 1;
         assert!(config.validate().is_err());

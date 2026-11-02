@@ -48,12 +48,16 @@ pub(crate) fn attributes(payload: &[u8], offset: usize) -> io::Result<BTreeMap<u
             return Err(invalid());
         }
         let kind = u16n(&payload[position + 2..]) & 0x3fff;
-        if kind != 0
-            && result
-                .insert(kind, payload[position + 4..position + length].to_vec())
-                .is_some()
-        {
-            return Err(invalid());
+        if kind != 0 {
+            let value = payload[position + 4..position + length].to_vec();
+            // IPv6 route-get can emit RTA_PREFSRC twice (selected source and
+            // route preference). Identical bytes are unambiguous; conflicting
+            // duplicates must never change an ownership decision by ordering.
+            if let Some(previous) = result.insert(kind, value.clone())
+                && previous != value
+            {
+                return Err(invalid());
+            }
         }
         let next = position + align(length);
         if next > payload.len() && position + length != payload.len() {
@@ -223,7 +227,7 @@ pub(crate) fn exchange(
 mod tests {
     use super::*;
     #[test]
-    fn attributes_preserve_unknown_values_but_reject_duplicate_or_truncated_ownership_fields() {
+    fn attributes_allow_identical_kernel_duplicates_but_reject_conflicting_or_truncated_fields() {
         let mut bytes = vec![0; 12];
         attribute(&mut bytes, 6, &31530u32.to_ne_bytes());
         attribute(&mut bytes, 21, &[200]);
@@ -233,6 +237,8 @@ mod tests {
         for length in 13..20 {
             assert!(attributes(&bytes[..length], 12).is_err());
         }
+        attribute(&mut bytes, 6, &31530u32.to_ne_bytes());
+        assert!(attributes(&bytes, 12).is_ok());
         attribute(&mut bytes, 6, &1u32.to_ne_bytes());
         assert!(attributes(&bytes, 12).is_err());
     }

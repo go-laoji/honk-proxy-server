@@ -208,12 +208,16 @@ impl PreparedCapture {
                 .map_err(|e| error("cgroup program type", e))?;
             program.load().map_err(|e| error("cgroup verifier", e))?;
         }
-        let release: &mut CgroupSock = bpf
-            .program_mut("hps_tp_release")
-            .ok_or("capture release program missing")?
-            .try_into()
-            .map_err(|e| error("release program type", e))?;
-        release.load().map_err(|e| error("release verifier", e))?;
+        for name in ["hps_tp_create", "hps_tp_release"] {
+            let program: &mut CgroupSock = bpf
+                .program_mut(name)
+                .ok_or("capture socket lifecycle program missing")?
+                .try_into()
+                .map_err(|e| error("socket lifecycle program type", e))?;
+            program
+                .load()
+                .map_err(|e| error("socket lifecycle verifier", e))?;
+        }
         for name in ["hps_tp_ingress", "hps_tp_egress"] {
             let program: &mut SchedClassifier = bpf
                 .program_mut(name)
@@ -286,14 +290,16 @@ impl PreparedCapture {
                     .attach(cgroup, CgroupAttachMode::Single)
                     .map_err(|e| error("attach disabled cgroup hook", e))?;
             }
-            let program: &mut CgroupSock = bpf
-                .program_mut("hps_tp_release")
-                .unwrap()
-                .try_into()
-                .map_err(|e| error("release program type", e))?;
-            program
-                .attach(cgroup, CgroupAttachMode::Single)
-                .map_err(|e| error("attach release hook", e))?;
+            for name in ["hps_tp_create", "hps_tp_release"] {
+                let program: &mut CgroupSock = bpf
+                    .program_mut(name)
+                    .unwrap()
+                    .try_into()
+                    .map_err(|e| error("socket lifecycle program type", e))?;
+                program
+                    .attach(cgroup, CgroupAttachMode::Single)
+                    .map_err(|e| error("attach socket lifecycle hook", e))?;
+            }
         }
         let mut attachments = vec![];
         if cgroup.is_some() {

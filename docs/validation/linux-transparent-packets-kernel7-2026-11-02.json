@@ -1,0 +1,15 @@
+{
+  "connected_and_unconnected_udp": true,
+  "forwarding_verified": false,
+  "ipv4_tcp_udp": true,
+  "ipv6_tcp_udp": true,
+  "kernel": "7.0.14-linuxkit",
+  "object_sha256": "466a946dd961ca1aff226bfb2e37484bf7fd7cce4f357b7acb55a7cce16e985d",
+  "original_tcp_destination": true,
+  "preexisting_udp_first_send_rejected": 2,
+  "process_pid": 395,
+  "revision": 7,
+  "scope": "original_packet_capture_and_reply_only",
+  "udp_original_reply_source": true,
+  "verified_flows": 12
+}

@@ -55,7 +55,7 @@ async fn real_transparent_programs_load_disabled_with_owned_links_and_release_ev
         .unwrap();
     let programs = capture.program_ids().unwrap();
     let maps = capture.map_ids().unwrap();
-    assert_eq!(programs.len(), 7);
+    assert_eq!(programs.len(), 8);
     assert!(programs.iter().all(|id| *id > 0 && !before.contains(id)));
     assert!(!maps.is_empty() && maps.iter().all(|id| *id > 0));
     assert!(capture.links_present().unwrap());
