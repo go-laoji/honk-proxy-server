@@ -131,7 +131,9 @@ impl RoutingConfig {
         let action_valid = |a: &RouteAction| match a {
             RouteAction::Node { id } => {
                 crate::valid_node_id(id)
-                    && (id.starts_with("lease:") || nodes.contains(id.as_str()))
+                    && (id.starts_with("lease:")
+                        || crate::valid_subscription_node_id(id)
+                        || nodes.contains(id.as_str()))
             }
             RouteAction::Group { id } => groups.contains(id.as_str()),
             _ => true,

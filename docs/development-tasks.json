@@ -406,7 +406,7 @@
       "acceptance": "协议关联生命周期与来源归属正确；不替代短效API主线；嵌套循环拒绝，高级策略可解释。",
       "issue": 24,
       "url": "https://github.com/go-laoji/honk-proxy-server/issues/24",
-      "status": "in_progress"
+      "status": "completed"
     },
     {
       "id": "T20",

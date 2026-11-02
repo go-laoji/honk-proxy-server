@@ -140,6 +140,7 @@ fn supported_api(path: &str) -> bool {
             | "api/v1/config/workspace"
             | "api/v1/config/export"
             | "api/v1/providers"
+            | "api/v1/subscriptions"
             | "api/v1/groups"
     ) || supported_health_get(path)
         || supported_diagnostic_get(path)
@@ -256,7 +257,7 @@ fn supported_connections_get(path: &str) -> bool {
                         }
                         "inbound" => value == "@unknown" || valid_resource_id(&value),
                         "node" => value == "@direct" || hps_config::valid_node_id(&value),
-                        "provider" => value == "@static" || valid_resource_id(&value),
+                        "provider" => value == "@static" || hps_config::valid_source_id(&value),
                         "group" => value == "@none" || valid_resource_id(&value),
                         "rule" => value == "@default" || valid_resource_id(&value),
                         "protocol" => {
@@ -313,9 +314,8 @@ fn supported_nodes_get(path: &str) -> bool {
                         "id" => hps_config::valid_node_id(&value),
                         "search" => value.len() <= 256,
                         "provider" if value == "@static" => true,
-                        "provider" | "group" => {
-                            hps_config::valid_node_id(&value) && !value.contains(':')
-                        }
+                        "provider" => hps_config::valid_source_id(&value),
+                        "group" => hps_config::valid_node_id(&value) && !value.contains(':'),
                         "protocol" => ["http", "https", "socks5"].contains(&value.as_ref()),
                         "capability" => ["tcp", "udp", "ipv4", "ipv6"].contains(&value.as_ref()),
                         "state" => [
@@ -517,6 +517,7 @@ fn supported_action(path: &str) -> bool {
     }
     if matches!(parts.as_slice(),["api","v1","providers",id,"controller","pause"|"resume"|"evaluate"] if valid_resource_id(id))
         || matches!(parts.as_slice(),["api","v1","providers",id,"save"|"delete"|"extract"] if valid_resource_id(id))
+        || matches!(parts.as_slice(),["api","v1","subscriptions",id,"save"|"delete"|"refresh"] if valid_resource_id(id))
         || matches!(parts.as_slice(),["api","v1","providers",id,"diagnose","quota"|"whitelist"] if valid_resource_id(id))
     {
         return true;
@@ -889,6 +890,18 @@ mod tests {
         assert!(!supported_api("api/v1/rules?url=http://external"));
         assert!(supported_action("api/v1/rules/simulate"));
         assert!(supported_action("api/v1/rules/apply"));
+        assert!(supported_api("api/v1/subscriptions"));
+        assert!(supported_action("api/v1/subscriptions/fixture/save"));
+        assert!(supported_action("api/v1/subscriptions/fixture/refresh"));
+        assert!(supported_action("api/v1/subscriptions/fixture/delete"));
+        assert!(!supported_action("api/v1/subscriptions/fixture/unknown"));
+        assert!(!supported_action("api/v1/subscriptions/../refresh"));
+        assert!(supported_api(
+            "api/v1/nodes?provider=subscription%3Afixture&limit=50"
+        ));
+        assert!(supported_api(
+            "api/v1/nodes/sub:fixture:0123456789abcdef01234567"
+        ));
         assert!(supported_action("api/v1/groups/simulate"));
         assert!(supported_action("api/v1/groups/pin"));
         assert!(!supported_action("api/v1/groups/unknown"));

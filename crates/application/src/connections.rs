@@ -279,6 +279,7 @@ impl Supervisor {
                         .providers
                         .iter()
                         .map(|p| p.id.clone())
+                        .chain(current.config.subscriptions.iter().map(|s| s.source_id()))
                         .collect(),
                 });
                 let mut snapshots = service.observations.snapshots.lock().unwrap();
@@ -546,7 +547,7 @@ fn validate(q: &ConnectionQuery) -> Result<(), ApplicationError> {
             .is_some_and(|s| s != "@direct" && !hps_config::valid_node_id(s))
         || q.provider
             .as_ref()
-            .is_some_and(|s| s != "@static" && !valid_resource(s))
+            .is_some_and(|s| s != "@static" && !hps_config::valid_source_id(s))
         || q.group
             .as_ref()
             .is_some_and(|s| s != "@none" && !valid_resource(s))

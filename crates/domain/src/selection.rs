@@ -34,6 +34,23 @@ pub struct GroupCandidate {
     pub remaining_secs: Option<u64>,
     pub latency_ms: Option<u64>,
     pub weight: u16,
+    #[serde(default)]
+    pub member_groups: Vec<String>,
+    pub score: Option<CandidateScore>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScoreComponent {
+    pub source: String,
+    pub observed: Option<u64>,
+    pub normalized: Option<u16>,
+    pub weight: u16,
+    pub contribution: i64,
+    pub missing_penalty: u16,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CandidateScore {
+    pub total: i64,
+    pub components: Vec<ScoreComponent>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SelectionDecision {

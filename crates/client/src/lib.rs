@@ -4,6 +4,7 @@ use serde::de::DeserializeOwned;
 use std::time::Duration;
 mod diagnostics;
 mod events;
+mod subscriptions;
 pub use events::EventSubscription;
 
 #[derive(Debug, thiserror::Error)]

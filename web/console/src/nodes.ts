@@ -101,6 +101,7 @@ export type ImportPreview = {
 };
 export const nodeStates: Record<string, string> = {
   active: "租约有效",
+  subscription_snapshot: "标准订阅快照（有效期未知）",
   static: "静态配置",
   expired: "已到期",
   revoked: "快照已撤销",

@@ -27,6 +27,7 @@ mod nodes;
 mod observability;
 mod providers;
 mod rules;
+mod subscriptions;
 mod tasks;
 #[cfg(feature = "web-ui")]
 mod web;
@@ -162,6 +163,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .merge(configuration::router())
         .merge(connections::router())
         .merge(providers::router())
+        .merge(subscriptions::router())
         .merge(health::router())
         .merge(dns::router())
         .merge(groups::router())

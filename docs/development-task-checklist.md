@@ -41,7 +41,7 @@ T05 配置基础后推进 T06/T07 短效 API 与补池。T08–T14 逐步闭合�
 | T16 | P0 | [#21](https://github.com/go-laoji/honk-proxy-server/issues/21) Desktop 本地远程档案与系统服务集成 | T02, T05, T15 | 已完成安全验收；真实 OS 写入限制单列 |
 | T17 | P0 | [#22](https://github.com/go-laoji/honk-proxy-server/issues/22) 分包发行、端到端与发布门槛 | T01, T02, T04, T05, T06, T07, T08, T09, T10, T11, T12, T13, T14, T15, T16 | 已交付发行候选与明确平台限制，非全平台无条件放行 |
 | T18 | P1 | [#23](https://github.com/go-laoji/honk-proxy-server/issues/23) 历史观测、诊断导出与任务增强 | T17 | 已完成 |
-| T19 | P1 | [#24](https://github.com/go-laoji/honk-proxy-server/issues/24) SOCKS5 UDP、订阅与高级分组扩展 | T17 | 开发中 |
+| T19 | P1 | [#24](https://github.com/go-laoji/honk-proxy-server/issues/24) SOCKS5 UDP、订阅与高级分组扩展 | T17 | 已完成 |
 | T20 | P1 | [#25](https://github.com/go-laoji/honk-proxy-server/issues/25) 备份恢复、系统体验与高级 Linux 诊断 | T17 | 开发中 |
 | T21 | P2 | [#26](https://github.com/go-laoji/honk-proxy-server/issues/26) 多实例与其他平台等储备范围 | T17 | 开发中 |
 

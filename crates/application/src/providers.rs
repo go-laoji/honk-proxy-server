@@ -86,7 +86,7 @@ impl Supervisor {
                     }),
                 upstream: lease.candidate.upstream,
             })
-            .collect();
+            .collect::<Vec<_>>();
         let pool = current.engine.dynamic_pool();
         tokio::task::spawn_blocking(move || pool.replace(nodes))
             .await

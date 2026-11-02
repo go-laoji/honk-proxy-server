@@ -103,6 +103,10 @@ export default function Overview({ data }: { data: ServiceData }) {
               ["HTTP / CONNECT", capabilities.http_proxy.available],
               ["HTTPS 代理", capabilities.https_proxy.available],
               ["SOCKS5 TCP", capabilities.socks5_proxy.available],
+              [
+                "SOCKS5 UDP ASSOCIATE",
+                capabilities.socks5_udp?.available ?? false,
+              ],
             ].map(([label, enabled]) => (
               <div
                 key={String(label)}

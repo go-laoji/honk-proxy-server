@@ -66,12 +66,14 @@ impl Upstream {
 pub struct Dialer {
     upstreams: Vec<Arc<Upstream>>,
     pub(crate) pool: Arc<crate::pool::DynamicPool>,
+    pub(crate) subscription_pool: std::sync::OnceLock<Arc<Vec<Arc<Upstream>>>>,
     pub(crate) demand: Arc<crate::demand::Demand>,
     pub(crate) health: Arc<crate::health::HealthRegistry>,
     pub(crate) nodes: Arc<crate::nodes::NodeRegistry>,
     policy: std::sync::RwLock<crate::health::HealthPolicy>,
     sources: std::sync::RwLock<std::collections::HashMap<String, String>>,
     source_protocols: std::sync::RwLock<std::collections::HashMap<String, ProxyProtocol>>,
+    source_lifetimes: std::sync::RwLock<std::collections::HashMap<String, u64>>,
     refill_fingerprint: String,
     selector: crate::selection::Selector,
     router: crate::routing::Router,
@@ -127,7 +129,7 @@ impl ProbePlan {
         self.upstream.source.as_ref().map(|(id, _)| id.as_str())
     }
     pub fn minimum_lifetime(&self) -> u64 {
-        self.dialer.min_lifetime.max(self.upstream.minimum_lifetime)
+        self.dialer.minimum_lifetime(&self.upstream)
     }
     pub fn remaining(&self) -> Option<Duration> {
         remaining(&self.upstream)
@@ -250,12 +252,14 @@ impl Dialer {
         Ok(Self {
             upstreams,
             pool: Arc::new(crate::pool::DynamicPool::default()),
+            subscription_pool: Default::default(),
             demand: Arc::new(crate::demand::Demand::default()),
             health: Arc::new(crate::health::HealthRegistry::default()),
             nodes: Arc::new(crate::nodes::NodeRegistry::default()),
             policy: Default::default(),
             sources: std::sync::RwLock::new(std::collections::HashMap::new()),
             source_protocols: Default::default(),
+            source_lifetimes: Default::default(),
             refill_fingerprint,
             selector: crate::selection::Selector::new(config.selection.clone()),
             router,
@@ -272,11 +276,24 @@ impl Dialer {
             capabilities,
         })
     }
+    pub(crate) fn set_source_lifetimes(&self, values: std::collections::HashMap<String, u64>) {
+        *self.source_lifetimes.write().unwrap() = values;
+    }
+    fn minimum_lifetime(&self, upstream: &Upstream) -> u64 {
+        let configured = upstream
+            .source
+            .as_ref()
+            .and_then(|(id, _)| self.source_lifetimes.read().unwrap().get(id).copied());
+        self.min_lifetime
+            .max(configured.unwrap_or(upstream.minimum_lifetime))
+    }
     pub fn probe_plans(self: &Arc<Self>) -> Vec<ProbePlan> {
         let dynamic = self.pool.snapshot();
+        let subscriptions = self.subscription_pool.get().cloned().unwrap_or_default();
         self.upstreams
             .iter()
             .chain(dynamic.iter())
+            .chain(subscriptions.iter())
             .filter(|upstream| {
                 upstream
                     .source
@@ -470,6 +487,7 @@ impl Dialer {
         commit: bool,
     ) -> (hps_domain::SelectionDecision, Option<Arc<Upstream>>) {
         let dynamic = self.pool.snapshot();
+        let subscriptions = self.subscription_pool.get().cloned().unwrap_or_default();
         let family = query
             .destination_host
             .as_ref()
@@ -486,6 +504,7 @@ impl Dialer {
             .upstreams
             .iter()
             .chain(dynamic.iter())
+            .chain(subscriptions.iter())
             .map(|upstream| {
                 let sampled = std::time::Instant::now();
                 let remaining = remaining(upstream);
@@ -503,7 +522,7 @@ impl Dialer {
                 {
                     reasons.push("source_reconfigured".into());
                 }
-                let minimum = self.min_lifetime.max(upstream.minimum_lifetime);
+                let minimum = self.minimum_lifetime(upstream);
                 if let Some(time) = remaining
                     && time <= Duration::from_secs(minimum)
                 {
@@ -735,27 +754,28 @@ impl Dialer {
             upstream_protocol: format!("{:?}", upstream.config.protocol).to_lowercase(),
             expires_at_unix: upstream.config.expires_at_unix,
             remaining_secs_at_admission: remaining(&upstream).map(|r| r.as_secs()),
-            minimum_remaining_secs: self.min_lifetime.max(upstream.minimum_lifetime),
+            minimum_remaining_secs: self.minimum_lifetime(&upstream),
         }) {
             observation.fail("admission", "node_admission_changed", false);
             return Err(ProxyError::NoUpstream);
         }
-        if remaining(&upstream).is_some_and(|r| {
-            r <= Duration::from_secs(self.min_lifetime.max(upstream.minimum_lifetime))
-        }) || !self.health_usable(
-            &upstream.identity,
-            query
-                .destination_host
-                .as_ref()
-                .and_then(|h| h.parse::<std::net::IpAddr>().ok())
-                .map(|ip| {
-                    if ip.is_ipv4() {
-                        hps_domain::IpFamily::Ipv4
-                    } else {
-                        hps_domain::IpFamily::Ipv6
-                    }
-                }),
-        ) {
+        if remaining(&upstream)
+            .is_some_and(|r| r <= Duration::from_secs(self.minimum_lifetime(&upstream)))
+            || !self.health_usable(
+                &upstream.identity,
+                query
+                    .destination_host
+                    .as_ref()
+                    .and_then(|h| h.parse::<std::net::IpAddr>().ok())
+                    .map(|ip| {
+                        if ip.is_ipv4() {
+                            hps_domain::IpFamily::Ipv4
+                        } else {
+                            hps_domain::IpFamily::Ipv6
+                        }
+                    }),
+            )
+        {
             observation.fail("admission", "node_no_longer_eligible", false);
             return Err(ProxyError::NoUpstream);
         }

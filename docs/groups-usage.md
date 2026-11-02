@@ -1,6 +1,6 @@
 # 节点分组、固定与选点
 
-HTTP、HTTPS 与 SOCKS5 TCP 入口共用 Rust 选择器。配置位于 `proxy.selection`，无分组配置时保持全池轮询。分组不会跳过已有健康、节点启停、来源指纹和租约寿命准入，也不会在没有合格节点时隐式直连。
+HTTP、HTTPS、SOCKS5 TCP / UDP ASSOCIATE 入口共用 Rust 选择器。配置位于 `proxy.selection`，无分组配置时保持全池轮询。分组不会跳过已有健康、节点启停、来源指纹和租约寿命准入，也不会在没有合格节点时隐式直连。
 
 ## 配置
 
@@ -34,7 +34,7 @@ key = "source_destination"
 ttl_secs = 60
 ```
 
-`members` 与 `providers` 取并集，再要求所有指定 `tags` 均匹配，并应用协议过滤。节点和所属来源的标签合并；协议列表为空表示不限。`include_all=true` 明确选择全池作为成员来源。空成员条件不会自动当作全池，空组允许保存并明确返回无候选。
+`members`、`providers` 与 `groups` 子组候选取并集，再要求所有指定 `tags` 均匹配，并应用协议过滤。节点和所属来源的标签合并；协议列表为空表示不限。`include_all=true` 明确选择全池作为成员来源。空成员条件不会自动当作全池，空组允许保存并明确返回无候选。
 
 静态节点、供应商、入口和默认组引用会验证；动态租约 ID 使用 `lease:42` 形式，租约消失后仍能解释显式成员的 `missing_or_retired`。删除被默认组、入口或后续路由引用的分组前，需要先移除引用。ID 是配置标识，不是账号或权限主体。
 
@@ -52,7 +52,7 @@ ttl_secs = 60
 
 取消固定同时清除回退列表；原策略是 `fixed` 时切换为 `round_robin`。`failover`/`fixed` 回退优先按明确回退列表顺序，其余策略在允许范围内继续按自身规则分配。
 
-当前 HTTP/HTTPS/SOCKS5 上游均只提供 TCP 数据通道，UDP 模拟会逐节点返回 `tcp_only`，不继承 TCP 探测成功。UDP 数据通道另由 T15/T19 接续。
+HTTP/HTTPS 上游仅支持 TCP，UDP 候选明确标记 `tcp_only`；SOCKS5 出口在真实 UDP ASSOCIATE 成功后收发数据报。TCP 健康不等于 UDP 探测成功，当前主动 UDP 健康探测仍未实现。嵌套组和 Score 见 [T19 使用说明](protocol-subscriptions-usage.md)。
 
 ## 会话和配置代际
 

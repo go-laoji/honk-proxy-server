@@ -13,6 +13,15 @@ type Group = {
   strategy: string;
   include_all: boolean;
   members: string[];
+  groups: string[];
+  score: {
+    latency_weight: number;
+    lifetime_weight: number;
+    priority_weight: number;
+    latency_ceiling_ms: number;
+    lifetime_target_secs: number;
+    missing_evidence_penalty: number;
+  };
   providers: string[];
   tags: string[];
   protocols: string[];
@@ -40,6 +49,15 @@ const blankGroup: Group = {
   strategy: "round_robin",
   include_all: false,
   members: [],
+  groups: [],
+  score: {
+    latency_weight: 60,
+    lifetime_weight: 30,
+    priority_weight: 10,
+    latency_ceiling_ms: 2000,
+    lifetime_target_secs: 300,
+    missing_evidence_penalty: 250,
+  },
   providers: [],
   tags: [],
   protocols: [],
@@ -311,7 +329,7 @@ export default function GroupsPage({
           <p className="muted text-xs leading-6">
             {editor.mode === "policy"
               ? "配置默认组、入口绑定、节点和来源标签，以及会话表上限。删除被引用的分组前先移除引用。"
-              : "members 与 providers 取并集，再按 tags 和 protocols 过滤；include_all 明确选择全池。会话可配置 source_ip / source_destination 和 ttl_secs。"}
+              : "members、providers 与 groups 子组取并集，再按 tags/protocols 过滤。订阅来源写 subscription:来源ID；子组保留过滤与固定范围，最多 8 层且拒绝循环。strategy=score 使用 score 权重与显式 weights 运营优先级；缺失证据逐项扣分，不推断成本或地域。"}
           </p>
           <label className="block text-xs font-medium">
             {editor.mode === "policy" ? "选择策略 JSON" : "分组 JSON"}
@@ -355,7 +373,7 @@ export default function GroupsPage({
                 <dd className="inline break-all">
                   {item.include_all
                     ? "全部节点"
-                    : `${item.members.length} 个节点 / ${item.providers.length} 个来源`}
+                    : `${item.members.length} 个节点 / ${item.providers.length} 个来源 / ${item.groups.length} 个子组`}
                 </dd>
               </div>
               <div>
@@ -498,7 +516,7 @@ export default function GroupsPage({
               onChange={(event) => setTransport(event.target.value)}
             >
               <option value="tcp">TCP</option>
-              <option value="udp">UDP（当前节点均为 TCP-only）</option>
+              <option value="udp">UDP（SOCKS5 出口或显式直连）</option>
             </select>
           </label>
         </div>
@@ -557,7 +575,7 @@ export default function GroupsPage({
                       </td>
                       <td className="p-3">
                         {node.remaining_secs === null
-                          ? "无租约期限"
+                          ? "有效期未知 / 无租约"
                           : `${node.remaining_secs}s`}{" "}
                         /{" "}
                         {node.latency_ms === null
@@ -569,6 +587,38 @@ export default function GroupsPage({
                         {node.eligible
                           ? "合格候选"
                           : node.reasons.map((r) => reasons[r] ?? r).join("；")}
+                        {node.member_groups.length > 0 && (
+                          <p className="muted mt-2">
+                            子组：{node.member_groups.join(", ")}
+                          </p>
+                        )}
+                        {node.score && (
+                          <details className="mt-2">
+                            <summary>
+                              Score {node.score.total} · 分量与证据
+                            </summary>
+                            <ul className="mt-2 space-y-2">
+                              {node.score.components.map((part) => (
+                                <li key={part.source}>
+                                  {(
+                                    {
+                                      fresh_health_probe_latency_ms:
+                                        "新鲜健康延迟 ms",
+                                      admission_remaining_lifetime_secs:
+                                        "准入剩余寿命 s",
+                                      configured_operator_priority:
+                                        "显式运营优先级",
+                                    } as Record<string, string>
+                                  )[part.source] ?? part.source}
+                                  ：{part.observed ?? "缺少证据"}；归一{" "}
+                                  {part.normalized ?? "未知"} /1000；权重{" "}
+                                  {part.weight}；贡献 {part.contribution}
+                                  ；缺证据扣分 {part.missing_penalty}
+                                </li>
+                              ))}
+                            </ul>
+                          </details>
+                        )}
                       </td>
                     </tr>
                   ))}
