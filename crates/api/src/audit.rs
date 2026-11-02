@@ -32,6 +32,8 @@ fn operation(route: &str) -> Option<(&'static str, &'static str)> {
         "/api/v1/groups/delete" => ("group_delete", "group"),
         "/api/v1/groups/pin" => ("group_pin", "group"),
         "/api/v1/rules/save" => ("rules_save", "routing"),
+        "/api/v1/rules/import/preview" => ("rules_import_preview", "routing"),
+        "/api/v1/rules/import/apply" => ("rules_import_candidate", "routing"),
         "/api/v1/rules/upsert" => ("rule_upsert", "routing"),
         "/api/v1/rules/delete" => ("rule_delete", "routing"),
         "/api/v1/rules/toggle" => ("rule_toggle", "routing"),

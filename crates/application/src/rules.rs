@@ -18,6 +18,85 @@ fn only_routing_changed(
 }
 
 impl Supervisor {
+    pub async fn export_rules(
+        &self,
+        revision: Option<i64>,
+    ) -> Result<hps_config::RuleDocument, ApplicationError> {
+        let revision = revision.unwrap_or(self.current().revision);
+        let document = self.store.revision(revision).await?;
+        Ok(hps_config::RuleDocument {
+            format_version: 1,
+            source_revision: Some(revision),
+            configuration: document.config.proxy.routing,
+        })
+    }
+    pub async fn preview_rule_import(
+        self: &Arc<Self>,
+        input: hps_config::RuleImportInput,
+    ) -> Result<hps_domain::RuleImportPreview, ApplicationError> {
+        let permit = self
+            .rule_diagnostics
+            .clone()
+            .try_acquire_owned()
+            .map_err(|_| ApplicationError::RuleDiagnosticsCapacity)?;
+        self.tracked(move |service| async move {
+            let _permit = permit;
+            service.preview_rule_import_inner(input).await
+        })
+        .await
+    }
+    async fn preview_rule_import_inner(
+        &self,
+        input: hps_config::RuleImportInput,
+    ) -> Result<hps_domain::RuleImportPreview, ApplicationError> {
+        use sha2::{Digest, Sha256};
+        if input.document.format_version != 1 {
+            return Err(ApplicationError::Invalid);
+        }
+        self.rule_base(input.expected_revision, None).await?;
+        let checksum = format!(
+            "{:x}",
+            Sha256::digest(
+                serde_json::to_vec(&input.document).map_err(|_| ApplicationError::Invalid)?
+            )
+        );
+        let rule_count = input.document.configuration.rules.len();
+        let mut config = self.current().base_config.clone();
+        config.proxy.routing = input.document.configuration;
+        let validation = self
+            .validate_inner(ConfigInput {
+                toml: toml::to_string(&config).map_err(|_| ApplicationError::Invalid)?,
+                expected_revision: input.expected_revision,
+                expected_draft_version: None,
+                note: "rules import preview".into(),
+                use_draft_credentials: false,
+            })
+            .await;
+        Ok(hps_domain::RuleImportPreview {
+            format_version: 1,
+            checksum,
+            rule_count,
+            validation,
+        })
+    }
+    pub async fn import_rules(
+        self: &Arc<Self>,
+        input: hps_config::RuleImportInput,
+    ) -> Result<ConfigRevision, ApplicationError> {
+        let preview = self.preview_rule_import(input.clone()).await?;
+        if !preview.validation.valid {
+            return Err(ApplicationError::Invalid);
+        }
+        if input.checksum.as_deref() != Some(&preview.checksum) {
+            return Err(StorageError::Conflict.into());
+        }
+        self.save_rules(RulesSave {
+            configuration: input.document.configuration,
+            expected_revision: input.expected_revision,
+            base_revision: None,
+        })
+        .await
+    }
     async fn rule_base(
         &self,
         expected: i64,

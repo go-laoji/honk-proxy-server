@@ -134,7 +134,9 @@ pub struct DomainContext {
     pub domains: Vec<String>,
     pub source: String,
     pub ambiguous: bool,
+    #[serde(default)]
     pub mappings: Vec<DomainMapping>,
+    #[serde(default)]
     pub mappings_truncated: bool,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]

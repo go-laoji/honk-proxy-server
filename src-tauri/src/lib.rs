@@ -332,10 +332,13 @@ fn supported_dns_get(path: &str) -> bool {
     })
 }
 fn supported_rules_get(path: &str) -> bool {
-    if path == "api/v1/rules" {
+    if path == "api/v1/rules" || path == "api/v1/rules/export" {
         return true;
     }
-    let Some(query) = path.strip_prefix("api/v1/rules?") else {
+    let Some(query) = path
+        .strip_prefix("api/v1/rules?")
+        .or_else(|| path.strip_prefix("api/v1/rules/export?"))
+    else {
         return false;
     };
     let pairs = url::form_urlencoded::parse(query.as_bytes()).collect::<Vec<_>>();
@@ -435,6 +438,8 @@ fn supported_action(path: &str) -> bool {
             | "api/v1/linux/capture/save"
             | "api/v1/tasks"
             | "api/v1/rules/save"
+            | "api/v1/rules/import/preview"
+            | "api/v1/rules/import/apply"
             | "api/v1/rules/upsert"
             | "api/v1/rules/delete"
             | "api/v1/rules/toggle"
@@ -690,6 +695,12 @@ mod tests {
         ));
         assert!(supported_api("api/v1/groups"));
         assert!(supported_api("api/v1/rules"));
+        assert!(supported_api("api/v1/rules/export?revision=42"));
+        assert!(!supported_api(
+            "api/v1/rules/export?revision=42&revision=43"
+        ));
+        assert!(supported_action("api/v1/rules/import/preview"));
+        assert!(supported_action("api/v1/rules/import/apply"));
         assert!(supported_api(
             "api/v1/nodes?provider=vendor&state=draining&limit=50&offset=0"
         ));

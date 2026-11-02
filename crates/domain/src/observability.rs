@@ -112,3 +112,10 @@ pub struct ObservationOverview {
     pub rule_hits: RuleHitStatistics,
     pub correlations: Correlations,
 }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuleImportPreview {
+    pub format_version: u32,
+    pub checksum: String,
+    pub rule_count: usize,
+    pub validation: crate::ConfigValidation,
+}

@@ -393,6 +393,22 @@ enum GroupCommand {
 }
 #[derive(Subcommand)]
 enum RuleCommand {
+    Export {
+        #[arg(long)]
+        revision: Option<i64>,
+    },
+    ImportPreview {
+        path: PathBuf,
+        #[arg(long)]
+        expected_revision: i64,
+    },
+    ImportApply {
+        path: PathBuf,
+        #[arg(long)]
+        expected_revision: i64,
+        #[arg(long)]
+        checksum: String,
+    },
     Show {
         #[arg(long)]
         revision: Option<i64>,
@@ -1010,6 +1026,36 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
             }
         },
         Command::Rule { command } => match command {
+            RuleCommand::Export { revision } => {
+                serde_json::to_value(client.export_rules(*revision).await.map_err(client_error)?)
+            }
+            RuleCommand::ImportPreview {
+                path,
+                expected_revision,
+            } => serde_json::to_value(
+                client
+                    .preview_rule_import(&hps_config::RuleImportInput {
+                        document: read_rule_document(path)?,
+                        expected_revision: *expected_revision,
+                        checksum: None,
+                    })
+                    .await
+                    .map_err(client_error)?,
+            ),
+            RuleCommand::ImportApply {
+                path,
+                expected_revision,
+                checksum,
+            } => serde_json::to_value(
+                client
+                    .import_rules(&hps_config::RuleImportInput {
+                        document: read_rule_document(path)?,
+                        expected_revision: *expected_revision,
+                        checksum: Some(checksum.clone()),
+                    })
+                    .await
+                    .map_err(client_error)?,
+            ),
             RuleCommand::Show { revision } => {
                 serde_json::to_value(client.rules(*revision).await.map_err(client_error)?)
             }
@@ -1658,6 +1704,30 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
     value.map_err(|e| (5, e.to_string()))
 }
 
+fn read_rule_document(path: &std::path::Path) -> Result<hps_config::RuleDocument, (u8, String)> {
+    use std::io::Read;
+    let file = std::fs::File::open(path).map_err(|_| (2, "cannot read rules JSON".into()))?;
+    if !file
+        .metadata()
+        .map_err(|_| (2, "cannot inspect rules JSON".into()))?
+        .is_file()
+    {
+        return Err((2, "rules JSON must be a regular file".into()));
+    }
+    let mut bytes = vec![];
+    file.take(1024 * 1024 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| (2, "cannot read rules JSON".into()))?;
+    if bytes.len() > 1024 * 1024 {
+        return Err((2, "rules JSON exceeds 1 MiB".into()));
+    }
+    serde_json::from_slice(&bytes).map_err(|_| {
+        (
+            2,
+            "invalid rules JSON; check its format version and fields".into(),
+        )
+    })
+}
 fn read_policy_file(path: &std::path::Path) -> Result<String, (u8, String)> {
     let metadata = std::fs::metadata(path).map_err(|e| (2, e.to_string()))?;
     if !metadata.is_file() || metadata.len() > 8 * 1024 * 1024 {

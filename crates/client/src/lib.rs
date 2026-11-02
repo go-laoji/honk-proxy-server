@@ -163,6 +163,27 @@ impl HpsClient {
         ))
         .await
     }
+    pub async fn export_rules(
+        &self,
+        revision: Option<i64>,
+    ) -> Result<hps_config::RuleDocument, ClientError> {
+        self.get_json(&revision.map_or("api/v1/rules/export".into(), |r| {
+            format!("api/v1/rules/export?revision={r}")
+        }))
+        .await
+    }
+    pub async fn preview_rule_import(
+        &self,
+        input: &hps_config::RuleImportInput,
+    ) -> Result<hps_domain::RuleImportPreview, ClientError> {
+        self.post_body("api/v1/rules/import/preview", input).await
+    }
+    pub async fn import_rules(
+        &self,
+        input: &hps_config::RuleImportInput,
+    ) -> Result<hps_domain::ConfigRevision, ClientError> {
+        self.post_body("api/v1/rules/import/apply", input).await
+    }
     pub async fn dns(
         &self,
         after: Option<&str>,
