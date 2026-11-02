@@ -27,7 +27,7 @@ def main():
     parser.add_argument("--ebpf",type=Path)
     parser.add_argument("--kernel-report",type=Path,default=ROOT/"docs/validation/linux-transparent-acceptance-2026-11-02.json")
     parser.add_argument("--debug", action="store_true", help="exploratory validation bundles only")
-    parser.add_argument("--bundles", default="app" if platform.system() == "Darwin" else "deb")
+    parser.add_argument("--bundles", choices=["app", "deb"], default="app" if platform.system() == "Darwin" else "deb")
     args = parser.parse_args()
     require = support.require
     revision = subprocess.check_output(["git", "-c", "safe.directory=" + str(ROOT), "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
@@ -91,11 +91,12 @@ def main():
     require(desktop["source_revision"] == revision and desktop["source_dirty"] == dirty, "compiled Desktop source metadata mismatch")
     bundles = []
     bundle_root = target_directory / mode / "bundle"
+    product = json.loads((ROOT / "src-tauri/tauri.conf.json").read_text())["productName"]
     for path in sorted(bundle_root.rglob("*")):
-        if path.suffix == ".app" and path.is_dir():
+        if args.bundles == "app" and path == bundle_root / "macos" / (product + ".app") and path.is_dir():
             require(support.digest(path / "Contents/Resources/bin/hpsd") == support.digest(resource_daemon), "bundled daemon bytes differ")
             bundles.append({"path": str(path), "type": "app", "resource_daemon_sha256": support.digest(resource_daemon)})
-        elif path.is_file() and path.suffix in (".deb", ".dmg", ".AppImage", ".rpm"):
+        elif args.bundles == "deb" and path.is_file() and path.suffix == ".deb" and path.name.startswith(product + "_"):
             bundles.append({"path": str(path), "sha256": support.digest(path), "type": path.suffix[1:]})
     require(bundles, "no Desktop installation bundle was produced")
     manifest = {"format_version": 1, "package": "desktop", "source_revision": revision, "dirty_tracked_source": dirty, "exploratory_artifact": args.allow_dirty, "target": target, "profile": mode, "web_build_id": web["web_build_id"], "web_pages": web["pages"], "daemon_sha256": support.digest(resource_daemon), "desktop_metadata": desktop, "bundles": bundles, "cloud_signed_or_notarized": False, "published": False, "macos_actual_proxy_persistent_change_verified": False}

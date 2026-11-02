@@ -1,6 +1,6 @@
 # T17 分包发行与质量门槛实施计划
 
-对应 #22，当前以 `feature/desktop-service` 为基础继续可独立的工作。#21 的安全窗口复验尚待解锁，因此不 finish 它，也不先 finish 本分支；依赖验收完成后按顺序收尾。禁止 push、发布 registry 或自动合入 main。
+对应 #22。#21 已完成只读安全窗口验收并单独 finish，`develop` 已顺序合入本分支。macOS 系统代理持久写入未验收，事故前的错误测试结论已作废。禁止 push、发布 registry 或自动合入 main。
 
 ## 交付切片
 

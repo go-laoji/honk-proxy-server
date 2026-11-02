@@ -1,0 +1,48 @@
+name: Independent headless packages
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm, macos-15]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    env:
+      HPS_FORBID_HOST_NETWORK_CHANGES: '1'
+      CARGO_BUILD_JOBS: '2'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: shared-web
+          path: dist
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: verified-kernel
+          path: target/verified-kernel
+      - name: Build Linux static binaries and verify package
+        if: runner.os == 'Linux'
+        run: |
+          docker build -f packaging/Dockerfile.builder -t hps-ci-builder .
+          mkdir -p target/packages
+          docker run --rm --cpus 2 --memory 4g -v "$PWD:/work:ro" -v "$PWD/target:/out" -w /work -e CARGO_TARGET_DIR=/out/static -e HPS_WEB_ASSETS_DIR=/work/dist hps-ci-builder sh -eu -c '
+            export RUSTFLAGS="-C target-feature=+crt-static"
+            scripts/build-headless.sh --target "$(uname -m)-unknown-linux-musl"
+            python3 scripts/package-headless.py --bin-dir "/out/static/$(uname -m)-unknown-linux-musl/release" --target "$(uname -m)-unknown-linux-musl" --output-dir /out/packages --ebpf /out/verified-kernel/hps-ebpf.elf --kernel-report /out/verified-kernel/acceptance.json
+          '
+      - name: Build macOS binaries and verify package
+        if: runner.os == 'macOS'
+        run: |
+          scripts/build-headless.sh
+          python3 scripts/package-headless.py --bin-dir target/release --target "$(rustc -vV | sed -n 's/host: //p')"
+      - run: cargo test --locked --workspace
+      - run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: headless-${{ matrix.runner }}
+          path: target/packages/
+          if-no-files-found: error
