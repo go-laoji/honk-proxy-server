@@ -104,6 +104,13 @@ impl Supervisor {
                 let Some(service)=weak.upgrade() else {break;};
                 let current=service.current();
                 service.observability.history.lock().unwrap().sample(Instant::now(),hps_storage::tasks::unix_ms(),current.engine.node_registry().connection_statistics(),current.dns.statistics());
+                let failures = {
+                    let history=service.observability.history.lock().unwrap();
+                    let now=Instant::now();
+                    let (failed,closed)=history.samples.iter().filter(|(at,s)|s.interval_ms>0&&now.saturating_duration_since(*at).as_secs()<=60).fold((0u64,0u64),|(f,c),(_,s)|(f.saturating_add(s.failed_delta),c.saturating_add(s.closed_delta)));
+                    Some((failed,failed.saturating_add(closed)))
+                };
+                tokio::select!{biased;_=cancel.cancelled()=>break,_=service.sample_alerts(failures)=>{}}
             }}}
         });
     }

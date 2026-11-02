@@ -1,7 +1,11 @@
 use super::*;
 use axum::extract::Query;
 pub fn router() -> Router<Arc<AppState>> {
-    Router::new().route("/api/v1/observability", get(overview))
+    Router::new()
+        .route("/api/v1/observability", get(overview))
+        .route("/api/v1/observability/alerts", get(alerts))
+        .route("/api/v1/observability/alerts/save", post(save_alerts))
+        .layer(axum::extract::DefaultBodyLimit::max(4096))
 }
 async fn overview(
     State(state): State<Arc<AppState>>,
@@ -12,6 +16,32 @@ async fn overview(
         .as_ref()
         .ok_or_else(|| application_error(ApplicationError::Worker))?
         .observation_overview(query)
+        .await
+        .map(Json)
+        .map_err(application_error)
+}
+
+async fn alerts(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<hps_domain::AlertQuery>,
+) -> ApiResult<hps_domain::AlertFeed> {
+    state
+        .application
+        .as_ref()
+        .ok_or_else(|| application_error(ApplicationError::Worker))?
+        .alert_feed(query)
+        .map(Json)
+        .map_err(application_error)
+}
+async fn save_alerts(
+    State(state): State<Arc<AppState>>,
+    Json(input): Json<hps_domain::AlertSave>,
+) -> ApiResult<hps_domain::ConfigRevision> {
+    state
+        .application
+        .as_ref()
+        .ok_or_else(|| application_error(ApplicationError::Worker))?
+        .save_alerts(input)
         .await
         .map(Json)
         .map_err(application_error)

@@ -7,6 +7,13 @@ type Result<T> = std::result::Result<T, (u8, String)>;
 
 #[derive(Subcommand)]
 pub(super) enum DiagnosticCommand {
+    /// Read bounded alert transitions; there is no account-specific acknowledgement state.
+    Alerts {
+        #[arg(long)]
+        after: Option<u64>,
+        #[arg(long,default_value_t=50,value_parser=clap::value_parser!(u32).range(1..=100))]
+        limit: u32,
+    },
     /// Collect a bounded metadata-only diagnostic bundle as a daemon-owned task.
     Start {
         #[arg(long, default_value_t = 300, value_parser=clap::value_parser!(u32).range(60..=3600))]
@@ -54,6 +61,9 @@ fn value(value: impl serde::Serialize) -> Result<Value> {
 }
 pub(super) async fn run(client: &HpsClient, command: &DiagnosticCommand) -> Result<Value> {
     match command {
+        DiagnosticCommand::Alerts { after, limit } => {
+            value(client.alerts(*after, *limit).await.map_err(client_error)?)
+        }
         DiagnosticCommand::Start {
             window_secs,
             request_id,
