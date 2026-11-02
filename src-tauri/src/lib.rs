@@ -53,12 +53,60 @@ fn supported_api(path: &str) -> bool {
             | "api/v1/providers"
             | "api/v1/groups"
     ) || supported_health_get(path)
+        || supported_nodes_get(path)
         || supported_rules_get(path)
         || supported_dns_get(path)
         || supported_provider_get(path)
         || path
             .strip_prefix("api/v1/config/revisions/")
             .is_some_and(|id| id.parse::<i64>().is_ok_and(|id| id > 0))
+}
+fn supported_nodes_get(path: &str) -> bool {
+    let (base, query) = path
+        .split_once('?')
+        .map_or((path, None), |(base, q)| (base, Some(q)));
+    if let Some(id) = base.strip_prefix("api/v1/nodes/") {
+        return query.is_none() && hps_config::valid_node_id(id);
+    }
+    if base != "api/v1/nodes" {
+        return false;
+    }
+    query.is_none_or(|q| {
+        let mut keys = std::collections::HashSet::new();
+        !q.is_empty()
+            && url::form_urlencoded::parse(q.as_bytes()).all(|(key, value)| {
+                keys.insert(key.to_string())
+                    && match key.as_ref() {
+                        "id" => hps_config::valid_node_id(&value),
+                        "search" => value.len() <= 256,
+                        "provider" if value == "@static" => true,
+                        "provider" | "group" => {
+                            hps_config::valid_node_id(&value) && !value.contains(':')
+                        }
+                        "protocol" => ["http", "https", "socks5"].contains(&value.as_ref()),
+                        "capability" => ["tcp", "udp", "ipv4", "ipv6"].contains(&value.as_ref()),
+                        "state" => [
+                            "eligible",
+                            "blocked",
+                            "expired",
+                            "near_expiry",
+                            "disabled",
+                            "draining",
+                            "deleted",
+                            "healthy",
+                            "unhealthy",
+                            "unknown",
+                            "retired",
+                        ]
+                        .contains(&value.as_ref()),
+                        "sort" => ["id", "expiry_asc", "expiry_desc"].contains(&value.as_ref()),
+                        "remaining_max_secs" => value.parse::<u64>().is_ok(),
+                        "offset" => value.parse::<u32>().is_ok_and(|v| v <= 300000),
+                        "limit" => value.parse::<u32>().is_ok_and(|v| (1..=200).contains(&v)),
+                        _ => false,
+                    }
+            })
+    })
 }
 fn supported_dns_get(path: &str) -> bool {
     let (base, query) = path
@@ -117,6 +165,7 @@ fn supported_health_get(path: &str) -> bool {
                 keys.insert(key.to_string())
                     && match key.as_ref() {
                         "limit" => value.parse::<u32>().is_ok_and(|n| (1..=200).contains(&n)),
+                        "node" => hps_config::valid_node_id(&value),
                         "after" => {
                             !value.is_empty()
                                 && value.len() <= 128
@@ -179,6 +228,9 @@ fn supported_action(path: &str) -> bool {
             | "api/v1/rules/reorder"
             | "api/v1/rules/apply"
             | "api/v1/rules/simulate"
+            | "api/v1/nodes/action"
+            | "api/v1/nodes/import/preview"
+            | "api/v1/nodes/import/apply"
             | "api/v1/groups/simulate"
             | "api/v1/groups/save"
             | "api/v1/groups/upsert"
@@ -330,6 +382,15 @@ mod tests {
         assert!(supported_api("api/v1/status"));
         assert!(supported_api("api/v1/groups"));
         assert!(supported_api("api/v1/rules"));
+        assert!(supported_api(
+            "api/v1/nodes?provider=vendor&state=draining&limit=50&offset=0"
+        ));
+        assert!(supported_api("api/v1/nodes/lease:42"));
+        assert!(!supported_api("api/v1/nodes/lease:042"));
+        assert!(!supported_api("api/v1/nodes?offset=0&offset=1"));
+        assert!(!supported_api("api/v1/nodes?url=http://external"));
+        assert!(!supported_api("api/v1/nodes?limit=201"));
+        assert!(supported_action("api/v1/nodes/import/apply"));
         assert!(supported_api("api/v1/rules?revision=42"));
         assert!(!supported_api("api/v1/rules?revision=1&revision=2"));
         assert!(!supported_api("api/v1/rules?revision=0"));

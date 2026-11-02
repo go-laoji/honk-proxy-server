@@ -83,6 +83,13 @@ impl Supervisor {
             .iter()
             .filter(|l| config.enabled && l.fingerprint == fp && l.candidate.expires_at > cutoff)
             .filter(|l| {
+                current
+                    .engine
+                    .node_registry()
+                    .blocking_reason(&l.candidate.upstream.id)
+                    .is_none()
+            })
+            .filter(|l| {
                 seen.insert((
                     format!("{:?}", l.candidate.upstream.protocol),
                     l.candidate.upstream.host.clone(),

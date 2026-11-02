@@ -38,6 +38,7 @@ const HealthPage = lazy(() => import("./pages/HealthPage"));
 const DnsPage = lazy(() => import("./pages/DnsPage"));
 const GroupsPage = lazy(() => import("./pages/GroupsPage"));
 const RulesPage = lazy(() => import("./pages/RulesPage"));
+const NodesPage = lazy(() => import("./pages/NodesPage"));
 const ConfigPage = lazy(() => import("./pages/ConfigPage"));
 
 const icons: Record<
@@ -278,6 +279,10 @@ export default function App() {
                   key={service.data.endpoint}
                   refreshService={service.refresh}
                 />
+              </Suspense>
+            ) : current.id === "nodes" || current.id === "node-detail" ? (
+              <Suspense fallback={<p className="muted">正在读取节点…</p>}>
+                <NodesPage key={service.data.endpoint} />
               </Suspense>
             ) : current.id === "settings" ? (
               <SettingsPage data={service.data} />

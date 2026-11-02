@@ -99,9 +99,13 @@ export default function HealthPage({
   refreshService: () => Promise<void>;
 }) {
   const [data, setData] = useState<HealthOverview | null>(null);
+  const nodeFilter =
+    new URLSearchParams(window.location.search).get("node") ?? "";
   const [after, setAfter] = useState("");
-  const [selected, setSelected] = useState<string[]>([]);
-  const [expanded, setExpanded] = useState("");
+  const [selected, setSelected] = useState<string[]>(
+    nodeFilter ? [nodeFilter] : [],
+  );
+  const [expanded, setExpanded] = useState(nodeFilter);
   const [task, setTask] = useState<HealthTask | null>(null);
   const taskId = useRef<number | null>(null);
   const [busy, setBusy] = useState("");
@@ -138,7 +142,7 @@ export default function HealthPage({
     async function poll() {
       try {
         const value = await getJson<HealthOverview>(
-          `api/v1/health?limit=50${after ? `&after=${encodeURIComponent(after)}` : ""}`,
+          `api/v1/health?limit=50${nodeFilter ? `&node=${encodeURIComponent(nodeFilter)}` : ""}${after ? `&after=${encodeURIComponent(after)}` : ""}`,
           controller.signal,
         );
         if (controller.signal.aborted) return;
@@ -166,7 +170,7 @@ export default function HealthPage({
   }, [after]);
   async function refresh() {
     const value = await getJson<HealthOverview>(
-      `api/v1/health?limit=50${after ? `&after=${encodeURIComponent(after)}` : ""}`,
+      `api/v1/health?limit=50${nodeFilter ? `&node=${encodeURIComponent(nodeFilter)}` : ""}${after ? `&after=${encodeURIComponent(after)}` : ""}`,
     );
     if (mounted.current) setData(value);
   }
@@ -239,6 +243,14 @@ export default function HealthPage({
           className="rounded-xl bg-blue-50 p-4 text-sm text-blue-700 dark:bg-blue-950 dark:text-blue-200"
         >
           {info}
+        </p>
+      )}
+      {nodeFilter && (
+        <p className="text-sm">
+          节点筛选：{nodeFilter}{" "}
+          <a className="ml-2 text-blue-600" href="./health.html">
+            查看全部健康记录 →
+          </a>
         </p>
       )}
       {!data ? (

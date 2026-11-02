@@ -66,6 +66,7 @@ pub struct Dialer {
     pub(crate) pool: Arc<crate::pool::DynamicPool>,
     pub(crate) demand: Arc<crate::demand::Demand>,
     pub(crate) health: Arc<crate::health::HealthRegistry>,
+    pub(crate) nodes: Arc<crate::nodes::NodeRegistry>,
     policy: std::sync::RwLock<crate::health::HealthPolicy>,
     sources: std::sync::RwLock<std::collections::HashMap<String, String>>,
     source_protocols: std::sync::RwLock<std::collections::HashMap<String, ProxyProtocol>>,
@@ -127,6 +128,9 @@ impl ProbePlan {
     }
     pub fn remaining(&self) -> Option<Duration> {
         remaining(&self.upstream)
+    }
+    pub fn operation(&self) -> hps_domain::NodeControl {
+        self.dialer.nodes.control(&self.upstream.config.id)
     }
     /// Bypasses selection/health and production demand, preserving prepared trust roots.
     pub async fn connect(
@@ -232,6 +236,7 @@ impl Dialer {
             pool: Arc::new(crate::pool::DynamicPool::default()),
             demand: Arc::new(crate::demand::Demand::default()),
             health: Arc::new(crate::health::HealthRegistry::default()),
+            nodes: Arc::new(crate::nodes::NodeRegistry::default()),
             policy: Default::default(),
             sources: std::sync::RwLock::new(std::collections::HashMap::new()),
             source_protocols: Default::default(),
@@ -460,6 +465,9 @@ impl Dialer {
                 if !upstream.config.enabled {
                     reasons.push("disabled".into());
                 }
+                if let Some(reason) = self.nodes.blocking_reason(&upstream.config.id) {
+                    reasons.push(reason.into());
+                }
                 if upstream
                     .source
                     .as_ref()
@@ -571,6 +579,10 @@ impl Dialer {
         let demand = self.demand.begin(refill_sources);
         let (_, upstream) = self.select(&query, true);
         let upstream = upstream.ok_or(ProxyError::NoUpstream)?;
+        let node_guard = self
+            .nodes
+            .begin(&upstream.config.id)
+            .ok_or(ProxyError::NoUpstream)?;
         if remaining(&upstream).is_some_and(|r| {
             r <= Duration::from_secs(self.min_lifetime.max(upstream.minimum_lifetime))
         }) || !self.health_usable(
@@ -637,7 +649,7 @@ impl Dialer {
             );
         }
         outcome.map(|mut connected| {
-            connected.io = demand.wrap(connected.io);
+            connected.io = demand.wrap(node_guard.wrap(connected.io));
             connected.routing = Some(decision);
             connected
         })

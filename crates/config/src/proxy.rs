@@ -159,6 +159,82 @@ impl ProxyConfig {
     }
 }
 
+/// Parse one manual proxy address without resolving, probing, or echoing credentials in errors.
+pub fn parse_upstream_address(
+    value: &str,
+    default: ProxyProtocol,
+) -> Result<UpstreamConfig, ConfigError> {
+    let invalid = || ConfigError::Invalid("invalid manual proxy address or credentials".into());
+    if value.len() > 4096 {
+        return Err(invalid());
+    }
+    let scheme = match default {
+        ProxyProtocol::Http => "http",
+        ProxyProtocol::Https => "https",
+        ProxyProtocol::Socks5 => "socks5",
+    };
+    let address = if value.contains("://") {
+        value.to_owned()
+    } else {
+        format!("{scheme}://{value}")
+    };
+    let url = url::Url::parse(&address).map_err(|_| invalid())?;
+    let protocol = match url.scheme() {
+        "http" => ProxyProtocol::Http,
+        "https" => ProxyProtocol::Https,
+        "socks5" | "socks5h" => ProxyProtocol::Socks5,
+        _ => return Err(invalid()),
+    };
+    if !["", "/"].contains(&url.path()) || url.query().is_some() || url.fragment().is_some() {
+        return Err(invalid());
+    }
+    fn decode(s: &str) -> Option<String> {
+        let mut bytes = Vec::with_capacity(s.len());
+        let mut input = s.as_bytes().iter().copied();
+        while let Some(b) = input.next() {
+            if b == b'%' {
+                let a = (input.next()? as char).to_digit(16)?;
+                let b = (input.next()? as char).to_digit(16)?;
+                bytes.push((a * 16 + b) as u8);
+            } else {
+                bytes.push(b);
+            }
+        }
+        String::from_utf8(bytes).ok()
+    }
+    let credentials = if !url.username().is_empty() || url.password().is_some() {
+        Some(UpstreamCredentials {
+            username: decode(url.username()).ok_or_else(invalid)?,
+            password: decode(url.password().unwrap_or_default()).ok_or_else(invalid)?,
+        })
+    } else {
+        None
+    };
+    let node = UpstreamConfig {
+        id: "preview".into(),
+        protocol,
+        host: url
+            .host_str()
+            .ok_or_else(invalid)?
+            .trim_start_matches('[')
+            .trim_end_matches(']')
+            .to_owned(),
+        port: url.port_or_known_default().unwrap_or(1080),
+        enabled: true,
+        credentials,
+        expires_at_unix: None,
+        ca_certificate: None,
+        tls_server_name: None,
+    };
+    ProxyConfig {
+        upstreams: vec![node.clone()],
+        ..Default::default()
+    }
+    .validate()
+    .map_err(|_| invalid())?;
+    Ok(node)
+}
+
 pub fn valid_host(host: &str) -> bool {
     let host = host.strip_suffix('.').unwrap_or(host);
     host.parse::<std::net::IpAddr>().is_ok()

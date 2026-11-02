@@ -538,7 +538,13 @@ export default function ProvidersPage({
           )}
           <div className="panel overflow-hidden">
             <h2 className="border-b border-slate-100 p-5 font-semibold dark:border-slate-800">
-              批次与租约
+              批次与租约{" "}
+              <a
+                className="ml-3 text-xs font-normal text-blue-600"
+                href={`./nodes.html?provider=${encodeURIComponent(id)}`}
+              >
+                查看来源节点 →
+              </a>
             </h2>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[850px] text-left text-sm">
@@ -564,7 +570,12 @@ export default function ProvidersPage({
                       className="border-t border-slate-100 dark:border-slate-800"
                     >
                       <td className="p-4">
-                        #{lease.id} / #{lease.batch_id}
+                        <a
+                          className="text-blue-600"
+                          href={`./node-detail.html?id=${encodeURIComponent(lease.upstream_id)}`}
+                        >
+                          #{lease.id} / #{lease.batch_id}
+                        </a>
                       </td>
                       <td className="p-4 font-mono text-xs">
                         {lease.protocol}://

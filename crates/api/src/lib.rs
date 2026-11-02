@@ -19,6 +19,7 @@ mod configuration;
 mod dns;
 mod groups;
 mod health;
+mod nodes;
 mod providers;
 mod rules;
 #[cfg(feature = "web-ui")]
@@ -152,6 +153,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .merge(health::router())
         .merge(dns::router())
         .merge(groups::router())
+        .merge(nodes::router())
         .merge(rules::router())
         .layer(axum::extract::DefaultBodyLimit::max(4 * 1024 * 1024));
     #[cfg(feature = "web-ui")]
@@ -314,6 +316,9 @@ fn application_error(error: ApplicationError) -> (StatusCode, Json<ApiError>) {
         }
         ApplicationError::ExtractionCapacity => {
             (StatusCode::SERVICE_UNAVAILABLE, "supplier_fetch_capacity")
+        }
+        ApplicationError::NodeCapacity => {
+            (StatusCode::TOO_MANY_REQUESTS, "node_operation_capacity")
         }
         ApplicationError::ClockRollback => (StatusCode::CONFLICT, "clock_rollback"),
         ApplicationError::Storage(StorageError::PoolFull) => {

@@ -28,6 +28,11 @@ impl Supervisor {
             .collect::<HashSet<_>>();
         leases.sort_by_cached_key(|lease| {
             std::cmp::Reverse((
+                current
+                    .engine
+                    .node_registry()
+                    .blocking_reason(&lease.candidate.upstream.id)
+                    .is_none(),
                 healthy.contains(&(
                     Some(lease.provider_id.clone()),
                     health_endpoint_key(&lease.candidate.upstream),

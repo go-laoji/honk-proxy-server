@@ -20,6 +20,7 @@ fn application(state: &AppState) -> Result<&Arc<Supervisor>, (StatusCode, Json<A
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ListQuery {
+    node: Option<String>,
     after: Option<String>,
     limit: Option<u32>,
 }
@@ -28,7 +29,7 @@ async fn overview(
     Query(query): Query<ListQuery>,
 ) -> ApiResult<HealthOverview<HealthConfig>> {
     application(&state)?
-        .health_overview(query.after, query.limit.unwrap_or(50))
+        .health_overview_for(query.after, query.limit.unwrap_or(50), query.node)
         .await
         .map(Json)
         .map_err(application_error)

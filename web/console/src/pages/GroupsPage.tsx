@@ -66,7 +66,9 @@ export default function GroupsPage({
     original: string | null;
     body: string;
   }>();
-  const [group, setGroup] = useState("");
+  const [group, setGroup] = useState(
+    new URLSearchParams(window.location.search).get("group") ?? "",
+  );
   const [inbound, setInbound] = useState("");
   const [source, setSource] = useState("");
   const [host, setHost] = useState("");
@@ -84,7 +86,12 @@ export default function GroupsPage({
     const request = ++sequence.current;
     getJson<Overview>("api/v1/groups", controller.signal)
       .then((value) => {
-        if (mounted.current && request === sequence.current) setData(value);
+        if (mounted.current && request === sequence.current) {
+          setData(value);
+          const linked = value.configuration.groups.find((g) => g.id === group);
+          setPin(linked?.pinned_node ?? "");
+          setFallback(linked?.fallback_nodes.join(", ") ?? "");
+        }
       })
       .catch((cause) => {
         if (

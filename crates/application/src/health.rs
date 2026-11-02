@@ -239,7 +239,10 @@ impl Supervisor {
             for offset in 0..plans.len().min(5000) {
                 let plan = &plans[(start + offset) % plans.len()];
                 scanned += 1;
-                if !plan.config().enabled || !self.probe_lifetime_ok(plan, config) {
+                if !plan.config().enabled
+                    || plan.operation().state.blocking_reason().is_some()
+                    || !self.probe_lifetime_ok(plan, config)
+                {
                     continue;
                 }
                 for profile in &current.health_profiles {
@@ -505,12 +508,24 @@ impl Supervisor {
         after: Option<String>,
         limit: u32,
     ) -> Result<HealthOverview<hps_config::HealthConfig>, ApplicationError> {
+        self.health_overview_for(after, limit, None).await
+    }
+    pub async fn health_overview_for(
+        &self,
+        after: Option<String>,
+        limit: u32,
+        node: Option<String>,
+    ) -> Result<HealthOverview<hps_config::HealthConfig>, ApplicationError> {
+        if node.as_ref().is_some_and(|n| !hps_config::valid_node_id(n)) {
+            return Err(ApplicationError::Invalid);
+        }
         let current = self.current();
         let mut plans = current.engine.probe_plans();
         plans.sort_by(|a, b| a.config().id.cmp(&b.config().id));
         let total = plans.len();
         let mut selected = plans
             .into_iter()
+            .filter(|p| node.as_ref().is_none_or(|n| p.config().id == *n))
             .filter(|p| after.as_ref().is_none_or(|after| p.config().id > *after))
             .take(limit.clamp(1, 200) as usize + 1)
             .collect::<Vec<_>>();
@@ -586,6 +601,7 @@ impl Supervisor {
                 enabled: plan.config().enabled,
                 remaining_secs: plan.remaining().map(|r| r.as_secs()),
                 eligible: plan.config().enabled
+                    && plan.operation().state.blocking_reason().is_none()
                     && plan
                         .remaining()
                         .is_none_or(|r| r > Duration::from_secs(plan.minimum_lifetime()))
