@@ -27,3 +27,7 @@ UDP 新增测试实际覆盖 IPv4/IPv6、真正的 SOCKS5 上游 association 链
 - 标准订阅仅验证官方协议/字段契约与自有 HTTP 故障夹具，没有测试付费供应商/真实商业订阅；没有采购要求。短效来源主线和既有免费源证据不被替代。
 - 支持协议/Clash 选项、手动刷新、未知真实有效期、主动 UDP 健康未支持等限制详见 [使用说明](../protocol-subscriptions-usage.md)。
 - 不 finish、不 push、不合 main、不关闭 #24；按主代理 FIFO 集成复核后处理。
+
+## 合并 #23 后复验
+
+按主代理指示将 `develop ec69bc3` 合并进本分支，得到 `c2e87f0`，自动合并无冲突；保留 #23 alerts、diagnostic/CLI/shared UI 与 Native 路径测试。合并后再执行：subscription Application 3 项、typed API 1 项、UDP ingress 5 项、selection 5 项，合计 14 项通过；`npm run typecheck`、18 页 build 与独立 18024 浏览器综合验收再次通过。中央进度/audit 由主代理维护。
