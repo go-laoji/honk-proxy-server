@@ -835,6 +835,7 @@ dependencies = [
  "hps-domain",
  "hps-net",
  "hps-platform",
+ "hps-system",
  "serde",
  "serde_json",
  "tokio",
@@ -1069,6 +1070,21 @@ dependencies = [
  "thiserror",
  "tokio",
  "uuid",
+]
+
+[[package]]
+name = "hps-system"
+version = "0.1.0"
+dependencies = [
+ "fs2",
+ "hps-client",
+ "hps-config",
+ "libc",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "toml",
+ "url",
 ]
 
 [[package]]

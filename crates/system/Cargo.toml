@@ -1,0 +1,18 @@
+[package]
+name = "hps-system"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+hps-client.workspace = true
+hps-config.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+url = "2"
+fs2 = "0.4"
+tempfile = "3"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
