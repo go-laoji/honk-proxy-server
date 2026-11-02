@@ -2,7 +2,15 @@
 
 - 关联任务：[#28](https://github.com/go-laoji/honk-proxy-server/issues/28)
 - 分支：`feature/brand-logo`，使用 `git flow feature start brand-logo develop` 从 `develop` 创建。
-- 状态：设计提案阶段，等待用户确认后才能替换产品资源。
+- 状态：第一版概念图已完成，等待用户确认后才能替换产品资源。
+
+## 第一版预览
+
+![Honk Proxy Logo 第一版概念评审图](design/brand-logo-concept-v1.png)
+
+预览文件：`docs/design/brand-logo-concept-v1.png`，1536 × 1024 PNG，使用内置 imagegen 生成。保留 H 的整体轮廓，以一对相反方向的弯曲箭头表达流量进出和转发；同时展示浅色、深色、单色与蓝色圆角应用图标。用户确认后将按选定图形制作 SVG 母版，统一重复图形的精确几何，并实际检查 16/20/32 像素用途。
+
+当前已检查评审图的品牌拼写、H 与双向通路意象、深浅底适配和单色呈现。图中的缩小示意不代表已通过真实 favicon 或托盘像素验收。尚未接入页面、替换现有图标、构建 Tauri 或覆盖任何已安装应用。
 
 ## 设计方向
 
@@ -12,11 +20,11 @@
 
 ## 执行步骤
 
-1. 检查实际 worktree、分支基点及原始未跟踪文件，创建 Issue 和功能分支。
-2. 使用内置 imagegen 生成概念评审图，检查文字、图形一致性与深浅色用途，新增保存到本设计目录。
-3. 提交提案材料并等待用户明确确认；此阶段不修改 `web/console`、`src-tauri` 或现有 Desktop bundle。
-4. 用户确认后，制作确定性的 SVG 母版与单色托盘版本，统一下列产品入口。
-5. 验证所有页面、前端构建资源及 Tauri 图标打包，再将真实结果回复 Issue 并关闭。
+1. [x] 检查实际 worktree、分支基点及原始未跟踪文件，创建 Issue 和功能分支。
+2. [x] 使用内置 imagegen 生成概念评审图，检查文字、图形一致性与深浅色用途，新增保存到本设计目录。
+3. [ ] 提交提案材料并等待用户明确确认；此阶段不修改 `web/console`、`src-tauri` 或现有 Desktop bundle。
+4. [ ] 用户确认后，制作确定性的 SVG 母版与单色托盘版本，统一下列产品入口。
+5. [ ] 验证所有页面、前端构建资源及 Tauri 图标打包，再将真实结果回复 Issue 并关闭。
 
 ## 确认后的替换范围
 
