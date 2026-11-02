@@ -8,7 +8,7 @@ pub(super) struct Controller {
     specification: LinuxCaptureConfig,
     fingerprint: String,
     #[cfg(target_os = "linux")]
-    runtime: linux::Controller,
+    runtime: Arc<linux::Controller>,
 }
 pub(super) enum Prepared {
     Disabled,
@@ -92,6 +92,25 @@ impl Prepared {
     }
 }
 impl Controller {
+    pub async fn control(
+        &self,
+        action: hps_domain::LinuxCaptureAction,
+    ) -> Result<(), ApplicationError> {
+        #[cfg(target_os = "linux")]
+        {
+            self.runtime
+                .control(action)
+                .await
+                .map_err(ApplicationError::Capture)
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = action;
+            Err(ApplicationError::Capture(
+                "transparent capture requires Linux".into(),
+            ))
+        }
+    }
     pub async fn status(&self, revision: i64) -> hps_domain::LinuxCaptureStatus {
         let mut view = hps_domain::LinuxCaptureStatus::unconfigured(revision);
         view.configured = true;
@@ -157,5 +176,37 @@ impl Controller {
         {
             vec![]
         }
+    }
+}
+
+impl Supervisor {
+    pub async fn control_linux_capture(
+        self: &Arc<Self>,
+        input: hps_domain::LinuxCaptureRequest,
+    ) -> Result<hps_domain::LinuxCaptureStatus, ApplicationError> {
+        let metadata = tasks::work_spec(
+            "linux_capture_control",
+            &input,
+            Some(input.expected_revision),
+            None,
+        )?;
+        self.owned_work(metadata, move |service| async move {
+            let _operation = service.operation.lock().await;
+            if service.closed.load(std::sync::atomic::Ordering::Acquire) {
+                return Err(EngineError::ShuttingDown.into());
+            }
+            if input.expected_epoch != service.event_epoch() {
+                return Err(ApplicationError::ConnectionEpoch);
+            }
+            let current = service.current();
+            if input.expected_revision != current.revision { return Err(StorageError::Conflict.into()); }
+            let capture = current.transparent.as_ref().ok_or_else(||
+                ApplicationError::Capture("transparent capture is not configured".into()))?;
+            capture.control(input.action).await?;
+            Ok(capture.status(current.revision).await)
+        }, |value| hps_storage::tasks::WorkResult {
+            state: "completed", error_code: None, result_ref: Some("linux_capture".into()),
+            result: Some(serde_json::json!({"state":value.state,"ready":value.ready,"kernel_revision":value.kernel_revision})),
+        }).await
     }
 }

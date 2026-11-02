@@ -1,11 +1,17 @@
 //! Actual attachment queries, not just the continued existence of program IDs.
-use super::{Capture, error, interface_index};
+use super::{Capture, State, error, interface_index};
 use aya::programs::SchedClassifier;
 use std::os::fd::AsRawFd;
 
 pub(super) struct CgroupAttachment {
+    pub name: &'static str,
+    pub link: std::sync::Mutex<Option<CgroupLink>>,
     pub attach_type: u32,
     pub id: u32,
+}
+pub(super) enum CgroupLink {
+    Address(aya::programs::cgroup_sock_addr::CgroupSockAddrLinkId),
+    Socket(aya::programs::cgroup_sock::CgroupSockLinkId),
 }
 // Linux UAPI bpf_attr.query prefix through prog_cnt (6.12 and later). Zeroed
 // trailing padding is explicit; bounded IDs avoid allocation based on foreign
@@ -22,7 +28,10 @@ struct Query {
     reserved: u32,
 }
 const _: () = assert!(std::mem::size_of::<Query>() == 32);
-fn cgroup_contains(fd: &std::fs::File, attachment: &CgroupAttachment) -> Result<bool, String> {
+pub(super) fn cgroup_contains(
+    fd: &std::fs::File,
+    attachment: &CgroupAttachment,
+) -> Result<bool, String> {
     let mut ids = [0u32; 256];
     let mut query = Query {
         target_fd: fd.as_raw_fd() as u32,
@@ -47,11 +56,31 @@ fn cgroup_contains(fd: &std::fs::File, attachment: &CgroupAttachment) -> Result<
     Ok(ids[..query.prog_cnt as usize].contains(&attachment.id))
 }
 pub(super) fn links_present(capture: &Capture) -> Result<bool, String> {
-    use std::os::unix::fs::MetadataExt;
     let guard = capture.state.lock().unwrap();
     let Some(state) = guard.as_ref() else {
         return Ok(false);
     };
+    if !identity_present(capture, state)? {
+        return Ok(false);
+    }
+    if let Some(cgroup) = &state.cgroup {
+        for attachment in &capture.cgroup_attachments {
+            if !cgroup_contains(cgroup, attachment)? {
+                return Ok(false);
+            }
+        }
+    }
+    for attachment in &capture.attachments {
+        let (_, programs) = SchedClassifier::query_tcx(&attachment.interface, attachment.direction)
+            .map_err(|e| error("TCX link inspection", e))?;
+        if !programs.iter().any(|p| p.id() == attachment.id) {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+pub(super) fn identity_present(capture: &Capture, state: &State) -> Result<bool, String> {
+    use std::os::unix::fs::MetadataExt;
     if crate::linux_objects::netns_cookie().map_err(|e| error("current namespace", e))?
         != state.policy.netns_cookie
     {
@@ -74,19 +103,9 @@ pub(super) fn links_present(capture: &Capture) -> Result<bool, String> {
         if (opened.dev(), opened.ino()) != (named.dev(), named.ino()) {
             return Ok(false);
         }
-        for attachment in &capture.cgroup_attachments {
-            if !cgroup_contains(cgroup, attachment)? {
-                return Ok(false);
-            }
-        }
     }
     for attachment in &capture.attachments {
         if interface_index(&attachment.interface).ok() != Some(attachment.index) {
-            return Ok(false);
-        }
-        let (_, programs) = SchedClassifier::query_tcx(&attachment.interface, attachment.direction)
-            .map_err(|e| error("TCX link inspection", e))?;
-        if !programs.iter().any(|p| p.id() == attachment.id) {
             return Ok(false);
         }
     }
@@ -138,6 +157,43 @@ mod tests {
             capture.activate(7, true).unwrap();
             assert_eq!(capture.settled_revision().unwrap(), 7);
             let maps = capture.map_ids().unwrap();
+            capture.suspend().unwrap();
+            {
+                let mut guard = capture.state.lock().unwrap();
+                let bpf = &mut guard.as_mut().unwrap().bpf;
+                let attachment = capture
+                    .cgroup_attachments
+                    .iter()
+                    .find(|a| a.name == name)
+                    .unwrap();
+                match attachment.link.lock().unwrap().take().unwrap() {
+                    super::CgroupLink::Address(link) => {
+                        let program: &mut aya::programs::CgroupSockAddr =
+                            bpf.program_mut(name).unwrap().try_into().unwrap();
+                        program.detach(link).unwrap();
+                    }
+                    super::CgroupLink::Socket(link) => {
+                        let program: &mut aya::programs::CgroupSock =
+                            bpf.program_mut(name).unwrap().try_into().unwrap();
+                        program.detach(link).unwrap();
+                    }
+                }
+                let attachment = &capture.attachments[0];
+                let program: &mut aya::programs::SchedClassifier = bpf
+                    .program_mut("hps_tp_egress")
+                    .unwrap()
+                    .try_into()
+                    .unwrap();
+                program
+                    .detach(attachment.link.lock().unwrap().take().unwrap())
+                    .unwrap();
+            }
+            assert!(!capture.links_present().unwrap());
+            capture.reconcile().unwrap();
+            assert!(capture.links_present().unwrap());
+            assert_eq!(capture.published_policy().unwrap(), Some((7, true)));
+            assert_eq!(capture.map_ids().unwrap(), maps);
+            capture.activate(7, true).unwrap();
             let marker = maps
                 .iter()
                 .copied()
@@ -194,6 +250,7 @@ mod tests {
                 assert!(changed.activate(8, true).is_err());
                 assert!(changed.settled_revision().is_err());
                 assert!(changed.suspend().is_err());
+                assert!(changed.reconcile().is_err());
             })
             .join()
             .unwrap();
@@ -241,7 +298,7 @@ mod tests {
             .unwrap();
             println!(
                 "{}",
-                serde_json::json!({"scope":"actual_capture_attachment_inspection_only","kernel":std::fs::read_to_string("/proc/sys/kernel/osrelease").unwrap().trim(),"object_sha256":capture.fingerprint,"detached_program":name,"program_fd_remained_open":true,"detachment_detected":true,"foreign_namespace_refused":true,"original_journal_preserved":true,"metadata_independent_of_route_mutex":true,"settled_revision":7,"retirement_barrier":"protocol_zero_packet_socket_release","maps_released":true,"full_transparent_datapath_ready":false})
+                serde_json::json!({"scope":"actual_capture_attachment_inspection_and_repair_only","kernel":std::fs::read_to_string("/proc/sys/kernel/osrelease").unwrap().trim(),"object_sha256":capture.fingerprint,"detached_program":name,"program_fd_remained_open":true,"detachment_detected":true,"cgroup_and_tcx_links_repaired_in_place":true,"repair_kept_policy_suspended":true,"same_maps_after_repair":true,"foreign_namespace_refused":true,"original_journal_preserved":true,"metadata_independent_of_route_mutex":true,"settled_revision":7,"retirement_barrier":"protocol_zero_packet_socket_release","maps_released":true,"full_transparent_datapath_ready":false})
             );
         }
     }

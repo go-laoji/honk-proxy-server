@@ -4,6 +4,7 @@
 mod generation_tests;
 mod inspection;
 mod metadata;
+mod repair;
 pub use metadata::CapturedMetadata;
 mod routes;
 #[cfg(test)]
@@ -341,12 +342,14 @@ impl PreparedCapture {
                     .unwrap()
                     .try_into()
                     .map_err(|e| error("cgroup program type", e))?;
-                program
+                let link = program
                     // For bpf_link_create, flags must be zero; the kernel gives
                     // cgroup links multi-program semantics itself (6.12 cgroup.c).
                     .attach(cgroup, CgroupAttachMode::Single)
                     .map_err(|e| error("attach disabled cgroup hook", e))?;
                 cgroup_attachments.push(inspection::CgroupAttachment {
+                    name,
+                    link: Mutex::new(Some(inspection::CgroupLink::Address(link))),
                     attach_type,
                     id: program
                         .info()
@@ -360,10 +363,12 @@ impl PreparedCapture {
                     .unwrap()
                     .try_into()
                     .map_err(|e| error("socket lifecycle program type", e))?;
-                program
+                let link = program
                     .attach(cgroup, CgroupAttachMode::Single)
                     .map_err(|e| error("attach socket lifecycle hook", e))?;
                 cgroup_attachments.push(inspection::CgroupAttachment {
+                    name,
+                    link: Mutex::new(Some(inspection::CgroupLink::Socket(link))),
                     attach_type,
                     id: program
                         .info()
@@ -434,7 +439,7 @@ fn attach(
         .ok_or("TCX program missing")?
         .try_into()
         .map_err(|e| error("TCX program type", e))?;
-    program
+    let link = program
         .attach_with_options(
             interface,
             direction,
@@ -443,6 +448,7 @@ fn attach(
         .map_err(|e| error("attach disabled TCX link", e))?;
     let id = program.info().map_err(|e| error("program ID", e))?.id();
     attachments.push(Attachment {
+        link: Mutex::new(Some(link)),
         interface: interface.into(),
         index: interface_index(interface)?,
         direction,
@@ -451,6 +457,7 @@ fn attach(
     Ok(())
 }
 struct Attachment {
+    link: Mutex<Option<aya::programs::tc::SchedClassifierLinkId>>,
     interface: String,
     index: u32,
     direction: TcAttachType,

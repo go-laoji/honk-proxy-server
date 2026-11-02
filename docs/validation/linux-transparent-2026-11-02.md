@@ -187,3 +187,11 @@ ABI v4 加入显式 suspended 策略：保留已配置范围与 bypass，对受�
 实际 aarch64 7.0.14 和 QEMU 6.12.115 均通过新监视项：启动检查真实 ready、四个 listener、八个程序和匹配代际；精确删除自有 IPv4 capture rule 后，报告 routes_present=false、links_present=true、suspended=true、ready=false。随后实际 cgroup 子进程的 IPv4/IPv6 TCP connect 与 UDP send 共四次均返回 EPERM，用户态连接登记数为零。停止后不报告 ready 或旧 program ID，按持久配置重启后重新就绪。证据为 `linux-transparent-monitor-kernel{7,612}-2026-11-02.json`。
 
 7.0 同时重新通过正常三代际和 DNS 共存回退两项，相关 Linux/macOS Clippy、格式/diff 通过。下一批为保持暂停边界的有限恢复、API/CLI/MPA；LAN、SIGKILL 与 x86_64 仍待完成，完整发行验收 ready 不据此宣称通过。
+
+## 第 19 批：原位有限恢复与独立启停
+
+实际 Linux 7.0.14/aarch64 与 6.12.115/aarch64：丢失精确自有路由规则后，监视先暂停，双栈 TCP/UDP 四次新请求被内核拒绝；第一次自动尝试原位修复成功，保留原 program/map ID。将另一个自有 cgroup 通过隔离 bind mount 覆盖原路径，真实 inode 校验拒绝接管；自动尝试总数最多三次，到限后保持 degraded/suspended，恢复原路径后也不自行放行，人工 recheck 才恢复。实例 epoch 不符的停止请求被拒绝。用户 stop/start 释放并重新建立自有捕获，显式入口状态保持，持久重启恢复。控制操作纳入 T14 的 owned task 与事件，客户端取消等待不丢失工作。
+
+恢复保持原 Capture 和暂停范围，取消并等待每条旧 owner，执行网络 RCU 屏障，排空旧 listener backlog，精确退休旧元数据，再登记当前引擎并解除暂停。重挂只针对原 namespace、cgroup、interface index；自有 link ID 被保存并替换，避免重复修复积累失效 FD。外部归属冲突保留日志并拒绝接管。普通 Linux Clippy 的一处折叠 if 已按建议修复；不计作行为失败。
+
+证据：`linux-transparent-repair-kernel7-2026-11-02.json` 与 `linux-transparent-repair-kernel612-2026-11-02.json`。本批未覆盖完整 LAN、x86_64、SIGKILL 和共用 MPA，因此保持 full_transparent_datapath_ready=false，#16/#18/#20 仍开放。

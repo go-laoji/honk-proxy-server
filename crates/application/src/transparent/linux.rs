@@ -10,7 +10,7 @@ use std::{
     os::fd::AsFd,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering},
     },
     time::{Duration, Instant},
 };
@@ -21,38 +21,140 @@ pub(super) struct Controller {
     running: Mutex<Option<Arc<Running>>>,
     operation: tokio::sync::Mutex<()>,
     diagnostics: Arc<tokio::sync::Semaphore>,
+    prepared: PreparedCapture,
+    engine: Mutex<Option<Arc<Engine>>>,
+    requested: AtomicBool,
+    attempts: AtomicU32,
+    stop: CancellationToken,
+    tasks: TaskTracker,
 }
 impl Controller {
-    pub async fn prepare(prepared: PreparedCapture) -> Result<Self, String> {
-        Ok(Self {
-            running: Mutex::new(Some(Running::prepare(prepared).await?)),
+    pub async fn prepare(prepared: PreparedCapture) -> Result<Arc<Self>, String> {
+        let running = Running::prepare(prepared.clone()).await?;
+        let controller = Arc::new(Self {
+            running: Mutex::new(Some(running)),
             operation: tokio::sync::Mutex::new(()),
             diagnostics: Arc::new(tokio::sync::Semaphore::new(4)),
-        })
+            prepared,
+            engine: Mutex::new(None),
+            requested: AtomicBool::new(true),
+            attempts: AtomicU32::new(0),
+            stop: CancellationToken::new(),
+            tasks: TaskTracker::new(),
+        });
+        let weak = Arc::downgrade(&controller);
+        let stop = controller.stop.clone();
+        controller.tasks.spawn(async move {
+            let mut next = tokio::time::Instant::now();
+            loop {
+                tokio::select! {biased; _=stop.cancelled()=>break, _=tokio::time::sleep(Duration::from_millis(100))=>{}}
+                let Some(controller) = weak.upgrade() else { break };
+                if !controller.requested.load(Ordering::Acquire)
+                    || controller.attempts.load(Ordering::Acquire) >= 3
+                { continue; }
+                let failed = controller.running.lock().unwrap().as_ref()
+                    .is_some_and(|r| r.stop.is_cancelled() && r.error.lock().unwrap().is_some());
+                if !failed { next = tokio::time::Instant::now() + Duration::from_secs(2); continue; }
+                if tokio::time::Instant::now() < next { continue; }
+                let Ok(_operation) = controller.operation.try_lock() else { continue };
+                if !controller.requested.load(Ordering::Acquire) { continue; }
+                let attempt = controller.attempts.fetch_add(1, Ordering::AcqRel) + 1;
+                let _ = controller.recover_locked().await;
+                next = tokio::time::Instant::now() + Duration::from_secs(2u64.pow(attempt));
+            }
+        });
+        Ok(controller)
     }
     pub async fn publish(&self, engine: Arc<Engine>) -> Result<(), String> {
         let _operation = self.operation.lock().await;
-        let running = self
-            .running
+        if self.stop.is_cancelled() {
+            return Err("capture controller is shut down".into());
+        }
+        if self.requested.load(Ordering::Acquire) {
+            let running = self
+                .running
+                .lock()
+                .unwrap()
+                .clone()
+                .ok_or("capture is stopped")?;
+            running.collect().await?;
+            running.publish(engine.clone()).await?;
+        }
+        *self.engine.lock().unwrap() = Some(engine);
+        Ok(())
+    }
+    async fn recover_locked(&self) -> Result<(), String> {
+        let engine = self
+            .engine
             .lock()
             .unwrap()
             .clone()
-            .ok_or("capture is stopped")?;
-        running.collect().await?;
-        running.publish(engine).await
+            .ok_or("capture engine is unavailable")?;
+        let previous = self.running.lock().unwrap().clone();
+        let next = if let Some(previous) = &previous {
+            match previous.recover().await {
+                Ok(next) => next,
+                Err(error) => {
+                    *previous.error.lock().unwrap() = Some(error.clone());
+                    return Err(error);
+                }
+            }
+        } else {
+            Running::prepare(self.prepared.clone()).await?
+        };
+        if let Err(error) = next.publish(engine).await {
+            next.fail(error.clone()).await;
+            *self.running.lock().unwrap() = Some(next);
+            return Err(error);
+        }
+        *self.running.lock().unwrap() = Some(next);
+        Ok(())
+    }
+    pub async fn control(&self, action: hps_domain::LinuxCaptureAction) -> Result<(), String> {
+        let _operation = self.operation.lock().await;
+        if self.stop.is_cancelled() {
+            return Err("capture controller is shut down".into());
+        }
+        if action == hps_domain::LinuxCaptureAction::Stop {
+            self.requested.store(false, Ordering::Release);
+            let running = self.running.lock().unwrap().take();
+            if let Some(running) = running {
+                running.shutdown().await?;
+            }
+            return Ok(());
+        }
+        self.requested.store(true, Ordering::Release);
+        self.attempts.store(0, Ordering::Release);
+        let running = self.running.lock().unwrap().clone();
+        if let Some(running) = &running
+            && !running.stop.is_cancelled()
+        {
+            match running.collect().await {
+                Ok(()) => return Ok(()),
+                Err(error) => running.fail(error).await,
+            }
+        }
+        self.recover_locked().await
     }
     pub async fn shutdown(&self) -> Result<(), String> {
+        self.stop.cancel();
+        self.tasks.close();
+        self.tasks.wait().await;
         let _operation = self.operation.lock().await;
+        self.requested.store(false, Ordering::Release);
         let running = self.running.lock().unwrap().take();
         if let Some(running) = running {
             running.shutdown().await?;
         }
+        self.engine.lock().unwrap().take();
         Ok(())
     }
     pub async fn status(
         &self,
         mut view: hps_domain::LinuxCaptureStatus,
     ) -> hps_domain::LinuxCaptureStatus {
+        view.retry_attempts = self.attempts.load(Ordering::Acquire);
+        view.max_retry_attempts = 3;
         let permit = match self.diagnostics.clone().try_acquire_owned() {
             Ok(permit) => permit,
             Err(_) => {
@@ -205,6 +307,70 @@ struct Listeners {
     udp6: Option<Arc<UdpSocket>>,
 }
 impl Listeners {
+    fn flush(&self) -> Result<(), String> {
+        use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+        for listener in [&self.tcp4, &self.tcp6].into_iter().flatten() {
+            let mut empty = false;
+            for _ in 0..65536 {
+                let fd = unsafe {
+                    libc::accept4(
+                        listener.as_raw_fd(),
+                        std::ptr::null_mut(),
+                        std::ptr::null_mut(),
+                        libc::SOCK_NONBLOCK | libc::SOCK_CLOEXEC,
+                    )
+                };
+                if fd >= 0 {
+                    drop(unsafe { OwnedFd::from_raw_fd(fd) });
+                    continue;
+                }
+                let error = std::io::Error::last_os_error();
+                if error.kind() == std::io::ErrorKind::WouldBlock {
+                    empty = true;
+                    break;
+                }
+                if matches!(error.raw_os_error(), Some(libc::EINTR | libc::ECONNABORTED)) {
+                    continue;
+                }
+                return Err(format!("capture backlog drain: {error}"));
+            }
+            if !empty {
+                return Err("capture TCP backlog drain bound reached".into());
+            }
+        }
+        let mut bytes = [0u8; 65536];
+        for socket in [&self.udp4, &self.udp6].into_iter().flatten() {
+            let mut empty = false;
+            for _ in 0..65536 {
+                // Read the OS queue directly; Tokio readiness can be stale once
+                // the previous receiver task has been drained.
+                let n = unsafe {
+                    libc::recv(
+                        socket.as_raw_fd(),
+                        bytes.as_mut_ptr().cast(),
+                        bytes.len(),
+                        libc::MSG_DONTWAIT,
+                    )
+                };
+                if n >= 0 {
+                    continue;
+                }
+                let error = std::io::Error::last_os_error();
+                if error.kind() == std::io::ErrorKind::WouldBlock {
+                    empty = true;
+                    break;
+                }
+                if error.kind() == std::io::ErrorKind::Interrupted {
+                    continue;
+                }
+                return Err(format!("capture datagram drain: {error}"));
+            }
+            if !empty {
+                return Err("capture UDP backlog drain bound reached".into());
+            }
+        }
+        Ok(())
+    }
     fn bind(config: &LinuxCaptureConfig) -> Result<Self, String> {
         let mut result = Self::default();
         if config.tcp {
@@ -624,7 +790,7 @@ impl Running {
         *self.error.lock().unwrap() = Some(error);
         self.stop.cancel();
     }
-    async fn shutdown(&self) -> Result<(), String> {
+    async fn drain(&self) {
         self.stop.cancel();
         self.tasks.close();
         self.tasks.wait().await;
@@ -635,6 +801,44 @@ impl Running {
         for owner in owners.values() {
             owner.session.wait().await;
         }
+    }
+    async fn recover(&self) -> Result<Arc<Self>, String> {
+        self.drain().await;
+        let _publication = self.publication.lock().await;
+        let capture = self.capture.clone();
+        tokio::task::spawn_blocking(move || {
+            capture.reconcile()?;
+            capture.settled_revision()?;
+            Ok::<_, String>(())
+        })
+        .await
+        .map_err(|_| "capture repair worker stopped")??;
+        // Drain all old listener backlog before retiring identities. New selected
+        // traffic remains refused by the suspended policy throughout this step.
+        self.listeners.flush()?;
+        for (key, flow) in self.capture.flows()? {
+            self.capture.retire_flow(key, flow)?;
+        }
+        Ok(Arc::new(Self {
+            capture: self.capture.clone(),
+            listeners: self.listeners.clone(),
+            budget: self.budget.clone(),
+            engines: Mutex::new(Generations::default()),
+            owners: Mutex::new(HashMap::new()),
+            publication: tokio::sync::Mutex::new(()),
+            stop: CancellationToken::new(),
+            tasks: TaskTracker::new(),
+            started: AtomicBool::new(false),
+            error: Mutex::new(None),
+            dropped: AtomicU64::new(self.dropped.load(Ordering::Relaxed)),
+        }))
+    }
+    async fn shutdown(&self) -> Result<(), String> {
+        // Stop new capture before draining, retaining fail-closed scope until
+        // the user's explicit stop finally detaches it.
+        let capture = self.capture.clone();
+        let _ = tokio::task::spawn_blocking(move || capture.suspend()).await;
+        self.drain().await;
         let _publication = self.publication.lock().await;
         let capture = self.capture.clone();
         tokio::task::spawn_blocking(move || capture.shutdown())

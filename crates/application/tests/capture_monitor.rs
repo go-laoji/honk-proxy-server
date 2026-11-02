@@ -14,7 +14,7 @@ mod rtnetlink;
 use capture_support::{Address, Group};
 use hps_application::{StartupOverrides, Supervisor};
 use hps_config::{DaemonConfig, LinuxCaptureConfig};
-use hps_domain::RouteAction;
+use hps_domain::{LinuxCaptureAction, LinuxCaptureRequest, RouteAction};
 use std::{
     io::Write,
     path::Path,
@@ -163,6 +163,106 @@ async fn real_capture_monitor_suspends_after_route_loss() {
             .started,
         0
     );
+    let recovered_in_place = tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            let view = service.linux_capture_status().await;
+            if view.ready {
+                break view;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(recovered_in_place.retry_attempts, 1);
+    assert_eq!(recovered_in_place.program_ids, initial.program_ids);
+    assert_eq!(recovered_in_place.map_ids, initial.map_ids);
+    assert_eq!(recovered_in_place.routes_present, Some(true));
+    assert!(!recovered_in_place.suspended);
+    // A replaced scope must never be silently replaced or captured as a new
+    // identity. Retry exhaustion stays degraded even if the old name returns.
+    let overlay = Group(group.0.with_extension("identity-overlay"));
+    std::fs::create_dir(&overlay.0).unwrap();
+    let source = std::ffi::CString::new(overlay.0.as_os_str().as_encoded_bytes()).unwrap();
+    let target = std::ffi::CString::new(group.0.as_os_str().as_encoded_bytes()).unwrap();
+    assert_eq!(
+        unsafe {
+            libc::mount(
+                source.as_ptr(),
+                target.as_ptr(),
+                std::ptr::null(),
+                libc::MS_BIND,
+                std::ptr::null(),
+            )
+        },
+        0
+    );
+    struct Restore(std::ffi::CString);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            assert_eq!(
+                unsafe { libc::umount2(self.0.as_ptr(), libc::MNT_DETACH) },
+                0
+            );
+        }
+    }
+    let restore = Restore(target);
+    let exhausted = tokio::time::timeout(Duration::from_secs(20), async {
+        loop {
+            let view = service.linux_capture_status().await;
+            if view.retry_attempts == 3 && view.state == "degraded" {
+                break view;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(exhausted.suspended && !exhausted.ready);
+    assert_eq!(exhausted.max_retry_attempts, 3);
+    drop(restore);
+    tokio::time::sleep(Duration::from_millis(350)).await;
+    assert!(!service.linux_capture_status().await.ready);
+    let request = |action| LinuxCaptureRequest {
+        expected_epoch: service.event_epoch().into(),
+        expected_revision: 1,
+        action,
+    };
+    let mut stale = request(LinuxCaptureAction::Stop);
+    stale.expected_epoch = uuid::Uuid::new_v4().to_string();
+    assert!(matches!(
+        service.control_linux_capture(stale).await,
+        Err(hps_application::ApplicationError::ConnectionEpoch)
+    ));
+    let checked = service
+        .control_linux_capture(request(LinuxCaptureAction::Recheck))
+        .await
+        .unwrap();
+    assert!(checked.ready, "{checked:?}");
+    let explicit_before = service.current().engine.status().inbounds;
+    let stopped_by_user = service
+        .control_linux_capture(request(LinuxCaptureAction::Stop))
+        .await
+        .unwrap();
+    assert_eq!(stopped_by_user.state, "stopped");
+    assert!(!stopped_by_user.ready);
+    assert!(stopped_by_user.program_ids.is_empty());
+    assert_eq!(
+        explicit_before.iter().filter(|i| i.running).count(),
+        service
+            .current()
+            .engine
+            .status()
+            .inbounds
+            .iter()
+            .filter(|i| i.running)
+            .count()
+    );
+    let started = service
+        .control_linux_capture(request(LinuxCaptureAction::Start))
+        .await
+        .unwrap();
+    assert!(started.ready, "{started:?}");
     service.shutdown().await.unwrap();
     let stopped = service.linux_capture_status().await;
     assert!(!stopped.ready);
@@ -182,6 +282,6 @@ async fn real_capture_monitor_suspends_after_route_loss() {
     restarted.shutdown().await.unwrap();
     println!(
         "{}",
-        serde_json::json!({"scope":"daemon_capture_monitor_only","kernel":std::fs::read_to_string("/proc/sys/kernel/osrelease").unwrap().trim(),"object_sha256":initial.object_fingerprint,"initial_ready_verified":true,"route_loss_detected":true,"fault_suspended":true,"ipv4_tcp_udp_denied":true,"ipv6_tcp_udp_denied":true,"kernel_rejections":4,"stopped_not_ready":true,"persistent_restart_recovered":true,"full_transparent_datapath_ready":false})
+        serde_json::json!({"scope":"daemon_capture_monitor_and_repair_only","kernel":std::fs::read_to_string("/proc/sys/kernel/osrelease").unwrap().trim(),"object_sha256":initial.object_fingerprint,"initial_ready_verified":true,"route_loss_detected":true,"fault_suspended":true,"ipv4_tcp_udp_denied":true,"ipv6_tcp_udp_denied":true,"kernel_rejections":4,"in_place_repaired_same_programs_and_maps":true,"identity_change_refused":true,"bounded_retries":3,"manual_recheck_recovered":true,"stale_epoch_refused":true,"user_stop_start_verified":true,"explicit_inbounds_preserved":true,"stopped_not_ready":true,"persistent_restart_recovered":true,"full_transparent_datapath_ready":false})
     );
 }

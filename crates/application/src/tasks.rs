@@ -45,6 +45,8 @@ fn failure(error: &ApplicationError) -> &'static str {
         ApplicationError::RuleDiagnosticsCapacity => "rule_diagnostics_capacity",
         ApplicationError::Provider(error) => error.code,
         ApplicationError::Dns(_) => "dns_diagnostic_failed",
+        ApplicationError::Capture(_) => "linux_capture_failed",
+        ApplicationError::ConnectionEpoch => "instance_changed",
         _ => "background_operation_failed",
     }
 }
