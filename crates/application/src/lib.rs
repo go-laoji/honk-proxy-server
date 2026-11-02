@@ -1,5 +1,6 @@
 mod connections;
 mod controller;
+mod diagnostics;
 mod dns;
 mod dns_capture;
 pub use dns::DnsOverview;
@@ -29,6 +30,16 @@ pub use tasks::{RequestContext, current_request_id, with_request_context};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ApplicationError {
+    #[error("only retained read-only diagnostic jobs support this operation")]
+    TaskControlUnsupported,
+    #[error("task version changed; refresh its current state")]
+    TaskVersion,
+    #[error("diagnostic retry input expired; collect a new snapshot")]
+    TaskRetryExpired,
+    #[error("diagnostic source configuration changed; collect a new snapshot")]
+    DiagnosticSourceChanged,
+    #[error("diagnostic result is not complete or retained")]
+    DiagnosticNotReady,
     #[error("invalid observation window; choose 60 to 3600 seconds")]
     ObservationInput,
     #[error("too many concurrent observation snapshots")]
@@ -161,6 +172,7 @@ pub struct Supervisor {
     controller_started: std::sync::atomic::AtomicBool,
     health: health::HealthRuntime,
     observability: observability::ObservationRuntime,
+    diagnostics: diagnostics::Runtime,
 }
 impl Supervisor {
     pub async fn boot(
@@ -224,6 +236,7 @@ impl Supervisor {
             controller_started: std::sync::atomic::AtomicBool::new(false),
             health: Default::default(),
             observability: Default::default(),
+            diagnostics: Default::default(),
         });
         service.load_health().await?;
         service.refresh_pool().await?;

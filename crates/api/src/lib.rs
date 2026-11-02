@@ -18,6 +18,7 @@ use std::{
 mod audit;
 mod configuration;
 mod connections;
+mod diagnostics;
 mod dns;
 mod groups;
 mod health;
@@ -166,6 +167,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .merge(groups::router())
         .merge(nodes::router())
         .merge(observability::router())
+        .merge(diagnostics::router())
         .merge(rules::router())
         .merge(tasks::router())
         .merge(linux::router())
@@ -312,6 +314,15 @@ async fn config(State(state): State<Arc<AppState>>) -> Json<DaemonConfig> {
 
 fn application_error(error: ApplicationError) -> (StatusCode, Json<ApiError>) {
     let (status, code) = match &error {
+        ApplicationError::TaskControlUnsupported => {
+            (StatusCode::UNPROCESSABLE_ENTITY, "task_control_unsupported")
+        }
+        ApplicationError::TaskVersion => (StatusCode::CONFLICT, "task_version_changed"),
+        ApplicationError::TaskRetryExpired => (StatusCode::GONE, "task_retry_expired"),
+        ApplicationError::DiagnosticSourceChanged => {
+            (StatusCode::CONFLICT, "diagnostic_source_changed")
+        }
+        ApplicationError::DiagnosticNotReady => (StatusCode::CONFLICT, "diagnostic_not_ready"),
         ApplicationError::ObservationInput => (
             StatusCode::UNPROCESSABLE_ENTITY,
             "observation_window_invalid",

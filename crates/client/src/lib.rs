@@ -2,6 +2,7 @@ use hps_domain::{ApiError, Capabilities, ServiceStatus, VersionInfo};
 use reqwest::{Client, Url};
 use serde::de::DeserializeOwned;
 use std::time::Duration;
+mod diagnostics;
 mod events;
 pub use events::EventSubscription;
 

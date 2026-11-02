@@ -45,13 +45,11 @@ test("rules import previews a versioned file, saves an unactivated candidate and
         action: { kind: "reject" },
       },
     ];
-    await panel
-      .getByLabel("选择规则 JSON")
-      .setInputFiles({
-        name: "rules.json",
-        mimeType: "application/json",
-        buffer: Buffer.from(JSON.stringify(file)),
-      });
+    await panel.getByLabel("选择规则 JSON").setInputFiles({
+      name: "rules.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify(file)),
+    });
     await panel.getByRole("button", { name: "预览规则导入" }).click();
     await expect(panel).toContainText("预览有效 · 1 条规则");
     await panel.getByRole("button", { name: "创建导入候选" }).click();

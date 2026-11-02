@@ -134,6 +134,7 @@ pub enum EventFrame {
 }
 
 pub const TASK_KINDS: &[&str] = &[
+    "diagnostic_export",
     "provider",
     "health",
     "activation",

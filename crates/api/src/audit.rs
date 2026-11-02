@@ -49,6 +49,9 @@ fn operation(route: &str) -> Option<(&'static str, &'static str)> {
         "/api/v1/connections/disconnect/preview" => ("connection_disconnect_preview", "connection"),
         "/api/v1/connections/disconnect/confirm" => ("connection_disconnect_confirm", "connection"),
         "/api/v1/tasks" => ("task_submit", "task"),
+        "/api/v1/diagnostics" => ("diagnostic_collect", "diagnostic"),
+        "/api/v1/tasks/{id}/cancel" => ("diagnostic_cancel", "task"),
+        "/api/v1/tasks/{id}/retry" => ("diagnostic_retry", "task"),
         _ => return None,
     })
 }

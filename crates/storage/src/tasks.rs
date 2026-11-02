@@ -267,6 +267,19 @@ impl Store {
             read_task(c,id)
         }).await
     }
+    pub async fn cancel_diagnostic_work(
+        &self,
+        id: i64,
+        expected_version: u64,
+    ) -> Result<TaskInfo, StorageError> {
+        if id <= 0 || expected_version == 0 || expected_version > i64::MAX as u64 {
+            return Err(StorageError::Invalid);
+        }
+        self.call(move|c|{
+            if c.execute("UPDATE task_records SET version=version+1,state='discarded',phase='cancelled',terminal=1,updated_at=max(updated_at,?3),finished_at=?3,completed=1,skipped=1,error_code='diagnostic_cancelled',result_ref=NULL,result_json=NULL WHERE id=?1 AND version=?2 AND kind='diagnostic_export' AND source_ref IS NULL AND state IN ('queued','running')",params![id,expected_version as i64,unix_ms() as i64])?!=1{return Err(StorageError::Conflict);}
+            read_task(c,id)
+        }).await
+    }
     pub async fn finish_work(&self, id: i64, result: WorkResult) -> Result<TaskInfo, StorageError> {
         if ![
             "completed",

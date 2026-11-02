@@ -16,6 +16,24 @@ fn work(request: &str) -> WorkInput {
         configuration_revision: Some(1),
     }
 }
+#[tokio::test]
+async fn diagnostic_cancel_and_completion_have_exactly_one_terminal_winner() {
+    let store = Store::open(None, DaemonConfig::default()).unwrap();
+    let mut input = work("diagnostic-race");
+    input.kind = "diagnostic_export";
+    let (task, _) = store.begin_work(input).await.unwrap();
+    let running = store.start_work(task.id).await.unwrap();
+    let (cancelled, completed) = tokio::join!(
+        store.cancel_diagnostic_work(task.id, running.version),
+        store.finish_work(task.id, done())
+    );
+    assert_ne!(cancelled.is_ok(), completed.is_ok());
+    let terminal = store.task(task.id).await.unwrap();
+    assert!(terminal.terminal);
+    assert_eq!(terminal.version, running.version + 1);
+    assert!(matches!(terminal.state.as_str(), "completed" | "discarded"));
+    store.close().await.unwrap();
+}
 fn done() -> WorkResult {
     WorkResult {
         state: "completed",
