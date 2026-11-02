@@ -2,6 +2,7 @@
 //! must be ready before activate; object loading alone never means forwarding.
 #[cfg(test)]
 mod generation_tests;
+mod inspection;
 mod metadata;
 pub use metadata::CapturedMetadata;
 mod routes;
@@ -13,7 +14,7 @@ mod test_support;
 mod udp_tests;
 use aya::{
     Ebpf, EbpfLoader,
-    maps::{HashMap, LpmTrie, PerCpuArray, SockMap, lpm_trie::Key},
+    maps::{HashMap, LpmTrie, MapData, PerCpuArray, SockMap, lpm_trie::Key},
     programs::{
         CgroupAttachMode, CgroupSock, CgroupSockAddr, LinkOrder, SchedClassifier, TcAttachType,
         tc::TcAttachOptions,
@@ -311,8 +312,9 @@ impl PreparedCapture {
             .map(File::open)
             .transpose()
             .map_err(|e| error("open cgroup", e))?;
+        let mut cgroup_attachments = vec![];
         if let Some(cgroup) = &cgroup {
-            for name in ADDRESS_PROGRAMS {
+            for (name, attach_type) in ADDRESS_PROGRAMS.into_iter().zip([10, 11, 14, 15]) {
                 let program: &mut CgroupSockAddr = bpf
                     .program_mut(name)
                     .unwrap()
@@ -323,8 +325,15 @@ impl PreparedCapture {
                     // cgroup links multi-program semantics itself (6.12 cgroup.c).
                     .attach(cgroup, CgroupAttachMode::Single)
                     .map_err(|e| error("attach disabled cgroup hook", e))?;
+                cgroup_attachments.push(inspection::CgroupAttachment {
+                    attach_type,
+                    id: program
+                        .info()
+                        .map_err(|e| error("cgroup program ID", e))?
+                        .id(),
+                });
             }
-            for name in ["hps_tp_create", "hps_tp_release"] {
+            for (name, attach_type) in [("hps_tp_create", 2), ("hps_tp_release", 34)] {
                 let program: &mut CgroupSock = bpf
                     .program_mut(name)
                     .unwrap()
@@ -333,6 +342,13 @@ impl PreparedCapture {
                 program
                     .attach(cgroup, CgroupAttachMode::Single)
                     .map_err(|e| error("attach socket lifecycle hook", e))?;
+                cgroup_attachments.push(inspection::CgroupAttachment {
+                    attach_type,
+                    id: program
+                        .info()
+                        .map_err(|e| error("cgroup program ID", e))?
+                        .id(),
+                });
             }
         }
         let mut attachments = vec![];
@@ -361,17 +377,27 @@ impl PreparedCapture {
                 &mut attachments,
             )?;
         }
+        let flows = HashMap::try_from(
+            bpf.take_map("HPS_TP_FLOWS")
+                .ok_or("capture flow map missing")?,
+        )
+        .map_err(|e| error("flow ownership", e))?;
         Ok(Capture {
+            metadata: Mutex::new(Some(FlowMaps {
+                flows,
+                netns_cookie: policy.netns_cookie,
+            })),
             state: Mutex::new(Some(State {
                 bpf,
                 policy,
                 ownership,
-                _cgroup: cgroup,
+                cgroup,
                 routes: None,
             })),
             specification: self.specification,
             fingerprint: self.fingerprint,
             attachments,
+            cgroup_attachments,
         })
     }
 }
@@ -397,6 +423,7 @@ fn attach(
     let id = program.info().map_err(|e| error("program ID", e))?.id();
     attachments.push(Attachment {
         interface: interface.into(),
+        index: interface_index(interface)?,
         direction,
         id,
     });
@@ -404,6 +431,7 @@ fn attach(
 }
 struct Attachment {
     interface: String,
+    index: u32,
     direction: TcAttachType,
     id: u32,
 }
@@ -411,14 +439,20 @@ struct State {
     bpf: Ebpf,
     policy: CapturePolicy,
     ownership: File,
-    _cgroup: Option<File>,
+    cgroup: Option<File>,
     routes: Option<routes::OwnedRoutes>,
 }
 pub struct Capture {
     state: Mutex<Option<State>>,
+    metadata: Mutex<Option<FlowMaps>>,
     pub specification: LinuxCaptureConfig,
     pub fingerprint: String,
     attachments: Vec<Attachment>,
+    cgroup_attachments: Vec<inspection::CgroupAttachment>,
+}
+struct FlowMaps {
+    flows: HashMap<MapData, FlowKey, CapturedFlow>,
+    netns_cookie: u64,
 }
 impl Capture {
     pub fn prepare_routes(&self) -> Result<(), String> {
@@ -455,6 +489,9 @@ impl Capture {
         if revision <= 0 {
             return Err("capture revision must be positive".into());
         }
+        if !self.links_present()? {
+            return Err("capture links or scope identity are not ready".into());
+        }
         let mut guard = self.state.lock().unwrap();
         let state = guard.as_mut().ok_or("transparent capture is shut down")?;
         if !state
@@ -489,19 +526,12 @@ impl Capture {
         Ok(())
     }
     pub fn flow(&self, key: FlowKey) -> Result<Option<CapturedFlow>, String> {
-        let guard = self.state.lock().unwrap();
-        let state = guard.as_ref().ok_or("transparent capture is shut down")?;
-        if key.netns_cookie != state.policy.netns_cookie {
+        let guard = self.metadata.lock().unwrap();
+        let metadata = guard.as_ref().ok_or("transparent capture is shut down")?;
+        if key.netns_cookie != metadata.netns_cookie {
             return Err("capture flow belongs to another network namespace".into());
         }
-        let map = HashMap::<_, FlowKey, CapturedFlow>::try_from(
-            state
-                .bpf
-                .map("HPS_TP_FLOWS")
-                .ok_or("capture flow map missing")?,
-        )
-        .map_err(|e| error("flow ABI", e))?;
-        match map.get(&key, 0) {
+        match metadata.flows.get(&key, 0) {
             Ok(value) => Ok(Some(value)),
             Err(aya::maps::MapError::KeyNotFound) => Ok(None),
             Err(e) => Err(error("flow lookup", e)),
@@ -510,16 +540,11 @@ impl Capture {
     /// Bounded metadata used for generation retention and owner garbage
     /// collection. This is not an unbounded packet history.
     pub fn flows(&self) -> Result<Vec<(FlowKey, CapturedFlow)>, String> {
-        let guard = self.state.lock().unwrap();
-        let state = guard.as_ref().ok_or("transparent capture is shut down")?;
-        let map = HashMap::<_, FlowKey, CapturedFlow>::try_from(
-            state
-                .bpf
-                .map("HPS_TP_FLOWS")
-                .ok_or("capture flow map missing")?,
-        )
-        .map_err(|e| error("flow ABI", e))?;
-        map.iter()
+        let guard = self.metadata.lock().unwrap();
+        let metadata = guard.as_ref().ok_or("transparent capture is shut down")?;
+        metadata
+            .flows
+            .iter()
             .take(self.specification.max_flows as usize)
             .map(|entry| entry.map_err(|e| error("flow scan", e)))
             .collect()
@@ -529,21 +554,17 @@ impl Capture {
     /// change between lookup and remove; timestamp refreshes do not change it.
     /// Cancel and drain the corresponding owner before calling this method.
     pub fn retire_flow(&self, key: FlowKey, expected: CapturedFlow) -> Result<bool, String> {
-        let mut guard = self.state.lock().unwrap();
-        let state = guard.as_mut().ok_or("transparent capture is shut down")?;
-        if key.netns_cookie != state.policy.netns_cookie {
+        let mut guard = self.metadata.lock().unwrap();
+        let metadata = guard.as_mut().ok_or("transparent capture is shut down")?;
+        if key.netns_cookie != metadata.netns_cookie {
             return Err("capture flow belongs to another network namespace".into());
         }
-        let mut map = HashMap::<_, FlowKey, CapturedFlow>::try_from(
-            state
-                .bpf
-                .map_mut("HPS_TP_FLOWS")
-                .ok_or("capture flow map missing")?,
-        )
-        .map_err(|e| error("flow ABI", e))?;
-        match map.get(&key, 0) {
+        match metadata.flows.get(&key, 0) {
             Ok(value) if value.same_identity(&expected) => {
-                map.remove(&key).map_err(|e| error("retire flow", e))?;
+                metadata
+                    .flows
+                    .remove(&key)
+                    .map_err(|e| error("retire flow", e))?;
                 Ok(true)
             }
             Ok(_) | Err(aya::maps::MapError::KeyNotFound) => Ok(false),
@@ -551,11 +572,11 @@ impl Capture {
         }
     }
     pub fn netns_cookie(&self) -> Result<u64, String> {
-        self.state
+        self.metadata
             .lock()
             .unwrap()
             .as_ref()
-            .map(|s| s.policy.netns_cookie)
+            .map(|s| s.netns_cookie)
             .ok_or_else(|| "transparent capture is shut down".into())
     }
     pub fn program_ids(&self) -> Result<Vec<u32>, String> {
@@ -594,18 +615,40 @@ impl Capture {
         Ok(maps.into_iter().collect())
     }
     pub fn links_present(&self) -> Result<bool, String> {
-        if self.state.lock().unwrap().is_none() {
-            return Ok(false);
+        inspection::links_present(self)
+    }
+    /// Establish a kernel network-RCU grace period after the current policy
+    /// publication. Only then may a runtime scan the flow map and release older
+    /// generations without missing an already-running hook's late insertion.
+    /// Call from a blocking worker. Failure must retain old generations.
+    pub fn settled_revision(&self) -> Result<i64, String> {
+        let guard = self.state.lock().unwrap();
+        let state = guard.as_ref().ok_or("transparent capture is shut down")?;
+        if crate::linux_objects::netns_cookie().map_err(|e| error("current namespace", e))?
+            != state.policy.netns_cookie
+        {
+            return Err("capture policy namespace changed".into());
         }
-        for attachment in &self.attachments {
-            let (_, programs) =
-                SchedClassifier::query_tcx(&attachment.interface, attachment.direction)
-                    .map_err(|e| error("TCX link inspection", e))?;
-            if !programs.iter().any(|p| p.id() == attachment.id) {
-                return Ok(false);
-            }
+        // Linux 6.12 and 7.0 net/packet/af_packet.c packet_release calls
+        // synchronize_net unconditionally, including protocol zero (no packet
+        // hook, receive queue traffic, interface, routing, or packet inspection).
+        // Closing our sole CLOEXEC FD completes release before returning to
+        // user space. This requires CONFIG_PACKET and CAP_NET_RAW; do not use
+        // membarrier GLOBAL as a substitute: it can skip RCU on one online CPU.
+        let fd = unsafe { libc::socket(libc::AF_PACKET, libc::SOCK_DGRAM | libc::SOCK_CLOEXEC, 0) };
+        if fd < 0 {
+            return Err(error(
+                "policy retirement barrier socket",
+                std::io::Error::last_os_error(),
+            ));
         }
-        Ok(true)
+        if unsafe { libc::close(fd) } != 0 {
+            return Err(error(
+                "policy retirement barrier close",
+                std::io::Error::last_os_error(),
+            ));
+        }
+        Ok(state.policy.revision as i64)
     }
     pub fn stats(&self) -> Result<Vec<CaptureStats>, String> {
         let guard = self.state.lock().unwrap();
@@ -649,6 +692,7 @@ impl Capture {
         let Some(mut state) = guard.take() else {
             return Ok(());
         };
+        self.metadata.lock().unwrap().take();
         // Closing owned links detaches even if the disabled-policy update fails.
         state.policy.flags = 0;
         let result = HashMap::<_, u32, CapturePolicy>::try_from(

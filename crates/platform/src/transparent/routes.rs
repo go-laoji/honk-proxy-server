@@ -477,11 +477,21 @@ pub(super) struct OwnedRoutes {
     created_rules: Vec<(u8, Vec<u8>)>,
 }
 impl OwnedRoutes {
+    fn require_namespace(netns: u64) -> Result<(), String> {
+        if crate::linux_objects::netns_cookie().map_err(|e| error("current namespace", e))? != netns
+        {
+            return Err(
+                "capture routing namespace changed; retaining original ownership journal".into(),
+            );
+        }
+        Ok(())
+    }
     pub(super) fn prepare(
         config: &LinuxCaptureConfig,
         netns: u64,
         _ownership: &File,
     ) -> Result<Self, String> {
+        Self::require_namespace(netns)?;
         let identity = Identity::from_config(config);
         let lo = unsafe { libc::if_nametoindex(c"lo".as_ptr()) };
         if lo == 0 {
@@ -527,6 +537,7 @@ impl OwnedRoutes {
         Ok(routes)
     }
     pub(super) fn present(&self) -> Result<bool, String> {
+        Self::require_namespace(self.netns)?;
         check_conflicts(
             &self.identity,
             std::slice::from_ref(&self.identity),
@@ -553,6 +564,7 @@ impl OwnedRoutes {
         if !self.created {
             return Ok(());
         }
+        Self::require_namespace(self.netns)?;
         // Rollback only positive acknowledgments from this attempt. A failed
         // CREATE|EXCL must never make us delete a competing process's object.
         while let Some((family, payload)) = self.created_rules.last() {

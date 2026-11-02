@@ -125,3 +125,13 @@ TCP scoped 入口返回独立 CapturedTcpSession；UDP owner 也增加 finished/
 共享 TCP 的 HTTP/HTTPS/SOCKS5 用例验证活动期间未结束，管理断开后仅等待该流通知即可看到额度释放。UDP 用例仅取消并等待自身 owner，无需关闭整个捕获 tracker 或普通显式入口；延迟回包仍被阻断，空闲回收也产生完成通知。运行时可据此先等待对应流结束，再按第十一批的精确身份退休，避免为单流 GC 暂停所有 TCP/UDP 接纳。
 
 完整 engine 回归 Linux 50、macOS 45 项通过，零失败/忽略，相关 Clippy 通过。实际 7.0 内核再次执行 TCP/UDP 两项，六条 TCP 三类上游及 Direct/SOCKS5 各八条 UDP 全部通过，证据为 `linux-transparent-completion-kernel7-2026-11-02.json`。完整 Daemon、控制面、LAN 与最终矩阵仍待接入，full ready 保持 false。
+
+## 实际挂载、命名空间与退休屏障（第十三批）
+
+新增有界 BPF_PROG_QUERY，按实际 cgroup FD 和六个 attach type 核对程序 ID；同时核对 cgroup 路径/FD 的 dev+inode、网络命名空间 cookie、网卡原 ifindex 和 TCX 实际查询结果。启用前必须通过这些检查。不能以仍持有的程序/map ID 代替实际挂载；路由准备/检查/清理遇到错误 namespace 均拒绝操作，并保留原归属日志。
+
+流 map 的独立 FD 与短互斥从配置/路由 State 分开，元数据 lookup、扫描、精确退休不会排队等待可能耗时的 route-netlink 检查。停止时同时释放该独立 FD，避免 map 被无意保留。
+
+`settled_revision` 在配置状态互斥下关闭本次独占的 protocol=0 AF_PACKET socket，利用本项目验证内核 [6.12 packet_release](https://github.com/torvalds/linux/blob/v6.12/net/packet/af_packet.c) 和 [7.0 packet_release](https://github.com/torvalds/linux/blob/v7.0/net/packet/af_packet.c) 中无条件的 synchronize_net，建立策略发布后的网络 RCU grace period。protocol=0 不注册收包钩子、不接收/检查报文、不创建网卡或路由。该退休基础要求 CONFIG_PACKET 和 CAP_NET_RAW；失败时必须保留旧代际，不能用固定延时冒充完成。完整运行时仍须把发布、屏障、元数据扫描和快照回收串行化。没有采用 membarrier GLOBAL，因为验证内核在单个 online CPU 时可能跳过 synchronize_rcu。
+
+实际 aarch64 7.0.14 与 QEMU 6.12.115 均通过：分别卸载 sendmsg4 与 sock_create，同时保留独立程序 FD，仍能发现挂载已丢失并拒绝下一次启用；新线程进入另一 netns 后，挂载/路由操作拒绝，原日志逐字不变且原路由仍存在；持有路由 State 时元数据查询仍可完成；退休屏障返回实际代际 7；停止并关闭独立测试 FD 后全部 map 回收。两个实际内核的证据为 `linux-transparent-inspection-kernel{7,612}-2026-11-02.json`。7.0 的 TCP/UDP 转发回归两项也通过，Linux Clippy/格式/diff 通过。完整 Daemon 和最终矩阵尚待完成，full ready 保持 false。

@@ -30,6 +30,7 @@ mount -t devtmpfs dev /dev
 mkdir -p /sys/fs/cgroup
 mount -t cgroup2 none /sys/fs/cgroup
 modprobe ipv6 || true
+modprobe af_packet || true
 ip link set lo up
 uname -r
 if [ -f /test-filter ]; then
