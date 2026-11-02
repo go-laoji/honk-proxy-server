@@ -3,6 +3,8 @@ import { Cable, ArrowRight } from "lucide-react";
 import type { ServiceData } from "../use-service";
 import { Badge } from "../components/ui";
 import { endpoint, connect, isDesktop } from "../platform";
+import ProfilesPanel from "../components/ProfilesPanel";
+import LocalSystemPanel from "../components/LocalSystemPanel";
 
 export default function ConnectPage({ data }: { data: ServiceData | null }) {
   const [address, setAddress] = useState("");
@@ -78,6 +80,12 @@ export default function ConnectPage({ data }: { data: ServiceData | null }) {
           </Badge>
         </div>
       </section>
+      {isDesktop && (
+        <>
+          <ProfilesPanel />
+          <LocalSystemPanel data={data} />
+        </>
+      )}
     </div>
   );
 }
