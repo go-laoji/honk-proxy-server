@@ -3,9 +3,16 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 pub(crate) async fn serve(mut io: BoxIo, session: Session) -> Result<(), ProxyError> {
-    let target = match tokio::time::timeout(session.handshake_timeout(), handshake(&mut io)).await {
+    let request = match tokio::time::timeout(session.handshake_timeout(), handshake(&mut io)).await
+    {
         Ok(result) => result?,
         Err(_) => return Err(ProxyError::Timeout),
+    };
+    let target = match request {
+        Request::Connect(target) => target,
+        Request::Udp { address, port } => {
+            return super::socks_udp::serve(io, session, address, port).await;
+        }
     };
     let upstream = match session
         .dialer
@@ -39,7 +46,14 @@ async fn reply(io: &mut BoxIo, code: u8) -> Result<(), ProxyError> {
     io.flush().await?;
     Ok(())
 }
-async fn handshake(io: &mut BoxIo) -> Result<Target, ProxyError> {
+enum Request {
+    Connect(Target),
+    Udp {
+        address: std::net::IpAddr,
+        port: u16,
+    },
+}
+async fn handshake(io: &mut BoxIo) -> Result<Request, ProxyError> {
     if io.read_u8().await? != 5 {
         return Err(ProxyError::InvalidTarget);
     }
@@ -59,7 +73,7 @@ async fn handshake(io: &mut BoxIo) -> Result<Target, ProxyError> {
         reply(io, 1).await?;
         return Err(ProxyError::InvalidTarget);
     }
-    if prefix[1] != 1 {
+    if ![1, 3].contains(&prefix[1]) {
         reply(io, 7).await?;
         return Err(ProxyError::InvalidTarget);
     }
@@ -86,8 +100,17 @@ async fn handshake(io: &mut BoxIo) -> Result<Target, ProxyError> {
         }
     };
     let port = io.read_u16().await?;
+    if prefix[1] == 3 {
+        return match host.parse() {
+            Ok(address) => Ok(Request::Udp { address, port }),
+            Err(_) => {
+                reply(io, 8).await?;
+                Err(ProxyError::InvalidTarget)
+            }
+        };
+    }
     match Target::new(&host, port) {
-        Ok(target) => Ok(target),
+        Ok(target) => Ok(Request::Connect(target)),
         Err(error) => {
             reply(io, 8).await?;
             Err(error)

@@ -98,10 +98,20 @@ pub(crate) struct Session {
     pub cancel: CancellationToken,
     pub tracker: TaskTracker,
     pub selection_context: hps_domain::SelectionQuery,
+    pub local_address: SocketAddr,
+    global_capacity: Arc<Capacity>,
     entry: Arc<Entry>,
     _admission: Arc<Admission>,
 }
 impl Session {
+    pub fn udp_target_permits(&self) -> Option<(Permit, Permit)> {
+        Some((
+            self.global_capacity.acquire(self.limits.max_connections)?,
+            self.entry
+                .capacity
+                .acquire(self.entry.config.max_connections)?,
+        ))
+    }
     pub fn handshake_timeout(&self) -> Duration {
         Duration::from_millis(self.limits.handshake_timeout_ms)
     }
@@ -137,7 +147,10 @@ impl Engine {
         Self::prepare(
             config,
             previous,
-            crate::routing::RoutingCapabilities::default(),
+            crate::routing::RoutingCapabilities {
+                udp: true,
+                ..Default::default()
+            },
             false,
         )
     }
@@ -445,7 +458,7 @@ impl Engine {
                 let inbound=match run.capacity.acquire(run.config.max_connections) { Some(permit)=>permit,None=>{run.inbound_rejected.fetch_add(1,Ordering::Relaxed);continue;} };
                 run.accepted.fetch_add(1,Ordering::Relaxed);
                 let activity=Activity::new();
-                let session=Session { dialer:engine.dialer.clone(),limits:engine.limits.clone(),budget:Budget::new(engine.bandwidth.clone(),run.bandwidth.clone(),activity.clone()),activity,cancel:sessions.child_token(),tracker:run.tracker.clone(),entry:run.clone(),selection_context:hps_domain::SelectionQuery {inbound:Some(run.config.id.clone()),source_ip:Some(peer.ip()),source_port:Some(peer.port()),..Default::default()},_admission:Arc::new(Admission { _global:global,_inbound:inbound }) };
+                let session=Session { dialer:engine.dialer.clone(),limits:engine.limits.clone(),budget:Budget::new(engine.bandwidth.clone(),run.bandwidth.clone(),activity.clone()),activity,cancel:sessions.child_token(),tracker:run.tracker.clone(),entry:run.clone(),local_address:tcp.local_addr().unwrap_or(address),global_capacity:engine.capacity.clone(),selection_context:hps_domain::SelectionQuery {inbound:Some(run.config.id.clone()),source_ip:Some(peer.ip()),source_port:Some(peer.port()),..Default::default()},_admission:Arc::new(Admission { _global:global,_inbound:inbound }) };
                 let acceptor=run.tls.clone(); let protocol=run.config.protocol; let child=session.clone();
                 session.spawn_io(async move {
                     let _=tcp.set_nodelay(true);

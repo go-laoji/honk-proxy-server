@@ -13,6 +13,7 @@ pub mod routing;
 pub mod runtime;
 mod selection;
 mod socks;
+mod socks_udp;
 mod socks_client;
 pub mod target;
 pub mod tls;
