@@ -388,7 +388,7 @@
       "acceptance": "来源/时间窗口/保留期明确，结果有界可核实；不可取消阶段不伪回滚，通知状态变化限频。",
       "issue": 23,
       "url": "https://github.com/go-laoji/honk-proxy-server/issues/23",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "id": "T19",
