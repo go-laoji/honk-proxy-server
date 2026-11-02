@@ -125,3 +125,133 @@ impl Supervisor {
         .await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[tokio::test]
+    async fn prepared_generation_owns_subscription_snapshot_before_publication_and_failure_keeps_old()
+     {
+        let mut config = DaemonConfig::default();
+        config.health.enabled = false;
+        config.subscriptions.push(SubscriptionConfig {
+            id: "fixture".into(),
+            url: "https://example.test/sub".into(),
+            ..Default::default()
+        });
+        let store = Store::open(None, config).unwrap();
+        let service = Supervisor::boot(store.clone(), Default::default())
+            .await
+            .unwrap();
+        let revision = service.subscriptions().running_revision;
+        service
+            .refresh_subscription(
+                "fixture".into(),
+                SubscriptionRefresh {
+                    expected_revision: revision,
+                    document: Some("http://127.0.0.1:8080".into()),
+                },
+            )
+            .await
+            .unwrap();
+        let old = service.current();
+        let old_id = old.engine.selection(&Default::default()).selected.unwrap();
+        let mut candidate = old.base_config.clone();
+        let source = &mut candidate.subscriptions[0];
+        let nodes = hps_provider::subscription::parse(source, "http://127.0.0.1:8081").unwrap();
+        let new_id = nodes[0].id.clone();
+        source.snapshot = Some(SubscriptionSnapshot {
+            fetched_at_unix: hps_storage::unix_now(),
+            origin: "document_import".into(),
+            nodes,
+        });
+        // Same source definition fingerprint, changed contents: the precise case
+        // where sharing the old DynamicPool previously exposed retired nodes.
+        assert_eq!(
+            hps_provider::subscription::fingerprint(&candidate.subscriptions[0]),
+            hps_provider::subscription::fingerprint(&old.config.subscriptions[0])
+        );
+        let before = old.clone();
+        let preparing = candidate.clone();
+        let prepared =
+            tokio::task::spawn_blocking(move || prepare_engine(&preparing, Some(&before)))
+                .await
+                .unwrap()
+                .unwrap();
+        assert!(Arc::ptr_eq(
+            &old.engine.dynamic_pool(),
+            &prepared.engine.dynamic_pool()
+        ));
+        assert!(prepared.engine.prepare_subscription_nodes(vec![]).is_err());
+        // No refresh_pool or start/publication has occurred. New readers already
+        // see exactly the prepared snapshot; old generation readers retain theirs.
+        assert_eq!(
+            prepared
+                .engine
+                .selection(&Default::default())
+                .selected
+                .as_deref(),
+            Some(new_id.as_str())
+        );
+        assert_eq!(
+            old.engine
+                .selection(&Default::default())
+                .selected
+                .as_deref(),
+            Some(old_id.as_str())
+        );
+        assert_eq!(service.current().revision, old.revision);
+        let mut failing = candidate.clone();
+        let node = &mut failing.subscriptions[0].snapshot.as_mut().unwrap().nodes[0];
+        node.protocol = hps_config::ProxyProtocol::Https;
+        node.ca_certificate = Some("/nonexistent/hps-test-subscription-ca.pem".into());
+        let before = old.clone();
+        assert!(
+            tokio::task::spawn_blocking(move || prepare_engine(&failing, Some(&before)))
+                .await
+                .unwrap()
+                .is_err()
+        );
+        assert_eq!(
+            service
+                .current()
+                .engine
+                .selection(&Default::default())
+                .selected
+                .as_deref(),
+            Some(old_id.as_str())
+        );
+        assert_eq!(
+            store.workspace().await.unwrap().desired.revision.id,
+            old.revision
+        );
+        let applied = service
+            .refresh_subscription(
+                "fixture".into(),
+                SubscriptionRefresh {
+                    expected_revision: old.revision,
+                    document: Some("http://127.0.0.1:8081".into()),
+                },
+            )
+            .await
+            .unwrap();
+        assert!(applied.running_revision > old.revision);
+        assert_eq!(
+            service
+                .current()
+                .engine
+                .selection(&Default::default())
+                .selected
+                .as_deref(),
+            Some(new_id.as_str())
+        );
+        assert_eq!(
+            old.engine
+                .selection(&Default::default())
+                .selected
+                .as_deref(),
+            Some(old_id.as_str())
+        );
+        service.shutdown().await.unwrap();
+    }
+}

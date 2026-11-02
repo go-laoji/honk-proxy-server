@@ -211,3 +211,60 @@ async fn remote_clash_get_uses_real_http_and_rejects_redirect_and_bad_refresh() 
     service.shutdown().await.unwrap();
     task.abort();
 }
+
+#[tokio::test]
+async fn subscription_commit_does_not_depend_on_post_publication_lease_reload() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = Store::open(Some(directory.path()), config()).unwrap();
+    let database = store.database_path.clone().unwrap();
+    let service = Supervisor::boot(store.clone(), Default::default())
+        .await
+        .unwrap();
+    let revision = service.subscriptions().running_revision;
+    let first = service
+        .refresh_subscription(
+            "standard".into(),
+            SubscriptionRefresh {
+                expected_revision: revision,
+                document: Some("http://127.0.0.1:8080".into()),
+            },
+        )
+        .await
+        .unwrap();
+    // Fault only the optional, unrelated lease inventory read. Configuration
+    // persistence and the prebuilt subscription generation remain functional.
+    let fault = rusqlite::Connection::open(database).unwrap();
+    fault
+        .execute_batch("ALTER TABLE provider_leases RENAME TO provider_leases_fault")
+        .unwrap();
+    assert!(store.active_leases().await.is_err());
+    let applied = service
+        .refresh_subscription(
+            "standard".into(),
+            SubscriptionRefresh {
+                expected_revision: first.running_revision,
+                document: Some("http://127.0.0.1:8081".into()),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(applied.state, "applied");
+    let view = service.subscriptions();
+    let expected = &view.subscriptions[0].snapshot.as_ref().unwrap().nodes[0].id;
+    assert_eq!(
+        service
+            .simulate_group(SelectionQuery::default())
+            .unwrap()
+            .selected
+            .as_ref(),
+        Some(expected)
+    );
+    assert_eq!(
+        store.workspace().await.unwrap().desired.revision.id,
+        applied.running_revision
+    );
+    fault
+        .execute_batch("ALTER TABLE provider_leases_fault RENAME TO provider_leases")
+        .unwrap();
+    service.shutdown().await.unwrap();
+}

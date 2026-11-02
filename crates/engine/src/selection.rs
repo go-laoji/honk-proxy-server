@@ -31,7 +31,16 @@ struct State {
     last_prune: Option<Instant>,
     retired: bool,
 }
+struct CompiledGroup {
+    index: usize,
+    members: HashSet<String>,
+    providers: HashSet<String>,
+    fallbacks: HashSet<String>,
+}
 pub(crate) struct Selector {
+    compiled: HashMap<String, CompiledGroup>,
+    node_tag_sets: HashMap<String, HashSet<String>>,
+    provider_tag_sets: HashMap<String, HashSet<String>>,
     config: SelectionConfig,
     state: Mutex<State>,
 }
@@ -63,7 +72,7 @@ impl Selector {
         let Some(id) = group else {
             return true;
         };
-        let Some(group) = self.config.groups.iter().find(|g| &g.id == id) else {
+        let Some(group) = self.group(id) else {
             return false;
         };
         // A nested path may request only sources it explicitly contains. Never refill a pinned scope.
@@ -79,11 +88,11 @@ impl Selector {
         depth < 8
             && group.pinned_node.is_none()
             && (group.include_all
-                || group.providers.iter().any(|id| id == provider)
+                || self.compiled[&group.id].providers.contains(provider)
                 || group
                     .groups
                     .iter()
-                    .filter_map(|id| self.config.groups.iter().find(|g| &g.id == id))
+                    .filter_map(|id| self.group(id))
                     .any(|g| self.group_allows_refill(g, provider, protocol, depth + 1)))
             && (group.protocols.is_empty()
                 || protocol.is_some_and(|p| group.protocols.contains(&p)))
@@ -96,10 +105,44 @@ impl Selector {
     }
 
     pub fn new(config: SelectionConfig) -> Self {
+        let compiled = config
+            .groups
+            .iter()
+            .enumerate()
+            .map(|(index, g)| {
+                (
+                    g.id.clone(),
+                    CompiledGroup {
+                        index,
+                        members: g.members.iter().cloned().collect(),
+                        providers: g.providers.iter().cloned().collect(),
+                        fallbacks: g.fallback_nodes.iter().cloned().collect(),
+                    },
+                )
+            })
+            .collect();
+        let node_tag_sets = config
+            .node_tags
+            .iter()
+            .map(|(id, tags)| (id.clone(), tags.iter().cloned().collect()))
+            .collect();
+        let provider_tag_sets = config
+            .provider_tags
+            .iter()
+            .map(|(id, tags)| (id.clone(), tags.iter().cloned().collect()))
+            .collect();
         Self {
             config,
+            compiled,
+            node_tag_sets,
+            provider_tag_sets,
             state: Mutex::default(),
         }
+    }
+    fn group(&self, id: &str) -> Option<&GroupConfig> {
+        self.compiled
+            .get(id)
+            .and_then(|g| self.config.groups.get(g.index))
     }
     fn expand_group(
         &self,
@@ -112,12 +155,13 @@ impl Selector {
         if cache.contains_key(id) || depth >= 8 {
             return;
         }
-        let Some(group) = self.config.groups.iter().find(|g| g.id == id) else {
+        let Some(group) = self.group(id) else {
             return;
         };
         for child in &group.groups {
             self.expand_group(child, choices, query, cache, depth + 1);
         }
+        let compiled = &self.compiled[id];
         let mut nodes = HashSet::new();
         for choice in choices {
             let up = &choice.upstream;
@@ -130,15 +174,15 @@ impl Selector {
             }
             let provider = up.source.as_ref().map(|(id, _)| id);
             let member = group.include_all
-                || group.members.contains(&up.config.id)
-                || provider.is_some_and(|id| group.providers.contains(id))
+                || compiled.members.contains(&up.config.id)
+                || provider.is_some_and(|id| compiled.providers.contains(id))
                 || group.groups.iter().any(|id| {
                     cache
                         .get(id)
                         .is_some_and(|nodes| nodes.contains(&up.config.id))
                 });
-            let tags = self.config.node_tags.get(&up.config.id);
-            let source_tags = provider.and_then(|id| self.config.provider_tags.get(id));
+            let tags = self.node_tag_sets.get(&up.config.id);
+            let source_tags = provider.and_then(|id| self.provider_tag_sets.get(id));
             if member
                 && (group.protocols.is_empty() || group.protocols.contains(&up.config.protocol))
                 && group.tags.iter().all(|tag| {
@@ -153,7 +197,7 @@ impl Selector {
             if nodes.contains(pin) {
                 nodes.retain(|id| id == pin);
             } else {
-                nodes.retain(|id| group.fallback_nodes.contains(id));
+                nodes.retain(|id| compiled.fallbacks.contains(id));
             }
         }
         cache.insert(id.to_owned(), nodes);
@@ -188,7 +232,7 @@ impl Selector {
                     .or(self.config.default_group.as_ref())
             })
             .flatten();
-        let group = id.and_then(|id| self.config.groups.iter().find(|g| &g.id == id));
+        let group = id.and_then(|id| self.group(id));
         let unknown = id.is_some() && group.is_none();
         let strategy = if query.node.is_some() {
             GroupStrategy::Fixed
@@ -239,7 +283,7 @@ impl Selector {
             if let Some(group) = group {
                 let member = group.include_all
                     || members.contains(up.config.id.as_str())
-                    || provider.is_some_and(|id| group.providers.contains(id))
+                    || provider.is_some_and(|id| self.compiled[&group.id].providers.contains(id))
                     || group.groups.iter().any(|id| {
                         nested
                             .get(id)

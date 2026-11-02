@@ -43,7 +43,7 @@ impl Supervisor {
         });
         let mut seen = HashSet::new();
         let mut counts = HashMap::<String, u32>::new();
-        let mut nodes = leases
+        let nodes = leases
             .into_iter()
             .filter(|lease| allowed.get(&lease.provider_id) == Some(&lease.fingerprint))
             .filter(|lease| {
@@ -87,18 +87,6 @@ impl Supervisor {
                 upstream: lease.candidate.upstream,
             })
             .collect::<Vec<_>>();
-        for subscription in current.config.subscriptions.iter().filter(|s| s.enabled) {
-            if let Some(snapshot) = &subscription.snapshot {
-                nodes.extend(snapshot.nodes.iter().cloned().map(|upstream| {
-                    hps_engine::pool::PoolNode {
-                        provider_id: subscription.source_id(),
-                        fingerprint: hps_provider::subscription::fingerprint(subscription),
-                        upstream,
-                        min_remaining_secs: 0,
-                    }
-                }));
-            }
-        }
         let pool = current.engine.dynamic_pool();
         tokio::task::spawn_blocking(move || pool.replace(nodes))
             .await

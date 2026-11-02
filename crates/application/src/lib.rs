@@ -575,6 +575,10 @@ impl Supervisor {
                 .await?;
             return Err(error);
         }
+        let lease_sources_changed = serde_json::to_value(&current.base_config.providers)
+            .map_err(|_| ApplicationError::Invalid)?
+            != serde_json::to_value(&target.config.providers)
+                .map_err(|_| ApplicationError::Invalid)?;
         let mut restart_required = restart_fields(&current.base_config, &target.config);
         let mut config = target.config.clone();
         self.overrides.apply(&mut config);
@@ -882,7 +886,12 @@ impl Supervisor {
         {
             old.shutdown().await;
         }
-        self.refresh_pool().await?;
+        // Subscription snapshots are already prepared on the candidate engine.
+        // Unrelated lease reloads cannot turn a committed subscription update into
+        // a reported failure or delay its visibility.
+        if lease_sources_changed {
+            self.refresh_pool().await?;
+        }
         self.retired.lock().unwrap().push(current.engine.clone());
         *self.pending_restart.lock().unwrap() = None;
         self.store
@@ -1069,6 +1078,27 @@ fn prepare_proxy_engine(
     };
     #[cfg(not(target_os = "linux"))]
     let engine = Engine::with_previous(config.proxy.clone(), previous)?;
+    let nodes = config
+        .subscriptions
+        .iter()
+        .filter(|s| s.enabled)
+        .filter_map(|source| source.snapshot.as_ref().map(|snapshot| (source, snapshot)))
+        .flat_map(|(source, snapshot)| {
+            snapshot
+                .nodes
+                .iter()
+                .cloned()
+                .map(|upstream| hps_engine::pool::PoolNode {
+                    provider_id: source.source_id(),
+                    fingerprint: hps_provider::subscription::fingerprint(source),
+                    upstream,
+                    min_remaining_secs: 0,
+                })
+        })
+        .collect();
+    engine
+        .prepare_subscription_nodes(nodes)
+        .map_err(|_| ApplicationError::Invalid)?;
     Ok(engine)
 }
 fn prepare_engine(
@@ -1271,6 +1301,22 @@ fn prepare_network(
                     .filter(|s| s.enabled)
                     .map(|s| (s.source_id(), hps_provider::subscription::fingerprint(s))),
             )
+            .collect(),
+    );
+    engine.set_provider_lifetimes(
+        config
+            .providers
+            .iter()
+            .map(|p| {
+                (
+                    p.id.clone(),
+                    if p.refill.enabled {
+                        p.min_remaining_secs.max(p.refill.retire_before_secs)
+                    } else {
+                        p.min_remaining_secs
+                    },
+                )
+            })
             .collect(),
     );
     engine.set_provider_source_protocols(

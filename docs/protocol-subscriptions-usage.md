@@ -35,7 +35,7 @@ enabled = true
 - Clash：读取 YAML/JSON 顶层 `proxies`。支持 `type: http`（`tls: true` 对应 HTTPS）及 `type: socks5`，字段 `name/server/port/username/password`；HTTPS 可配置 `sni`，SOCKS5 可配置 `udp: true`。其余顶层配置不会被执行或导入。
 - 不支持 Shadowsocks、VMess/VLESS、Trojan、SOCKS over TLS、自定义 headers、dialer-proxy、跳过证书校验、tfo/mptcp、指定 IP 版本等字段；为避免静默降级，整份刷新明确拒绝。SOCKS5 `udp: false` 也拒绝，当前快照端点模型不承诺导入每节点 TCP-only SOCKS 限制。
 
-Clash 字段按 [Mihomo 官方 HTTP](https://wiki.metacubex.one/en/config/proxies/http/) 与 [SOCKS](https://wiki.metacubex.one/en/config/proxies/socks/) 文档验证；YAML 使用 [serde_yaml_ng 0.10](https://docs.rs/serde_yaml_ng/0.10.0/serde_yaml_ng/) 的 typed serde 解析与未知字段拒绝，不执行远程 include 或自定义代码。HTTP GET 不跟随重定向、不隐式重试、不继承系统代理，使用现有 Provider resolver。文档最多 1 MiB，单来源最多 10000 节点，最多 32 来源且全量快照最多 20000 节点；SQLite 配置文档的原有 2 MiB 持久预算继续生效。动态发布池总上限为 120000（短效租约最多 100000 + 独立订阅快照最多 20000），订阅不挤占或误删已有租约。
+Clash 字段按 [Mihomo 官方 HTTP](https://wiki.metacubex.one/en/config/proxies/http/) 与 [SOCKS](https://wiki.metacubex.one/en/config/proxies/socks/) 文档验证；YAML 使用 [serde_yaml_ng 0.10](https://docs.rs/serde_yaml_ng/0.10.0/serde_yaml_ng/) 的 typed serde 解析与未知字段拒绝；预先拒绝 YAML 锚点/别名（引号内普通字符与注释保留），缩进/flow 嵌套上限 32，并以流式 visitor 限制最多 10000 条，避免解析完成后才检查扩展预算。不执行远程 include 或自定义代码。HTTP GET 不跟随重定向、不隐式重试、不继承系统代理，使用现有 Provider resolver。远端收包后解析放在 blocking worker，API 的 tracked 生命周期与提取 permit 持有到解析结束；本地文档导入同样处理。文档最多 1 MiB，单来源最多 10000 节点，最多 32 来源且全量快照最多 20000 节点；SQLite 配置文档的原有 2 MiB 持久预算继续生效。动态发布总预算为 120000：原共享短效租约池最多 100000，另有每配置代际独立的订阅快照最多 20000；订阅在新代际可见/开始接流前完成资源与 TLS 预备，不依赖激活后刷新共享池，也不挤占或误删已有租约。
 
 URL 可能包含 token，API/CLI/配置导出一律将整个 URL 脱敏，上游凭据分别脱敏，调试不输出 URL。定义编辑保留 `[REDACTED]` 可复用旧 URL；快照凭据由 GET/导入拥有，来源保存不能注入快照。管理面无需账号；具有访问管理 API 能力的调用者仍可保存配置。
 

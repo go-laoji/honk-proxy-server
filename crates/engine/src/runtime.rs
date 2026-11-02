@@ -171,16 +171,25 @@ impl Engine {
         _capture_enabled: bool,
     ) -> Result<Arc<Self>, EngineError> {
         config.validate().map_err(|_| EngineError::Configuration)?;
-        let mut dialer = Dialer::with_routing_capabilities(&config, capabilities).map_err(|e| {
-            if matches!(
-                e,
-                crate::ProxyError::UnsupportedRule | crate::ProxyError::RuleConfiguration
-            ) {
-                EngineError::Routing
-            } else {
-                EngineError::Tls
-            }
-        })?;
+        let dialer_capabilities = crate::routing::RoutingCapabilities {
+            udp: capabilities.udp
+                || config
+                    .inbounds
+                    .iter()
+                    .any(|i| i.protocol == ProxyProtocol::Socks5),
+            ..capabilities
+        };
+        let mut dialer =
+            Dialer::with_routing_capabilities(&config, dialer_capabilities).map_err(|e| {
+                if matches!(
+                    e,
+                    crate::ProxyError::UnsupportedRule | crate::ProxyError::RuleConfiguration
+                ) {
+                    EngineError::Routing
+                } else {
+                    EngineError::Tls
+                }
+            })?;
         if let Some(old) = previous {
             dialer.preserve_static_deadlines(&old.dialer);
             dialer.pool = old.dialer.pool.clone();
@@ -324,11 +333,39 @@ impl Engine {
     ) {
         self.dialer.set_source_protocols(protocols);
     }
+    /// Called only while preparing a new generation, before it can accept traffic.
+    /// This pool is never inherited from a prior engine or updated by lease refills.
+    pub fn prepare_subscription_nodes(
+        &self,
+        nodes: Vec<crate::pool::PoolNode>,
+    ) -> Result<(), crate::ProxyError> {
+        if nodes.len() > 20000
+            || self.dialer.subscription_pool.get().is_some()
+            || self
+                .entries
+                .values()
+                .any(|e| e.running.load(Ordering::Acquire))
+            || nodes.iter().any(|n| {
+                !n.provider_id.starts_with("subscription:") || n.upstream.expires_at_unix.is_some()
+            })
+        {
+            return Err(crate::ProxyError::Protocol);
+        }
+        let pool = crate::pool::DynamicPool::default();
+        pool.replace(nodes)?;
+        self.dialer
+            .subscription_pool
+            .set(pool.snapshot())
+            .map_err(|_| crate::ProxyError::Protocol)
+    }
     pub fn dynamic_pool(&self) -> Arc<crate::pool::DynamicPool> {
         self.dialer.pool.clone()
     }
     pub fn node_registry(&self) -> Arc<crate::nodes::NodeRegistry> {
         self.dialer.nodes.clone()
+    }
+    pub fn set_provider_lifetimes(&self, values: std::collections::HashMap<String, u64>) {
+        self.dialer.set_source_lifetimes(values);
     }
     pub fn set_provider_sources(&self, sources: std::collections::HashMap<String, String>) {
         self.dialer.set_sources(sources);
@@ -619,5 +656,60 @@ mod readiness_tests {
         assert!(engine.transparent_forwarding_available(false, true));
         engine.shutdown().await;
         assert!(!engine.transparent_forwarding_available(false, true));
+    }
+    #[tokio::test]
+    async fn source_lifetime_policy_is_generation_local_before_shared_lease_pool_refresh() {
+        use crate::pool::PoolNode;
+        let mut config = ProxyConfig::default();
+        config.limits.min_remaining_lifetime_secs = 0;
+        let old = Engine::new(config.clone()).unwrap();
+        old.configure_health(crate::health::HealthPolicy {
+            enabled: false,
+            ..Default::default()
+        });
+        old.set_provider_sources(std::collections::HashMap::from([(
+            "vendor".into(),
+            "same-fingerprint".into(),
+        )]));
+        old.set_provider_lifetimes(std::collections::HashMap::from([("vendor".into(), 0)]));
+        old.dynamic_pool()
+            .replace(vec![PoolNode {
+                provider_id: "vendor".into(),
+                fingerprint: "same-fingerprint".into(),
+                min_remaining_secs: 0,
+                upstream: hps_config::UpstreamConfig {
+                    id: "lease:1".into(),
+                    protocol: ProxyProtocol::Socks5,
+                    host: "127.0.0.1".into(),
+                    port: 9,
+                    enabled: true,
+                    credentials: None,
+                    expires_at_unix: Some(crate::routing::unix_now() + 120),
+                    ca_certificate: None,
+                    tls_server_name: None,
+                },
+            }])
+            .unwrap();
+        let next = Engine::with_previous(config, Some(&old)).unwrap();
+        next.configure_health(crate::health::HealthPolicy {
+            enabled: false,
+            ..Default::default()
+        });
+        next.set_provider_sources(std::collections::HashMap::from([(
+            "vendor".into(),
+            "same-fingerprint".into(),
+        )]));
+        next.set_provider_lifetimes(std::collections::HashMap::from([("vendor".into(), 300)]));
+        assert!(Arc::ptr_eq(&old.dynamic_pool(), &next.dynamic_pool()));
+        assert_eq!(old.selection(&Default::default()).eligible, 1);
+        assert_eq!(next.selection(&Default::default()).eligible, 0);
+        assert_eq!(next.probe_plans()[0].minimum_lifetime(), 300);
+        let target = crate::target::Target::new("127.0.0.1", 9).unwrap();
+        assert!(matches!(
+            next.dialer.connect(&target, false).await,
+            Err(crate::ProxyError::NoUpstream)
+        ));
+        old.shutdown().await;
+        next.shutdown().await;
     }
 }
