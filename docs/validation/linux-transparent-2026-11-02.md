@@ -159,3 +159,11 @@ Linux config/application 普通回归 46 passed / 4 个特权入口 ignored（�
 同一最终源码的正常三代际路径也在两个内核复验通过，证据为 `linux-transparent-rollback-kernel{7,612}-2026-11-02.json`。Mac storage/application 普通回归 65 项、Linux 相关库 26 项通过，相关 Clippy 和格式/diff 通过。QEMU initrd 在 depmod 前展开模块压缩，使最小 BusyBox 加载 CONFIG_PACKET 时不再先提交压缩的 ELF；复验没有 Invalid ELF header 输出。
 
 本批的失败注入针对真实内核更新，未用 mock 替代。DNS 与业务同时启用时的 resolver 回退仍待下一批联合验证；LAN、异常退出恢复、控制面和 x86_64 矩阵未完成，完整 ready 保持 false。
+
+## DNS 与业务捕获同时启用及 resolver 回退（第十六批）
+
+在相同真实 cgroup 内同时启动 8 个 DNS 与 8 个业务透明程序。实际 aarch64 Linux 7.0.14 和 QEMU 6.12.115 均通过：4 条原有业务 TCP/UDP 双栈流继续转发，客户端另以双栈 TCP/UDP 查询 8 次 DNS，收到原 nameserver IP/端口的回复。Daemon 本身也进入受选 cgroup，实际向受控 UDP resolver 出站正常旁路。
+
+保留 revision 2 待重启后，冻结业务策略 map，候选 revision 3 同时改为 Reject 并切换到会返回不同地址的 DNS upstream。业务发布失败回退后，原 4 条流继续工作；随后所有 DNS 查询仍到旧 resolver、返回旧地址，候选 upstream 的实际请求计数为零。查询名区分阶段、协议和地址族，不能由旧缓存遮蔽错误的 resolver 切换。desired/running、failed 记录、停止回收 16 个自有程序和持久重启均核对通过。
+
+证据为 `linux-transparent-dns-coexist-kernel{7,612}-2026-11-02.json`，相关 Linux Clippy、格式/diff 通过。本批补齐第十五批共享 DNS resolver 回退的真实联合证据。LAN、运行监视与恢复、控制台 API/CLI/MPA、异常退出和 x86_64 矩阵仍待完成，完整 ready 保持 false。

@@ -94,6 +94,9 @@ fn transparent_supervisor_child() {
             assert_eq!((n, source), (2, *target));
             assert_eq!(&reply[..n], &body);
         }
+        if std::env::var("HPS_DAEMON_CAPTURE_DNS").is_ok() {
+            captured_dns(phase);
+        }
         if phase > 0 && !freeze {
             for target in &targets[..2] {
                 let mut s =
@@ -173,14 +176,19 @@ async fn apply(service: &std::sync::Arc<Supervisor>, config: &DaemonConfig, expe
 #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
 #[ignore = "requires isolated privileged Linux, writable cgroup v2 and actual eBPF object"]
 async fn real_transparent_supervisor() {
-    run_supervisor(false).await;
+    run_supervisor(false, false).await;
 }
 #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
 #[ignore = "requires isolated privileged Linux, cgroup v2 and freezing an actual owned BPF policy map"]
 async fn real_transparent_publication_failure_restores_deferred_head() {
-    run_supervisor(true).await;
+    run_supervisor(true, false).await;
 }
-async fn run_supervisor(freeze: bool) {
+#[tokio::test(flavor = "multi_thread", worker_threads = 3)]
+#[ignore = "requires isolated privileged Linux and actual DNS plus transparent eBPF programs"]
+async fn real_transparent_dns_coexist_and_publication_rollback() {
+    run_supervisor(true, true).await;
+}
+async fn run_supervisor(freeze: bool, dns: bool) {
     let root = std::env::var("HPS_TEST_CGROUP_ROOT").unwrap();
     let group =
         Group(Path::new(&root).join(format!("hps-transparent-supervisor-{}", std::process::id())));
@@ -248,6 +256,31 @@ async fn run_supervisor(freeze: bool) {
             }
         }));
     }
+    let mut dns_jobs = Jobs(vec![]);
+    let old_dns_requests = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let new_dns_requests = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let mut replacement_dns = None;
+    if dns {
+        let old = dns_upstream(9, old_dns_requests.clone(), &mut dns_jobs).await;
+        let new = dns_upstream(8, new_dns_requests.clone(), &mut dns_jobs).await;
+        replacement_dns = Some(new);
+        let port = loop {
+            let reservation = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            let port = reservation.local_addr().unwrap().port();
+            if port != old.port() && port != new.port() && !targets.iter().any(|t| t.port() == port)
+            {
+                break port;
+            }
+        };
+        config.dns.enabled = true;
+        config.dns.upstreams[0].protocol = hps_config::DnsProtocol::Udp;
+        config.dns.upstreams[0].addresses = vec![old];
+        config.dns.capture = Some(hps_config::DnsCaptureConfig {
+            object: config.linux_capture.as_ref().unwrap().object.clone(),
+            cgroup: group.0.clone(),
+            port,
+        });
+    }
     let before = ids();
     let store = hps_storage::Store::open(Some(directory.path()), config.clone()).unwrap();
     let service = Supervisor::boot(store, StartupOverrides::default())
@@ -263,6 +296,7 @@ async fn run_supervisor(freeze: bool) {
             "--nocapture",
         ])
         .envs(freeze.then_some(("HPS_DAEMON_CAPTURE_FREEZE", "1")))
+        .envs(dns.then_some(("HPS_DAEMON_CAPTURE_DNS", "1")))
         .env("HPS_DAEMON_CAPTURE_CGROUP", &group.0)
         .env(
             "HPS_DAEMON_CAPTURE_TARGETS",
@@ -296,7 +330,7 @@ async fn run_supervisor(freeze: bool) {
             && f.context.process.as_ref().unwrap().pid == pid)
     );
     let boot_programs = ids().difference(&before).copied().collect::<BTreeSet<_>>();
-    assert_eq!(boot_programs.len(), 8);
+    assert_eq!(boot_programs.len(), if dns { 16 } else { 8 });
     let expected_revision = if freeze {
         config.instance_name = "deferred-before-failure".into();
         let deferred = service.create_revision(input(&config, 1)).await.unwrap();
@@ -330,6 +364,9 @@ async fn run_supervisor(freeze: bool) {
         );
         drop(map);
         config.proxy.routing.rules[0].action = RouteAction::Reject;
+        if let Some(address) = replacement_dns {
+            config.dns.upstreams[0].addresses = vec![address];
+        }
         let failed = service
             .create_revision(input(&config, deferred.id))
             .await
@@ -406,6 +443,17 @@ async fn run_supervisor(freeze: bool) {
             .unwrap()
             .unwrap();
     }
+    if dns {
+        assert_eq!(
+            old_dns_requests.load(std::sync::atomic::Ordering::Relaxed),
+            8
+        );
+        assert_eq!(
+            new_dns_requests.load(std::sync::atomic::Ordering::Relaxed),
+            0
+        );
+        assert!(service.dns_overview(None, 50).unwrap().linux_capture_active);
+    }
     let registry = service.current().engine.node_registry();
     let (_, flows) = registry.connection_records(true);
     let old = flows
@@ -449,7 +497,7 @@ async fn run_supervisor(freeze: bool) {
     .await
     .unwrap();
     let owned = ids().difference(&before).copied().collect::<BTreeSet<_>>();
-    assert_eq!(owned.len(), 8);
+    assert_eq!(owned.len(), if dns { 16 } else { 8 });
     let shutdown = service.shutdown().await;
     if freeze {
         assert!(matches!(
@@ -482,6 +530,87 @@ async fn run_supervisor(freeze: bool) {
     restarted.shutdown().await.unwrap();
     println!(
         "{}",
-        serde_json::json!({"scope":if freeze{"daemon_transparent_publication_failure"}else{"daemon_transparent_local_only"},"kernel":std::fs::read_to_string("/proc/sys/kernel/osrelease").unwrap().trim(),"client_pid":pid,"ipv4":true,"ipv6":true,"tcp":true,"udp":true,"actual_process_rule":true,"old_revision":1,"final_desired_revision":expected_revision,"old_connections_retained":4,"new_connections_rejected":if freeze{0}else{8},"business_bytes_up":if freeze{16}else{24},"business_bytes_down":if freeze{16}else{24},"policy_map_frozen":freeze,"deferred_desired_head_preserved":freeze,"failed_activation_recorded":freeze,"persistent_restart":true,"owned_programs_released":true,"full_transparent_datapath_ready":false})
+        serde_json::json!({"scope":if dns{"daemon_dns_transparent_rollback"}else if freeze{"daemon_transparent_publication_failure"}else{"daemon_transparent_local_only"},"kernel":std::fs::read_to_string("/proc/sys/kernel/osrelease").unwrap().trim(),"client_pid":pid,"ipv4":true,"ipv6":true,"tcp":true,"udp":true,"actual_process_rule":true,"old_revision":1,"final_desired_revision":expected_revision,"old_connections_retained":4,"new_connections_rejected":if freeze{0}else{8},"business_bytes_up":if freeze{16}else{24},"business_bytes_down":if freeze{16}else{24},"dns_tcp_udp_queries":if dns{8}else{0},"dns_resolver_restored":dns,"owned_program_count":if dns{16}else{8},"policy_map_frozen":freeze,"deferred_desired_head_preserved":freeze,"failed_activation_recorded":freeze,"persistent_restart":true,"owned_programs_released":true,"full_transparent_datapath_ready":false})
     );
+}
+
+fn captured_dns(phase: u8) {
+    use hickory_proto::op::Message;
+    for (family, target, bind) in [
+        ("v4", "203.0.113.53:53", "0.0.0.0:0"),
+        ("v6", "[2001:db8::53]:53", "[::]:0"),
+    ] {
+        let target: SocketAddr = target.parse().unwrap();
+        let mut query =
+            hps_dns::wire::query(&format!("udp-{family}-{phase}.coexist.test"), "A").unwrap();
+        query.metadata.id = 700 + phase as u16;
+        let socket = std::net::UdpSocket::bind(bind).unwrap();
+        socket
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        socket.send_to(&query.to_vec().unwrap(), target).unwrap();
+        let mut bytes = vec![0u8; 65535];
+        let (n, source) = socket.recv_from(&mut bytes).unwrap();
+        assert_eq!(source, target);
+        let response = Message::from_vec(&bytes[..n]).unwrap();
+        assert_eq!(response.metadata.id, query.metadata.id);
+        assert_eq!(
+            hps_dns::wire::addresses(&response),
+            vec!["203.0.113.9".parse::<std::net::IpAddr>().unwrap()]
+        );
+        let mut query =
+            hps_dns::wire::query(&format!("tcp-{family}-{phase}.coexist.test"), "A").unwrap();
+        query.metadata.id = 800 + phase as u16;
+        let payload = query.to_vec().unwrap();
+        let mut tcp =
+            std::net::TcpStream::connect_timeout(&target, Duration::from_secs(5)).unwrap();
+        tcp.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        tcp.set_write_timeout(Some(Duration::from_secs(5))).unwrap();
+        assert_eq!(tcp.peer_addr().unwrap(), target);
+        tcp.write_all(&(payload.len() as u16).to_be_bytes())
+            .unwrap();
+        tcp.write_all(&payload).unwrap();
+        let mut len = [0; 2];
+        tcp.read_exact(&mut len).unwrap();
+        let n = u16::from_be_bytes(len) as usize;
+        tcp.read_exact(&mut bytes[..n]).unwrap();
+        let response = Message::from_vec(&bytes[..n]).unwrap();
+        assert_eq!(response.metadata.id, query.metadata.id);
+        assert_eq!(
+            hps_dns::wire::addresses(&response),
+            vec!["203.0.113.9".parse::<std::net::IpAddr>().unwrap()]
+        );
+    }
+}
+async fn dns_upstream(
+    last: u8,
+    count: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    jobs: &mut Jobs,
+) -> SocketAddr {
+    use hickory_proto::{
+        op::{Message, OpCode},
+        rr::{RData, Record, rdata::A},
+    };
+    let socket = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    let address = socket.local_addr().unwrap();
+    jobs.0.push(tokio::spawn(async move {
+        let mut bytes = [0; 65535];
+        loop {
+            let (n, peer) = socket.recv_from(&mut bytes).await.unwrap();
+            count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let query = Message::from_vec(&bytes[..n]).unwrap();
+            let mut response = Message::response(query.metadata.id, OpCode::Query);
+            response.answers.push(Record::from_rdata(
+                query.queries[0].name().clone(),
+                30,
+                RData::A(A::new(203, 0, 113, last)),
+            ));
+            response.queries = query.queries;
+            socket
+                .send_to(&response.to_vec().unwrap(), peer)
+                .await
+                .unwrap();
+        }
+    }));
+    address
 }
