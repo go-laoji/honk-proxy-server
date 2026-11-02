@@ -8,6 +8,8 @@ pub fn content_type(path: &str) -> &'static str {
         Some("json") => "application/json",
         Some("svg") => "image/svg+xml",
         Some("png") => "image/png",
+        Some("ico") => "image/vnd.microsoft.icon",
+        Some("webmanifest") => "application/manifest+json",
         Some("woff2") => "font/woff2",
         _ => "application/octet-stream",
     }

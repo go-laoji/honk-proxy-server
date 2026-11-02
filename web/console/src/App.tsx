@@ -28,6 +28,7 @@ import {
 import manifest from "../pages.manifest.json";
 import { useService } from "./use-service";
 import { Badge } from "./components/ui";
+import BrandLogo from "./components/BrandLogo";
 import Overview from "./pages/Overview";
 import ConnectPage from "./pages/ConnectPage";
 import SettingsPage from "./pages/SettingsPage";
@@ -101,9 +102,7 @@ export default function App() {
         className={`fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-slate-200/70 bg-white transition-transform dark:border-slate-800 dark:bg-slate-900 lg:translate-x-0 ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}
       >
         <a href="./overview.html" className="flex h-20 items-center gap-3 px-6">
-          <span className="flex size-9 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm">
-            <Waypoints size={23} />
-          </span>
+          <BrandLogo />
           <span>
             <strong className="block text-base tracking-tight">
               Honk Proxy

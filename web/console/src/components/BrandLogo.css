@@ -1,0 +1,16 @@
+.brand-logo {
+  transition: transform 180ms ease-out;
+}
+
+@media (hover: hover) {
+  .brand-link:hover .brand-logo {
+    transform: translateY(-2px) rotate(-5deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-logo {
+    transition: none;
+    transform: none !important;
+  }
+}
