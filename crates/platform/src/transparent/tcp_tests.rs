@@ -243,7 +243,15 @@ async fn real_transparent_tcp_shared_engine() {
             .unwrap(),
     );
     capture.prepare_routes().unwrap();
-    let engine = Engine::with_capture(config, None, true).unwrap();
+    let engine = Engine::with_capture(
+        config,
+        None,
+        hps_engine::routing::RoutingCapabilities {
+            local_process: true,
+            udp: false,
+        },
+    )
+    .unwrap();
     engine.set_generation(7);
     let pids = Arc::new(Mutex::new(vec![]));
     let mut accept_jobs = vec![];

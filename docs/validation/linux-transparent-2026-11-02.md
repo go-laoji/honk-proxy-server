@@ -79,3 +79,13 @@ Linux/macOS 真实本地 socket 测试覆盖双栈匿名/供应商认证、wildc
 UDP 连接观察使用原有全局事实源；业务字节只在发送成功和有效来源回复后增加，SOCKS 头/握手、错误地址和无效数据报不计入。主动断开立即唤醒 UDP I/O 并回收节点占用；drain 阻止新 association，已有 association 可继续收发。当前健康门槛沿用既有 TCP 健康事实，**并未增加 UDP 健康探测或把 TCP Healthy 宣称为 UDP Healthy**；association 可用性还必须经过真实 UDP ASSOCIATE，实际目标收发由业务结果验证。
 
 普通双栈测试使用实际 SOCKS5 UDP relay 和 UDP echo：健康未知拒绝、有效健康后固定组显式 fallback、错误回复来源拒绝且不计数、真实字节、drain 保留已有会话、主动断开、到期节点不连接、Direct/Reject 不补池、UDP 仅产生 SOCKS5 供应商需求信号。完整 engine 回归 Linux 46 / macOS 45 通过，零失败/忽略，两端 Clippy 通过。还没有 Linux UDP owner/全局排队预算/代际和透明回复的联合证据，控制台 UDP 数据面能力保持不可用。
+
+## 透明 owner 的额度、排队与停止（第八批）
+
+加入共享 CaptureBudget 与 scoped TCP/UDP owner：TCP、UDP setup 共用 pending permit；UDP owner 另持会话 permit。排队报文与字节在分配 payload 前获取 permit，并一直持有到发送或丢弃，空数据报也占报文额度；队列、在途和失败清理均回收相同 permit。引擎代际间继续共享原全局连接 gate，不能通过新建代际或预算绕过旧流占用。UDP owner 的 sender、reply 与独立 SOCKS 控制监视均在一个受跟踪任务内，限速等待期间控制连接仍被监视，不产生遗留子任务。
+
+回复最终 try_send 与 session.cancel 共用短互斥；取消返回后旧 owner 不能继续给已重用客户端元组发回复。空闲回收、scope 取消、全局退出均释放任务/socket/队列/节点额度；捕获 scope 的停止不停止显式 HTTP/HTTPS/SOCKS5 入口。drain 的 TaskTracker 正确 close/wait/reopen，取消 drain 等待也恢复接纳，避免一次超时后永久拒绝新的捕获流。
+
+Linux 普通真实 socket 测试验证：pending=1、会话=1、报文=2、字节=512 的上限，512 B 与空报文排队/在途占用、字节/报文/尺寸分别拒绝、setup 完成释放 pending、旧代际占用阻止新代际、取消阻断延迟回复、显式入口保持监听、空闲结束回收、scope 取消 pending 关联与排队。还分别验证 TCP 控制关闭能打断上行 512 秒限速等待，以及已收到下行数据后的 50 秒限速等待（发送侧无下一条消息时也必须监视）；两项均在 1 秒内回收。TCP 三类上游契约同时验证 scoped pending 在业务连接仍活跃时已释放，等待 drain 被取消后接纳恢复。该批 owner 进程元数据仍为测试调用契约，实际内核 UDP 联合验证待下一批。
+
+额度中的 queued_bytes 指客户端 UDP 请求的等待/在途 payload，不是进程或内核 socket 总内存上限；每会话还有有界接收缓冲/socket 开销，受 max_udp_sessions 约束。当前公共实际服务尚未接入 owner，不据此宣称完整数据面 ready。Linux 全部 engine 用例 50 通过，macOS 45 通过，零失败/忽略，相关 Clippy 通过；实际 7.0 内核的共享 TCP 三上游回归也通过。

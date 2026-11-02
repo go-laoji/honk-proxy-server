@@ -22,6 +22,8 @@ use tokio_rustls::TlsAcceptor;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 #[cfg(target_os = "linux")]
 mod captured;
+#[cfg(target_os = "linux")]
+mod captured_udp;
 
 #[derive(Debug, thiserror::Error)]
 pub enum EngineError {
@@ -53,7 +55,11 @@ pub struct Engine {
     capture_tracker: TaskTracker,
     capture_registration: Mutex<()>,
     #[cfg(target_os = "linux")]
+    capture_drain: tokio::sync::Mutex<()>,
+    #[cfg(target_os = "linux")]
     capture_enabled: bool,
+    #[cfg(target_os = "linux")]
+    capture_udp_enabled: bool,
 }
 struct Entry {
     config: InboundConfig,
@@ -141,17 +147,9 @@ impl Engine {
     pub fn with_capture(
         config: ProxyConfig,
         previous: Option<&Arc<Self>>,
-        local_process: bool,
+        capabilities: crate::routing::RoutingCapabilities,
     ) -> Result<Arc<Self>, EngineError> {
-        Self::prepare(
-            config,
-            previous,
-            crate::routing::RoutingCapabilities {
-                local_process,
-                udp: false,
-            },
-            true,
-        )
+        Self::prepare(config, previous, capabilities, true)
     }
     fn prepare(
         config: ProxyConfig,
@@ -247,7 +245,11 @@ impl Engine {
             capture_tracker: TaskTracker::new(),
             capture_registration: Mutex::new(()),
             #[cfg(target_os = "linux")]
+            capture_drain: tokio::sync::Mutex::new(()),
+            #[cfg(target_os = "linux")]
             capture_enabled: _capture_enabled,
+            #[cfg(target_os = "linux")]
+            capture_udp_enabled: _capture_enabled && capabilities.udp,
         }))
     }
     pub fn preparation_fingerprint(&self) -> &str {

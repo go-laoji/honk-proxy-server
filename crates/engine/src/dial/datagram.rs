@@ -18,6 +18,18 @@ pub struct DatagramConnection {
     max_payload: usize,
 }
 impl DatagramConnection {
+    #[cfg(target_os = "linux")]
+    pub(crate) async fn transport_ended(&self) -> ProxyError {
+        let error = match &self.io {
+            DatagramIo::Direct(_) => std::future::pending::<ProxyError>().await,
+            DatagramIo::Socks(socket) => socket.control_ended().await,
+        };
+        if !self.observation.cancellation().is_cancelled() {
+            self.observation
+                .fail("transferring", "udp_association_closed", false);
+        }
+        error
+    }
     pub fn observation(&self) -> &ConnectionGuard {
         &self.observation
     }

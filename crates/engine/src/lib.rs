@@ -1,5 +1,7 @@
 //! Shared user-space transport for explicit and future transparent proxy ingress.
 mod capacity;
+#[cfg(target_os = "linux")]
+pub mod capture;
 pub mod connections;
 mod demand;
 pub mod dial;

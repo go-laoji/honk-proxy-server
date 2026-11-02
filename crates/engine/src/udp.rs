@@ -188,7 +188,7 @@ impl SocksUdpAssociation {
             Ok(())
         }
     }
-    async fn control_ended(&self) -> ProxyError {
+    pub(crate) async fn control_ended(&self) -> ProxyError {
         let mut control = self.control.lock().await;
         let mut byte = [0];
         let result = control.read(&mut byte).await;

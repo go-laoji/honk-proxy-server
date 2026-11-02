@@ -162,6 +162,21 @@ pub struct LinuxPreflight {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CaptureResourceUsage {
+    pub pending: usize,
+    pub max_pending: usize,
+    pub udp_sessions: usize,
+    pub max_udp_sessions: usize,
+    pub queued_datagrams: usize,
+    pub max_queued_datagrams: usize,
+    pub queued_bytes: usize,
+    pub max_queued_bytes: usize,
+    pub dropped_datagrams: u64,
+    pub invalid_replies: u64,
+    pub closed_udp_sessions: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct ResourceLimits {
     pub max_connections: usize,

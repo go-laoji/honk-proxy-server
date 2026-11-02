@@ -2,9 +2,19 @@
 //! connection observations, global capacity and bandwidth budget as explicit
 //! ingress. Only the capture owner may provide independently verified metadata.
 use super::*;
+use crate::capture::CaptureAdmission;
 use crate::{ProxyError, target::Target, traffic::relay};
 use hps_domain::{FlowOrigin, RoutingContext, SelectionTransport};
 use tokio::net::TcpStream;
+struct ReopenCapture<'a>(&'a Engine);
+impl Drop for ReopenCapture<'_> {
+    fn drop(&mut self) {
+        let _registration = self.0.capture_registration.lock().unwrap();
+        if !self.0.cancel.is_cancelled() {
+            self.0.capture_tracker.reopen();
+        }
+    }
+}
 
 impl Engine {
     /// Metadata must come from the actual captured tuple, never an RPC body.
@@ -13,22 +23,64 @@ impl Engine {
     pub fn spawn_captured_tcp(
         self: &Arc<Self>,
         stream: TcpStream,
-        mut context: RoutingContext,
+        context: RoutingContext,
         revision: i64,
     ) -> Result<(), ProxyError> {
+        self.spawn_captured_tcp_scoped(
+            stream,
+            context,
+            revision,
+            CaptureAdmission::standalone(self.cancel.child_token()),
+        )
+    }
+    pub fn spawn_captured_tcp_scoped(
+        self: &Arc<Self>,
+        stream: TcpStream,
+        mut context: RoutingContext,
+        revision: i64,
+        admission: CaptureAdmission,
+    ) -> Result<(), ProxyError> {
         let _registration = self.capture_registration.lock().unwrap();
-        if self.cancel.is_cancelled() {
+        if self.cancel.is_cancelled()
+            || self.capture_tracker.is_closed()
+            || admission.cancel.is_cancelled()
+        {
             return Err(ProxyError::Disconnected);
         }
+        let target = self.capture_target(
+            stream.peer_addr()?,
+            stream.local_addr()?,
+            &mut context,
+            revision,
+            SelectionTransport::Tcp,
+        )?;
+        let permit = self
+            .capacity
+            .acquire(self.limits.max_connections)
+            .ok_or(ProxyError::LocalResource)?;
+        let engine = self.clone();
+        self.capture_tracker.spawn(async move {
+            engine
+                .run_captured_tcp(stream, context, target, permit, admission)
+                .await;
+        });
+        Ok(())
+    }
+    pub(super) fn capture_target(
+        &self,
+        source: std::net::SocketAddr,
+        destination: std::net::SocketAddr,
+        context: &mut RoutingContext,
+        revision: i64,
+        transport: SelectionTransport,
+    ) -> Result<Target, ProxyError> {
         if !self.capture_enabled
             || revision <= 0
             || revision != self.generation()
-            || context.transport != SelectionTransport::Tcp
+            || context.transport != transport
         {
             return Err(ProxyError::UnsupportedRule);
         }
-        let source = stream.peer_addr()?;
-        let destination = stream.local_addr()?;
         if context.source_ip != Some(source.ip())
             || context.source_port != Some(source.port())
             || context.destination_host != destination.ip().to_string()
@@ -46,18 +98,7 @@ impl Engine {
             _ => return Err(ProxyError::UnsupportedRule),
         }
         context.inbound_protocol = Some("transparent".into());
-        let target = Target::new(&context.destination_host, context.destination_port)?;
-        let permit = self
-            .capacity
-            .acquire(self.limits.max_connections)
-            .ok_or(ProxyError::LocalResource)?;
-        let engine = self.clone();
-        self.capture_tracker.spawn(async move {
-            engine
-                .run_captured_tcp(stream, context, target, permit)
-                .await;
-        });
-        Ok(())
+        Target::new(&context.destination_host, context.destination_port)
     }
     async fn run_captured_tcp(
         self: Arc<Self>,
@@ -65,12 +106,15 @@ impl Engine {
         context: RoutingContext,
         target: Target,
         _permit: Permit,
+        mut admission: CaptureAdmission,
     ) {
-        let cancel = self.cancel.child_token();
+        let cancel = admission.cancel.clone();
         let connected = tokio::select! {biased;
+            _=self.cancel.cancelled()=>{cancel.cancel();return;},
             _=cancel.cancelled()=>return,
             result=self.dialer.connect_routed(&target,false,&context)=>result,
         };
+        admission.pending.take();
         let Ok(connected) = connected else {
             return;
         };
@@ -83,9 +127,22 @@ impl Engine {
         let left: BoxIo = Box::new(ActiveIo::new(stream, activity.clone()));
         let right: BoxIo = Box::new(ActiveIo::new(connected.io, activity.clone()));
         tokio::select! {biased;
+            _=self.cancel.cancelled()=>{cancel.cancel();},
             _=cancel.cancelled()=>{},
             _=activity.idle(Duration::from_millis(self.limits.idle_timeout_ms))=>{},
             _=relay(left,right,self.limits.buffer_bytes,budget)=>{},
         }
+    }
+    /// Stop the owner's accept/receive loops before calling. New capture
+    /// registrations are rejected during this drain; explicit ingress continues.
+    /// Cancelling the wait restores admission unless the engine is shutting down.
+    pub async fn wait_captured_idle(&self) {
+        let _drain = self.capture_drain.lock().await;
+        {
+            let _registration = self.capture_registration.lock().unwrap();
+            self.capture_tracker.close();
+        }
+        let _reopen = ReopenCapture(self);
+        self.capture_tracker.wait().await;
     }
 }

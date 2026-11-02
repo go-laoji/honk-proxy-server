@@ -85,11 +85,27 @@ async fn captured_tcp_contract_shares_process_rules_group_admission_bytes_discon
             },
         }];
         assert!(Engine::new(config.clone()).is_err());
-        let engine = Engine::with_capture(config, None, true).unwrap();
+        let engine = Engine::with_capture(
+            config,
+            None,
+            hps_engine::routing::RoutingCapabilities {
+                local_process: true,
+                udp: false,
+            },
+        )
+        .unwrap();
         engine.set_generation(7);
         engine.set_generation(8);
         assert_eq!(engine.generation(), 7);
         let registry = engine.node_registry();
+        let budget = hps_engine::capture::CaptureBudget::new(&hps_config::LinuxCaptureConfig {
+            object: "/fixture/not-loaded".into(),
+            local_cgroup: Some("/fixture/not-attached".into()),
+            max_pending: 1,
+            ..Default::default()
+        })
+        .unwrap();
+        let scope = tokio_util::sync::CancellationToken::new();
 
         let mut stale = TcpStream::connect(destination).await.unwrap();
         let (stream, source) = target.accept().await.unwrap();
@@ -124,7 +140,12 @@ async fn captured_tcp_contract_shares_process_rules_group_admission_bytes_discon
         let mut client = TcpStream::connect(destination).await.unwrap();
         let (stream, source) = target.accept().await.unwrap();
         engine
-            .spawn_captured_tcp(stream, context(source, destination), 7)
+            .spawn_captured_tcp_scoped(
+                stream,
+                context(source, destination),
+                7,
+                budget.tcp_admission(&scope).unwrap(),
+            )
             .unwrap();
         client.write_all(b"opaque-business-marker").await.unwrap();
         let (mut origin, _) = tokio::time::timeout(Duration::from_secs(3), target.accept())
@@ -152,6 +173,7 @@ async fn captured_tcp_contract_shares_process_rules_group_admission_bytes_discon
         assert_eq!(flow.choice.as_ref().unwrap().node_id, "selected");
         assert_eq!(flow.bytes_up, 22);
         assert_eq!(flow.bytes_down, 23);
+        assert_eq!(budget.usage().pending, 0);
         assert_eq!(registry.active("selected"), 1);
         assert!(!engine.is_idle());
 
