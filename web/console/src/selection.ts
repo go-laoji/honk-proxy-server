@@ -19,6 +19,18 @@ export type SelectionDecision = {
     remaining_secs: number | null;
     latency_ms: number | null;
     weight: number;
+    member_groups: string[];
+    score: {
+      total: number;
+      components: {
+        source: string;
+        observed: number | null;
+        normalized: number | null;
+        weight: number;
+        contribution: number;
+        missing_penalty: number;
+      }[];
+    } | null;
   }[];
 };
 export const strategyLabels: Record<string, string> = {
@@ -27,6 +39,7 @@ export const strategyLabels: Record<string, string> = {
   latency: "延迟优选",
   round_robin: "轮询",
   weighted: "加权轮询",
+  score: "证据评分",
 };
 export const candidateReasons: Record<string, string> = {
   manually_disabled: "人工禁用",

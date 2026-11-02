@@ -1,3 +1,4 @@
+import SubscriptionsPanel from "../components/SubscriptionsPanel";
 import { useEffect, useRef, useState } from "react";
 import {
   Box,
@@ -400,6 +401,12 @@ export default function ProvidersPage({
         <p role="status" className="text-sm text-blue-600 dark:text-blue-300">
           {info}
         </p>
+      )}
+      {!detailPage && (
+        <SubscriptionsPanel
+          refreshService={refreshService}
+          onRevision={() => load()}
+        />
       )}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Stat

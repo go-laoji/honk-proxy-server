@@ -5,6 +5,7 @@ use std::time::Duration;
 mod backup;
 mod diagnostics;
 mod events;
+mod subscriptions;
 pub use events::EventSubscription;
 
 #[derive(Debug, thiserror::Error)]

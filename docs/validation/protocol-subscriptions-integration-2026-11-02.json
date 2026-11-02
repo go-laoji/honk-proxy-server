@@ -1,0 +1,31 @@
+{
+  "issue": 24,
+  "source_revision": "67adf993906b3cd6149a74c5b01d2677ee71fdd6",
+  "workspace": {
+    "macos": {
+      "passed": 217,
+      "failed": 0,
+      "ignored_not_passed": 0
+    },
+    "linux_aarch64": {
+      "passed": 224,
+      "failed": 0,
+      "ignored_not_passed": 30
+    }
+  },
+  "native_passed": 9,
+  "chromium_passed": 23,
+  "cli_checks_passed": 7,
+  "workspace_both_platforms_clippy": true,
+  "native_clippy": true,
+  "rust_fmt_typescript_prettier_build": true,
+  "host_mac_network_writes": false,
+  "new_kernel_matrix_this_slice": false,
+  "linux_explicit_udp_tests": 5,
+  "known_boundaries": [
+    "Linux ignored kernel cases not counted as pass; real matrix follows combined T20 acceptance",
+    "Clash is an explicit HTTP/HTTPS/SOCKS5 subset and rejects anchors/aliases",
+    "Standard subscription expiry unknown and refresh manual; short-lived provider API budgets remain separate",
+    "Native visible window remains unavailable while Mac locked"
+  ]
+}

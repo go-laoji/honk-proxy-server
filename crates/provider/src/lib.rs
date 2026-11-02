@@ -1,5 +1,6 @@
 //! Vendor contracts and bounded fetching. No task scheduling or implicit retries.
 pub mod policy;
+pub mod subscription;
 use base64::Engine;
 use hmac::{Hmac, Mac};
 use hps_config::{

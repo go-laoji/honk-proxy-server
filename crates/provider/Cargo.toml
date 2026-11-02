@@ -19,6 +19,7 @@ sha2 = "0.10"
 base64 = "0.22"
 scraper = "0.29"
 encoding_rs = "0.8"
+serde_yaml_ng = "0.10.0"
 uuid.workspace = true
 
 [dev-dependencies]

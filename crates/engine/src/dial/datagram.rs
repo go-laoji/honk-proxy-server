@@ -18,7 +18,6 @@ pub struct DatagramConnection {
     max_payload: usize,
 }
 impl DatagramConnection {
-    #[cfg(target_os = "linux")]
     pub(crate) async fn transport_ended(&self) -> ProxyError {
         let error = match &self.io {
             DatagramIo::Direct(_) => std::future::pending::<ProxyError>().await,

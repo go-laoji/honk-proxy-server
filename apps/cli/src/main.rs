@@ -5,6 +5,7 @@ use std::{io::Write, path::PathBuf, process::ExitCode, time::Duration};
 mod backup;
 mod diagnostics;
 mod local;
+mod subscriptions;
 mod tasks;
 
 #[derive(Parser)]
@@ -102,6 +103,10 @@ enum Command {
     Connection {
         #[command(subcommand)]
         command: ConnectionCommand,
+    },
+    Subscription {
+        #[command(subcommand)]
+        command: subscriptions::SubscriptionCommand,
     },
     Provider {
         #[command(subcommand)]
@@ -1444,6 +1449,7 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
                 serde_json::to_value(task)
             }
         },
+        Command::Subscription { command } => return subscriptions::run(&client, command).await,
         Command::Provider { command } => match command {
             ProviderCommand::Controller { id } => {
                 serde_json::to_value(client.provider_controller(id).await.map_err(client_error)?)
