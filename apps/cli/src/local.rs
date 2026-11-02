@@ -1,6 +1,69 @@
 use clap::Subcommand;
 use hps_system::profiles::{Change, Kind, Profile, Store};
 use std::path::PathBuf;
+#[derive(Subcommand)]
+pub enum ServiceCommand {
+    Install {
+        #[arg(long)]
+        binary: PathBuf,
+        #[arg(long)]
+        config: PathBuf,
+        #[arg(long)]
+        address: String,
+        #[arg(long)]
+        system: bool,
+    },
+    Status,
+    Start {
+        #[arg(long)]
+        expected_endpoint: String,
+    },
+    Stop {
+        #[arg(long)]
+        expected_endpoint: String,
+    },
+    Restart {
+        #[arg(long)]
+        expected_endpoint: String,
+    },
+    Uninstall {
+        #[arg(long)]
+        expected_endpoint: String,
+    },
+}
+pub fn service(id: &str, command: &ServiceCommand) -> Result<serde_json::Value, (u8, String)> {
+    use hps_system::service::{Action, Install, Manager, Scope};
+    let manager = Manager::new(&hps_system::state_dir().map_err(|e| (2, e))?);
+    let state = match command {
+        ServiceCommand::Status => manager.status(id),
+        ServiceCommand::Install {
+            binary,
+            config,
+            address,
+            system,
+        } => manager.install(Install {
+            id: id.into(),
+            binary: binary.clone(),
+            config: config.clone(),
+            endpoint: address.clone(),
+            scope: if *system { Scope::System } else { Scope::User },
+        }),
+        ServiceCommand::Start { expected_endpoint } => {
+            manager.control(id, expected_endpoint, Action::Start)
+        }
+        ServiceCommand::Stop { expected_endpoint } => {
+            manager.control(id, expected_endpoint, Action::Stop)
+        }
+        ServiceCommand::Restart { expected_endpoint } => {
+            manager.control(id, expected_endpoint, Action::Restart)
+        }
+        ServiceCommand::Uninstall { expected_endpoint } => {
+            manager.control(id, expected_endpoint, Action::Uninstall)
+        }
+    }
+    .map_err(|e| (5, e))?;
+    serde_json::to_value(state).map_err(|e| (2, e.to_string()))
+}
 
 #[derive(Subcommand)]
 pub enum ProfileCommand {

@@ -1,6 +1,8 @@
 //! Local OS integration shared by CLI and Desktop. Never exposed by the daemon API.
 mod files;
+mod process;
 pub mod profiles;
+pub mod service;
 
 pub type Result<T> = std::result::Result<T, String>;
 

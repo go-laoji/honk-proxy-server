@@ -34,6 +34,15 @@ enum Output {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Explicitly manage an OS service on this computer; never sent to a remote daemon.
+    Service {
+        #[arg(long, required = true)]
+        local: bool,
+        #[arg(long, default_value = "local")]
+        id: String,
+        #[command(subcommand)]
+        command: local::ServiceCommand,
+    },
     Profile {
         #[command(subcommand)]
         command: local::ProfileCommand,
@@ -689,6 +698,12 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
     // Local configuration commands do not require a reachable daemon.
     match &args.command {
         Command::Profile { command } => return local::profiles(command),
+        Command::Service { id, command, .. } => {
+            if args.endpoint.is_some() || args.profile.is_some() {
+                return Err((2,"service commands act on this computer; omit --endpoint and --profile, pass --local explicitly".into()));
+            }
+            return local::service(id, command);
+        }
         Command::Linux {
             command:
                 LinuxCommand::SelfTest {
@@ -1582,6 +1597,7 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
         }
         Command::Init { .. }
         | Command::Profile { .. }
+        | Command::Service { .. }
         | Command::Linux {
             command: LinuxCommand::SelfTest { .. } | LinuxCommand::SelfTestChild { .. },
         } => unreachable!(),

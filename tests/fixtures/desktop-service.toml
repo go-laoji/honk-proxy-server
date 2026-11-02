@@ -1,0 +1,10 @@
+instance_name = "desktop-service-validation"
+management_listen = "127.0.0.1:17983"
+
+[proxy.routing]
+default_action = { kind = "direct" }
+
+[[proxy.inbounds]]
+id = "local-http"
+protocol = "http"
+listen = "127.0.0.1:18983"
