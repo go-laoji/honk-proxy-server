@@ -21,6 +21,6 @@ pnpm install --frozen-lockfile
 pnpm brand:generate
 ```
 
-脚本只从母版提取几何，通过 librsvg 渲染 PNG，并使用锁定版本的 Tauri CLI 制作原生图标容器。不要手工编辑导出文件；在隔离 worktree 修改母版后重新生成。原始 AI 概念图只用于设计参考，不参与产品构建，也不从其截图裁切图标。
+脚本只从母版提取几何，通过 librsvg 渲染 PNG，并使用锁定版本的 Tauri CLI 制作原生图标容器。ICNS 记录经过稳定排序，消除上游 HashMap 遍历造成的字节差异，并保留旧 RGB/alpha 记录对的相邻关系。不要手工编辑导出文件；在隔离 worktree 修改母版后重新生成。原始 AI 概念图只用于设计参考，不参与产品构建，也不从其截图裁切图标。
 
 小尺寸保留 H 的粗轮廓与互相分离的箭头；不同尺寸直接从 SVG 渲染。macOS 托盘使用单色透明 template，并由系统适配菜单栏外观；应用窗口、Dock 及其他平台使用彩色应用图标。

@@ -4,6 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 import shutil
+import struct
 import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
@@ -38,6 +39,25 @@ def render(source, target, size):
     target.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(["rsvg-convert", "--width", str(size), "--height", str(size),
                     "--output", str(target), str(source)], check=True)
+
+
+def canonical_icns(path):
+    # Tauri's ICNS writer iterates a hash map. Sort records without changing pixels,
+    # keeping legacy RGB/alpha pairs adjacent for older icon readers.
+    data = path.read_bytes()
+    if data[:4] != b"icns" or struct.unpack(">I", data[4:8])[0] != len(data):
+        raise ValueError("invalid generated ICNS header")
+    records = []
+    offset = 8
+    while offset < len(data):
+        length = struct.unpack(">I", data[offset + 4:offset + 8])[0]
+        if length < 8 or offset + length > len(data):
+            raise ValueError("invalid generated ICNS record")
+        records.append(data[offset:offset + length])
+        offset += length
+    pairs = {b"s8mk": b"is32", b"l8mk": b"il32", b"h8mk": b"ih32", b"t8mk": b"it32"}
+    records.sort(key=lambda record: (pairs.get(record[:4], record[:4]), record[:4] in pairs))
+    path.write_bytes(data[:8] + b"".join(records))
 
 
 def main():
@@ -96,6 +116,8 @@ def main():
             if source.is_file() and source.suffix in (".png", ".ico", ".icns"):
                 target = ICONS / source.name
                 shutil.copyfile(source, target)
+                if target.suffix == ".icns":
+                    canonical_icns(target)
                 generated.append(target)
     for size in (16, 32, 48):
         target = PUBLIC / ("favicon-" + str(size) + ".png")
