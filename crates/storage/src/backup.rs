@@ -113,12 +113,30 @@ fn validate(connection: &Connection) -> Result<i64, BackupError> {
     {
         return Err(BackupError::Invalid);
     }
-    let desired: String = connection.query_row("SELECT document FROM config_revisions WHERE id=(SELECT desired_revision FROM config_head WHERE singleton=1)", [], |r| r.get(0))?;
-    let config: DaemonConfig = serde_json::from_str(&desired).map_err(|_| BackupError::Invalid)?;
-    config.validate().map_err(|_| BackupError::Invalid)?;
+    // Match Store startup's semantic integrity checks, including historical/known-good revisions.
+    let mut revisions = connection.prepare("SELECT document,checksum FROM config_revisions")?;
+    for row in revisions.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))? {
+        let (document, checksum) = row?;
+        if format!("{:x}", Sha256::digest(document.as_bytes())) != checksum {
+            return Err(BackupError::Invalid);
+        }
+        let config: DaemonConfig =
+            serde_json::from_str(&document).map_err(|_| BackupError::Invalid)?;
+        config.validate().map_err(|_| BackupError::Invalid)?;
+    }
+    let _:i64=connection.query_row("SELECT r.id FROM config_revisions r JOIN config_head h ON r.id=h.desired_revision WHERE h.singleton=1",[],|r|r.get(0))?;
     Ok(version)
 }
 fn copy(source: &Connection, destination: &Path) -> Result<(), BackupError> {
+    // Pin a WAL read snapshot so a continuously writing source cannot restart every step.
+    // This holds no writer mutex; the bounded deadline limits checkpoint retention.
+    source.execute_batch("BEGIN DEFERRED")?;
+    let _: i64 = source.query_row("SELECT count(*) FROM sqlite_schema", [], |r| r.get(0))?;
+    let pages: i64 = source.query_row("PRAGMA page_count", [], |r| r.get(0))?;
+    let page_size: i64 = source.query_row("PRAGMA page_size", [], |r| r.get(0))?;
+    if pages <= 0 || page_size <= 0 || pages.saturating_mul(page_size) > MAX_BACKUP_BYTES as i64 {
+        return Err(BackupError::Invalid);
+    }
     let file = private_file(destination)?;
     let mut target = Connection::open(destination)?;
     let deadline = Instant::now() + Duration::from_secs(30);
@@ -280,9 +298,11 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let store = Store::open(Some(dir.path()), DaemonConfig::default()).unwrap();
         let writer = Connection::open(store.database_path.as_ref().unwrap()).unwrap();
-        writer.execute_batch("CREATE TABLE backup_pair(a INTEGER,b INTEGER CHECK(a=b)); INSERT INTO backup_pair VALUES(0,0)").unwrap();
+        writer.execute_batch("CREATE TABLE backup_pair(a INTEGER,b INTEGER CHECK(a=b)); INSERT INTO backup_pair VALUES(0,0);CREATE TABLE backup_payload(data BLOB);INSERT INTO backup_payload VALUES(zeroblob(2097152))").unwrap();
         let running = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
         let signal = running.clone();
+        let progress = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let count = progress.clone();
         let worker = std::thread::spawn(move || {
             let mut n = 0;
             while signal.load(std::sync::atomic::Ordering::Relaxed) {
@@ -290,11 +310,17 @@ mod tests {
                     .execute("UPDATE backup_pair SET a=?1,b=?1", [n])
                     .unwrap();
                 n += 1;
+                count.store(n as u64, std::sync::atomic::Ordering::Relaxed);
                 std::thread::sleep(Duration::from_millis(1));
             }
             n
         });
+        while progress.load(std::sync::atomic::Ordering::Relaxed) < 3 {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        let before = progress.load(std::sync::atomic::Ordering::Relaxed);
         let snapshot = store.backup().await.unwrap();
+        assert!(progress.load(std::sync::atomic::Ordering::Relaxed) > before);
         running.store(false, std::sync::atomic::Ordering::Relaxed);
         assert!(worker.join().unwrap() > 0);
         let path = dir.path().join("export.sqlite3");
@@ -360,6 +386,22 @@ mod tests {
         let reopened = Store::open(Some(target_dir.path()), DaemonConfig::default()).unwrap();
         assert_ne!(reopened.epoch, target.epoch);
         reopened.close().await.unwrap();
+        let damaged = Connection::open(&export).unwrap();
+        damaged
+            .execute(
+                "UPDATE config_revisions SET checksum=?1 WHERE id=1",
+                ["0".repeat(64)],
+            )
+            .unwrap();
+        drop(damaged);
+        let damaged_sha = format!("{:x}", Sha256::digest(std::fs::read(&export).unwrap()));
+        let before = std::fs::read(target_dir.path().join("hps.sqlite3")).unwrap();
+        assert!(inspect(&export, Some(&damaged_sha)).is_err());
+        assert!(restore(target_dir.path(), &export, &damaged_sha).is_err());
+        assert_eq!(
+            before,
+            std::fs::read(target_dir.path().join("hps.sqlite3")).unwrap()
+        );
         let newer = Connection::open(&export).unwrap();
         newer
             .execute("INSERT INTO schema_migrations VALUES(999,0)", [])

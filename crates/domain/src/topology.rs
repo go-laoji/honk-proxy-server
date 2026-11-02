@@ -92,3 +92,66 @@ impl LinuxDiagnostics {
         Some(output)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn snapshot() -> LinuxDiagnostics {
+        let mut capture = crate::LinuxCaptureStatus::unconfigured(1);
+        capture.program_ids = vec![7];
+        capture.map_ids = vec![9];
+        capture.kernel_revision = Some(1);
+        capture.checked_at_unix_ms = 100;
+        capture.hooks = vec![crate::CaptureHookStatus {
+            hook: "ingress".into(),
+            observed_sockets: 0,
+            marked_sockets: 0,
+            captured_packets: 4,
+            bypassed_packets: 0,
+            rejected_packets: 0,
+            unsupported_packets: 0,
+            missing_process: 0,
+            errors: 0,
+            last_error: 0,
+            error_phase: 0,
+        }];
+        LinuxDiagnostics {
+            epoch: "same".into(),
+            scope: "test".into(),
+            capture,
+            topology: LinuxTopology {
+                supported: true,
+                kernel_release: None,
+                network_namespace: None,
+                cgroup_namespace: None,
+                cgroup_membership: None,
+                interfaces: vec![],
+                routes: vec![],
+                mounts: vec![],
+                warnings: vec![],
+                truncated: false,
+            },
+        }
+    }
+    #[test]
+    fn changes_only_compare_same_epoch_generation_and_monotonic_counters() {
+        let previous = snapshot();
+        let mut next = previous.clone();
+        next.capture.checked_at_unix_ms = 200;
+        next.capture.hooks[0].captured_packets = 8;
+        assert_eq!(
+            next.counter_delta(&previous).unwrap()["ingress.captured_packets"],
+            4
+        );
+        assert_eq!(next.topology_changed(&previous), Some(false));
+        next.capture.hooks[0].captured_packets = 1;
+        assert!(next.counter_delta(&previous).is_none());
+        next.capture.hooks[0].captured_packets = 8;
+        next.capture.map_ids = vec![11];
+        assert!(next.counter_delta(&previous).is_none());
+        next.capture.map_ids = vec![9];
+        next.epoch = "changed".into();
+        assert!(next.counter_delta(&previous).is_none());
+        assert_eq!(next.topology_changed(&previous), None);
+    }
+}
