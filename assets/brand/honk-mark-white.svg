@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="320" viewBox="-12 -12 344 344">
+  <title>Honk Proxy</title>
+  <desc>An H with two opposing routes for proxy traffic.</desc>
+  <defs>
+    <path id="h" d="M22 0H88Q110 0 110 22V150H210V22Q210 0 232 0H298Q320 0 320 22V298Q320 320 298 320H232Q210 320 210 298V260H110V298Q110 320 88 320H22Q0 320 0 298V22Q0 0 22 0Z" />
+    <path id="return" d="M35 236L80 201Q86 196 86 203V218H154C190 218 210 195 210 160V154H248V160C248 218 210 254 154 254H86V271Q86 278 80 273Z" />
+    <path id="outbound" d="M67 172C74 124 104 94 149 94H251V75Q251 68 257 73L302 110Q307 114 302 119L257 157Q251 162 251 155V134H151C127 134 111 149 105 176Z" />
+    <mask id="routes" maskUnits="userSpaceOnUse" x="0" y="0" width="320" height="320">
+      <use href="#h" fill="white" />
+      <path d="M-16 222C18 178 40 166 64 169C79 170 93 174 108 180" fill="none" stroke="black" stroke-width="30" />
+      <use href="#return" fill="black" />
+    </mask>
+  </defs>
+  <use href="#h" fill="#ffffff" mask="url(#routes)" />
+  <use href="#outbound" fill="#ffffff" />
+</svg>

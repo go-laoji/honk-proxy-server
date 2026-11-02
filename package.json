@@ -8,6 +8,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "brand:generate": "python3 scripts/generate-brand-assets.py",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit",
     "test:e2e": "playwright test",
     "format:check": "prettier --check web/console vite.config.ts tsconfig*.json playwright.config.ts tests/console package.json"

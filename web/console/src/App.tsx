@@ -28,6 +28,7 @@ import {
 import manifest from "../pages.manifest.json";
 import { useService } from "./use-service";
 import { Badge } from "./components/ui";
+import BrandLogo from "./components/BrandLogo";
 import Overview from "./pages/Overview";
 import ConnectPage from "./pages/ConnectPage";
 import SettingsPage from "./pages/SettingsPage";
@@ -109,9 +110,7 @@ export default function App() {
           href="./overview.html"
           className="brand-link flex h-20 items-center gap-3 px-6"
         >
-          <span className="brand-mark" aria-hidden="true">
-            <Waypoints size={23} />
-          </span>
+          <BrandLogo />
           <span>
             <strong className="block text-base tracking-tight">
               Honk Proxy
