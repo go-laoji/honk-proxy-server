@@ -1,8 +1,9 @@
 //! SystemConfiguration sessions hold the native preferences lock across comparison and commit.
 use super::*;
+#[cfg(not(test))]
+use core_foundation::data::CFData;
 use core_foundation::{
     base::{CFRelease, TCFType},
-    data::CFData,
     propertylist,
     string::CFString,
 };
@@ -16,6 +17,7 @@ pub(super) struct Session {
     prefs: SCPreferencesRef,
     auth: AuthorizationRef,
     locked: bool,
+    #[cfg(not(test))]
     private: bool,
 }
 impl Session {
@@ -23,8 +25,21 @@ impl Session {
         Self::create(writing, None)
     }
     fn create(writing: bool, private_id: Option<&str>) -> Result<Self> {
+        if writing && std::env::var_os("HPS_FORBID_HOST_NETWORK_CHANGES").is_some() {
+            return Err(
+                "macOS network preference writes disabled for this development session".into(),
+            );
+        }
+        // Host tests may read preferences but must never acquire network write access.
+        #[cfg(test)]
+        if writing {
+            return Err("macOS network preference writes are forbidden in host tests".into());
+        }
         let name = CFString::new("HPS local system proxy");
         let private = private_id.map(CFString::new);
+        let prefs_id = private
+            .as_ref()
+            .map_or(ptr::null(), TCFType::as_concrete_TypeRef);
         let mut auth = ptr::null_mut();
         // Only native OS authorization may prompt. No WebView or daemon is elevated.
         if writing {
@@ -35,18 +50,12 @@ impl Session {
         }
         let prefs = unsafe {
             if auth.is_null() {
-                SCPreferencesCreate(
-                    ptr::null(),
-                    name.as_concrete_TypeRef(),
-                    private
-                        .as_ref()
-                        .map_or(ptr::null(), TCFType::as_concrete_TypeRef),
-                )
+                SCPreferencesCreate(ptr::null(), name.as_concrete_TypeRef(), prefs_id)
             } else {
                 SCPreferencesCreateWithAuthorization(
                     ptr::null(),
                     name.as_concrete_TypeRef(),
-                    ptr::null(),
+                    prefs_id,
                     auth.cast(),
                 )
             }
@@ -63,6 +72,7 @@ impl Session {
             prefs,
             auth,
             locked: false,
+            #[cfg(not(test))]
             private: private.is_some(),
         };
         if writing {
@@ -85,6 +95,16 @@ impl Session {
             .map_err(|_| "invalid network preferences".into())
     }
     fn commit(&mut self, network: &plist::Value) -> Result<()> {
+        #[cfg(test)]
+        {
+            let _ = network;
+            Err("macOS network preference writes are forbidden in host tests".into())
+        }
+        #[cfg(not(test))]
+        self.commit_authorized(network)
+    }
+    #[cfg(not(test))]
+    fn commit_authorized(&mut self, network: &plist::Value) -> Result<()> {
         if !self.locked {
             return Err("a writable preferences session is required".into());
         }
@@ -170,30 +190,39 @@ impl Backend for Session {
 mod tests {
     use super::*;
     #[test]
-    #[ignore = "requires native OS administrator authorization for an isolated SCPreferences file; never modifies active network preferences"]
-    fn real_systemconfiguration_private_preferences_commit_and_restore() {
-        let dir = tempfile::tempdir().unwrap();
-        let id = dir.path().join("isolated-network.plist");
-        let mut backend = Session::create(true, Some(id.to_str().unwrap())).unwrap();
-        let mut services = plist::Dictionary::new();
+    fn host_tests_refuse_all_writable_preferences_sessions() {
+        assert!(Session::create(true, None).is_err());
+        assert!(Session::create(true, Some("/tmp/hps-isolated-network.plist")).is_err());
+        let mut readonly = Session::open(false).unwrap();
+        assert!(
+            readonly
+                .commit(&plist::Value::Dictionary(plist::Dictionary::new()))
+                .is_err()
+        );
+    }
+    #[test]
+    fn explicit_readonly_preferences_path_never_falls_back_to_system_preferences() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("readonly-preferences.plist");
         let mut service = plist::Dictionary::new();
         service.insert(
             "UserDefinedName".into(),
-            plist::Value::String("Isolated validation".into()),
+            plist::Value::String("Read only fixture".into()),
         );
-        services.insert("isolated".into(), plist::Value::Dictionary(service));
-        backend.commit(&plist::Value::Dictionary(services)).unwrap();
-        let input = Apply {
-            network_service: "isolated".into(),
-            http: Some(18983),
-            socks5: Some(18984),
-        };
-        apply_with(dir.path(), &mut backend, "http://127.0.0.1:17983/", &input).unwrap();
-        drop(backend);
-        let mut backend = Session::create(true, Some(id.to_str().unwrap())).unwrap();
-        assert_eq!(status_with(dir.path(), &backend).unwrap().state, "owned");
-        restore_with(dir.path(), &mut backend).unwrap();
-        assert_eq!(backend.read("isolated").unwrap(), None);
+        let mut services = plist::Dictionary::new();
+        services.insert(
+            "hps-readonly-fixture".into(),
+            plist::Value::Dictionary(service),
+        );
+        let mut fixture = plist::Dictionary::new();
+        fixture.insert("NetworkServices".into(), plist::Value::Dictionary(services));
+        plist::Value::Dictionary(fixture)
+            .to_file_xml(&path)
+            .unwrap();
+        let readonly = Session::create(false, Some(path.to_str().unwrap())).unwrap();
+        let services = readonly.services().unwrap();
+        assert_eq!(services.len(), 1);
+        assert_eq!(services[0].id, "hps-readonly-fixture");
     }
     #[test]
     fn actual_network_services_are_readable_without_elevation() {
