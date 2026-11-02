@@ -1,3 +1,4 @@
+mod alerts;
 mod connections;
 mod controller;
 mod diagnostics;
@@ -174,6 +175,7 @@ pub struct Supervisor {
     health: health::HealthRuntime,
     observability: observability::ObservationRuntime,
     diagnostics: diagnostics::Runtime,
+    alerts: alerts::Runtime,
 }
 impl Supervisor {
     pub async fn boot(
@@ -238,6 +240,7 @@ impl Supervisor {
             health: Default::default(),
             observability: Default::default(),
             diagnostics: Default::default(),
+            alerts: Default::default(),
         });
         service.load_health().await?;
         service.refresh_pool().await?;

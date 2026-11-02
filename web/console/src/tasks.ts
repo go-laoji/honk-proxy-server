@@ -86,6 +86,7 @@ export type FeedState = {
   attempt?: number;
 };
 export const taskKinds: Record<string, string> = {
+  diagnostic_export: "脱敏诊断包",
   provider: "供应商提取",
   health: "健康检测",
   activation: "配置激活",
@@ -138,6 +139,9 @@ export const resetReasons: Record<string, string> = {
   cursor_ahead: "游标超出现有日志，已重新读取当前快照。",
 };
 export const taskErrors: Record<string, string> = {
+  diagnostic_cancelled: "只读诊断已取消",
+  diagnostic_source_changed: "诊断期间配置发生变化",
+  diagnostic_timeout: "诊断收集超时",
   configuration_invalid: "配置未通过校验",
   configuration_changed: "配置版本已变化",
   configuration_not_found: "配置版本不存在",

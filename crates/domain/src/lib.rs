@@ -13,6 +13,8 @@ mod tasks;
 pub use tasks::*;
 mod observability;
 pub use observability::*;
+mod alerts;
+pub use alerts::*;
 mod diagnostics;
 pub use diagnostics::*;
 

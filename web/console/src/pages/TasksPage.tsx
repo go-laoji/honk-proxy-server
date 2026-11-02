@@ -3,6 +3,7 @@ import { Filter, ListChecks, RefreshCw, Search, X } from "lucide-react";
 import { ApiRequestError, getJson } from "../platform";
 import { Badge, Details } from "../components/ui";
 import FeedControls from "../components/FeedControls";
+import { TaskControlPanel } from "../components/DiagnosticPanel";
 import TaskSubmission from "../components/TaskSubmission";
 import { usePageQuery } from "../use-page-query";
 import { useEventFeed } from "../use-event-feed";
@@ -406,6 +407,14 @@ export default function TasksPage() {
                 ]}
               />
               <div className="space-y-3 p-5">
+                <TaskControlPanel
+                  task={detail}
+                  epoch={expected ?? epoch!}
+                  onChanged={(t) => {
+                    show(t.id, expected ?? epoch);
+                    setRefresh((n) => n + 1);
+                  }}
+                />
                 <div className="flex flex-wrap gap-4">
                   {source && (
                     <a className="text-sm text-blue-600" href={source.href}>
