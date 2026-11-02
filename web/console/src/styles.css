@@ -1,18 +1,95 @@
-@import "tailwindcss";
+@import "tailwindcss" source("../");
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
   --font-sans: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --color-brand-50: #edf8f5;
+  --color-brand-100: #d8eee7;
+  --color-brand-200: #b3ded1;
+  --color-brand-300: #81c7b5;
+  --color-brand-400: #4eac96;
+  --color-brand-500: #298e7b;
+  --color-brand-600: #14786c;
+  --color-brand-700: #126257;
+  --color-brand-800: #134f48;
+  --color-brand-900: #123f3a;
+  --color-brand-950: #092a28;
+  --color-blue-50: #eff5fa;
+  --color-blue-100: #dfeaf5;
+  --color-blue-200: #c1d5e9;
+  --color-blue-300: #93b5d3;
+  --color-blue-400: #6e96bd;
+  --color-blue-500: #527fac;
+  --color-blue-600: #3d628b;
+  --color-blue-700: #315071;
+  --color-blue-800: #2b435d;
+  --color-blue-900: #27394d;
+  --color-blue-950: #172534;
+  --color-slate-50: #f3f7f8;
+  --color-slate-100: #eaf0f2;
+  --color-slate-200: #d8e2e7;
+  --color-slate-300: #bccbd2;
+  --color-slate-400: #889fae;
+  --color-slate-500: #5c7585;
+  --color-slate-600: #445e70;
+  --color-slate-700: #344b5d;
+  --color-slate-800: #233948;
+  --color-slate-900: #172a38;
+  --color-slate-950: #0e1d29;
+}
+
+:root {
+  color-scheme: light;
+  --page: #f2f6f7;
+  --surface: #ffffff;
+  --surface-soft: #f6f9fa;
+  --sidebar: #eaf2f0;
+  --sidebar-line: #d4e3de;
+  --border: #d8e2e7;
+  --ink: #233948;
+  --muted: #5c7585;
+  --accent: #14786c;
+  --accent-soft: #d8eee7;
+  --accent-ink: #126257;
+  --chart-up: #527fac;
+  --chart-down: #14786c;
+  --chart-failed: #a96920;
+  --chart-active: #527fac;
+  --panel-shadow: 0 2px 7px #23394805, 0 12px 28px #23394803;
+}
+.dark {
+  color-scheme: dark;
+  --page: #0e1d29;
+  --surface: #172a38;
+  --surface-soft: #1b303e;
+  --sidebar: #102a2c;
+  --sidebar-line: #294445;
+  --border: #2c4352;
+  --ink: #e0eaf0;
+  --muted: #9db0bd;
+  --accent: #81c7b5;
+  --accent-soft: #21443e;
+  --accent-ink: #b3ded1;
+  --chart-up: #93b5d3;
+  --chart-down: #81c7b5;
+  --chart-failed: #e4b56c;
+  --chart-active: #93b5d3;
+  --panel-shadow: 0 4px 16px #00000014;
 }
 
 @layer base {
   body {
-    @apply m-0 bg-slate-50 text-slate-800 antialiased dark:bg-slate-950 dark:text-slate-200;
+    margin: 0;
+    background: var(--page);
+    color: var(--ink);
+    @apply antialiased;
   }
   button,
   a,
-  input {
-    @apply outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-950;
+  input,
+  select,
+  textarea {
+    @apply outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 dark:focus-visible:ring-brand-300 dark:focus-visible:ring-offset-slate-950;
   }
   button:not(:disabled),
   a {
@@ -21,23 +98,173 @@
   button:disabled {
     @apply cursor-not-allowed opacity-50;
   }
+  input[type="checkbox"],
+  input[type="radio"] {
+    accent-color: var(--accent);
+  }
+  ::selection {
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+  }
 }
 
 @layer components {
   .panel {
-    @apply rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    box-shadow: var(--panel-shadow);
+    @apply rounded-2xl;
   }
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors;
+  }
+  .btn:not(:disabled):hover {
+    background: var(--accent-soft);
+    border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+    color: var(--accent-ink);
   }
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700;
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-brand-700 dark:bg-brand-300 dark:text-brand-950 dark:hover:bg-brand-200;
+    box-shadow: 0 2px 4px #14786c18;
   }
   .muted {
-    @apply text-slate-500 dark:text-slate-400;
+    color: var(--muted);
   }
   .field,
   .input {
-    @apply w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-950;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    @apply w-full rounded-lg px-3 py-2.5 text-sm transition-colors;
+  }
+  .field:hover,
+  .input:hover {
+    border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  }
+  .sidebar {
+    background: var(--sidebar);
+    border-color: var(--sidebar-line);
+  }
+  .brand-mark {
+    @apply flex size-9 shrink-0 items-center justify-center rounded-xl bg-brand-600 text-white dark:bg-brand-300 dark:text-brand-950;
+    box-shadow: 0 4px 10px #14786c20;
+  }
+  .nav-group-label {
+    @apply mb-2 px-3 text-[10px] font-semibold tracking-widest;
+    color: var(--muted);
+  }
+  .nav-link {
+    color: var(--muted);
+    @apply flex items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-[13px] font-medium transition-colors;
+  }
+  .nav-link:hover {
+    background: color-mix(in srgb, var(--surface) 65%, transparent);
+    color: var(--ink);
+  }
+  .nav-link[aria-current="page"] {
+    color: var(--accent-ink);
+    background: var(--surface);
+    box-shadow: 0 2px 5px #123f3a08;
+  }
+  .nav-icon {
+    @apply inline-flex size-8 shrink-0 items-center justify-center rounded-lg;
+  }
+  .nav-link[aria-current="page"] .nav-icon {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .sidebar-instance {
+    border: 1px solid var(--sidebar-line);
+    background: color-mix(in srgb, var(--surface) 65%, transparent);
+    @apply m-3 rounded-xl p-3;
+  }
+  .app-header {
+    border-color: var(--border);
+    background: color-mix(in srgb, var(--surface) 90%, transparent);
+  }
+  .icon-button {
+    @apply rounded-lg p-2;
+    color: var(--muted);
+  }
+  .icon-button:hover {
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+  }
+  .page-heading-mark {
+    @apply inline-flex size-10 shrink-0 items-center justify-center rounded-xl;
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+  }
+  .stat-card {
+    --stat-accent: var(--accent);
+    --stat-tint: var(--accent-soft);
+    border-top: 2px solid
+      color-mix(in srgb, var(--stat-accent) 45%, var(--border));
+  }
+  .stat-card[data-tone="blue"] {
+    --stat-accent: var(--chart-up);
+    --stat-tint: color-mix(in srgb, var(--chart-up) 13%, var(--surface));
+  }
+  .stat-card[data-tone="neutral"] {
+    --stat-accent: var(--muted);
+    --stat-tint: var(--surface-soft);
+  }
+  .stat-icon {
+    color: var(--stat-accent);
+    background: var(--stat-tint);
+    @apply inline-flex size-9 shrink-0 items-center justify-center rounded-xl;
+  }
+  .status-badge {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium;
+    background: var(--surface-soft);
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  .status-badge[data-active="true"] {
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+    border-color: transparent;
+  }
+  .status-dot {
+    @apply size-1.5 shrink-0 rounded-full;
+    background: currentColor;
+  }
+  .chart-card {
+    background: var(--surface-soft);
+    border: 1px solid var(--border);
+    color: var(--ink);
+    @apply min-w-0 rounded-xl p-3;
+  }
+  .chart-card[data-series="down"] {
+    --series-color: var(--chart-down);
+  }
+  .chart-card[data-series="up"] {
+    --series-color: var(--chart-up);
+  }
+  .chart-card[data-series="failed"] {
+    --series-color: var(--chart-failed);
+  }
+  .chart-card[data-series="active"] {
+    --series-color: var(--chart-active);
+  }
+  .chart-label-dot {
+    background: var(--series-color);
+    @apply inline-block size-2 shrink-0 rounded-full;
+  }
+  .chart-line {
+    color: var(--series-color);
+  }
+}
+
+@layer utilities {
+  .dark .text-blue-600 {
+    color: var(--color-blue-300);
+  }
+  .dark .text-red-600 {
+    color: var(--color-red-300);
+  }
+  .dark .text-amber-700 {
+    color: var(--color-amber-300);
   }
 }

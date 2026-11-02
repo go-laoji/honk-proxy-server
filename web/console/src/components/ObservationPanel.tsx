@@ -141,16 +141,14 @@ export default function ObservationPanel({
                 ].map(({ key, label }) => {
                   const max = Math.max(1, ...series.map((p) => p[key]));
                   return (
-                    <figure
-                      className="min-w-0 rounded-lg bg-slate-50 p-3 dark:bg-slate-900"
-                      key={key}
-                    >
-                      <figcaption className="text-xs">
+                    <figure className="chart-card" data-series={key} key={key}>
+                      <figcaption className="flex items-center gap-2 text-xs">
+                        <span className="chart-label-dot" aria-hidden="true" />
                         {label} · 上界 {Math.ceil(max)}
                       </figcaption>
                       <svg
                         viewBox="0 0 320 80"
-                        className="mt-2 h-24 w-full text-blue-500"
+                        className="chart-line mt-2 h-24 w-full"
                         role="img"
                         aria-label={label}
                       >

@@ -27,6 +27,7 @@ export default function Overview({ data }: { data: ServiceData }) {
           value={status.management_ready ? "运行中" : "未就绪"}
           detail="CLI、浏览器与 Desktop 共用服务"
           icon={Server}
+          tone="blue"
         />
         <Stat
           title="代理数据面"
@@ -43,12 +44,14 @@ export default function Overview({ data }: { data: ServiceData }) {
               : "当前服务不在 Linux 上运行"
           }
           icon={Cpu}
+          tone={capabilities.linux_ebpf.ready ? "teal" : "neutral"}
         />
         <Stat
           title="持续运行"
           value={uptime}
           detail={`服务版本 ${status.version.version} · ${status.platform}`}
           icon={Clock3}
+          tone="blue"
         />
       </div>
       <NodeSummary endpoint={data.endpoint} />
