@@ -71,6 +71,8 @@ export default function InboundsPage({
         <CircleHelp size={19} className="mt-1 shrink-0 text-blue-600" />
         <p className="muted">
           入口、上游与资源限制可通过配置工作台校验并激活版本。此页启停立即生效，停止会断开该入口的现有连接。
+          SOCKS5 支持 TCP CONNECT 与 UDP ASSOCIATE；UDP 控制 TCP
+          关闭即释放，FRAG 不支持，每个关联最多 32 个目标且受全局/入口额度约束。
           热更新在 enabled 未变化时保留手动启停；Daemon 重启按已持久化配置恢复。
         </p>
       </div>
@@ -251,7 +253,7 @@ export default function InboundsPage({
             </p>
             <p>
               <strong className="text-slate-700 dark:text-slate-200">
-                SOCKS5 TCP：
+                SOCKS5 TCP / UDP：
               </strong>
               选择无认证 SOCKS5；支持域名、IPv4、IPv6 CONNECT，BIND / UDP
               尚不支持。socks5h 将域名传至上游；浏览器自身的 DoH、DNS

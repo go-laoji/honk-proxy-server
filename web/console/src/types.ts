@@ -25,6 +25,7 @@ export interface Capabilities {
   http_proxy: FeatureCapability;
   https_proxy: FeatureCapability;
   socks5_proxy: FeatureCapability;
+  socks5_udp?: FeatureCapability;
   linux_ebpf: {
     platform_supported: boolean;
     compiled: boolean;
