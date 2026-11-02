@@ -112,6 +112,16 @@ enum Command {
 
 #[derive(Subcommand)]
 enum HealthCommand {
+    History {
+        #[arg(long)]
+        node: Option<String>,
+        #[arg(long)]
+        since_unix: Option<i64>,
+        #[arg(long)]
+        before: Option<i64>,
+        #[arg(long, default_value_t = 100)]
+        limit: u32,
+    },
     Show {
         #[arg(long)]
         after: Option<String>,
@@ -1276,6 +1286,22 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
             }
         },
         Command::Health { command } => match command {
+            HealthCommand::History {
+                node,
+                since_unix,
+                before,
+                limit,
+            } => serde_json::to_value(
+                client
+                    .health_history(&hps_domain::HealthHistoryQuery {
+                        node: node.clone(),
+                        since_unix: *since_unix,
+                        before: *before,
+                        limit: Some(*limit),
+                    })
+                    .await
+                    .map_err(client_error)?,
+            ),
             HealthCommand::Show { after, limit } => serde_json::to_value(
                 client
                     .health(after.as_deref(), *limit)

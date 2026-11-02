@@ -134,6 +134,16 @@ pub struct DomainContext {
     pub domains: Vec<String>,
     pub source: String,
     pub ambiguous: bool,
+    pub mappings: Vec<DomainMapping>,
+    pub mappings_truncated: bool,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DomainMapping {
+    pub domain: String,
+    pub upstream: String,
+    pub remaining_ttl: u32,
+    pub observed_age_ms: u64,
+    pub source: String,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -543,10 +553,22 @@ impl Resolver {
         let mut state = self.0.state.lock().unwrap();
         state.prune();
         let mut domains = BTreeSet::new();
+        let mut mappings = vec![];
         for cached in state.cache.values() {
             let answer = &cached.answer;
             if wire::addresses(&answer.message).contains(&ip) {
                 domains.insert(answer.name.clone());
+                mappings.push(DomainMapping {
+                    domain: answer.name.clone(),
+                    upstream: answer.upstream.clone(),
+                    remaining_ttl: answer
+                        .ttl
+                        .unwrap_or(0)
+                        .saturating_sub(ceil_seconds(answer.started.elapsed())),
+                    observed_age_ms: answer.started.elapsed().as_millis().min(u64::MAX as u128)
+                        as u64,
+                    source: "unexpired_local_dns_answers".into(),
+                });
             }
         }
         let ambiguous = domains.len() > 1;
@@ -555,11 +577,16 @@ impl Resolver {
         } else {
             "unexpired_local_dns_answers"
         };
+        mappings.sort_by(|a, b| (&a.domain, &a.upstream).cmp(&(&b.domain, &b.upstream)));
+        let mappings_truncated = mappings.len() > 64;
+        mappings.truncate(64);
         DomainContext {
             ip,
             domains: domains.into_iter().take(64).collect(),
             source: source.into(),
             ambiguous,
+            mappings,
+            mappings_truncated,
         }
     }
 }

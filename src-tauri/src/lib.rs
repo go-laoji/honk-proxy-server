@@ -333,6 +333,22 @@ fn supported_health_get(path: &str) -> bool {
     if let Some(id) = base.strip_prefix("api/v1/health/tasks/") {
         return !id.is_empty() && supported_epoch_detail(path, "api/v1/health/tasks/");
     }
+    if base == "api/v1/health/history" {
+        return query.is_none_or(|query| {
+            let mut keys = std::collections::HashSet::new();
+            !query.is_empty()
+                && url::form_urlencoded::parse(query.as_bytes()).all(|(key, value)| {
+                    keys.insert(key.to_string())
+                        && match key.as_ref() {
+                            "node" => hps_config::valid_node_id(&value),
+                            "since_unix" => value.parse::<i64>().is_ok_and(|n| n >= 0),
+                            "before" => value.parse::<i64>().is_ok_and(|n| n > 0),
+                            "limit" => value.parse::<u32>().is_ok_and(|n| (1..=200).contains(&n)),
+                            _ => false,
+                        }
+                })
+        });
+    }
     if base != "api/v1/health" {
         return false;
     }
@@ -673,6 +689,12 @@ mod tests {
         assert!(!supported_action("api/v1/groups/unknown"));
         assert!(supported_api("api/v1/health?after=lease%3A12&limit=50"));
         assert!(supported_api("api/v1/health/tasks/12"));
+        assert!(supported_api(
+            "api/v1/health/history?node=lease%3A12&limit=100&since_unix=1&before=42"
+        ));
+        assert!(!supported_api("api/v1/health/history?limit=201"));
+        assert!(!supported_api("api/v1/health/history?before=0"));
+        assert!(!supported_api("api/v1/health/history?node=one&node=two"));
         for prefix in ["api/v1/health/tasks/", "api/v1/config/revisions/"] {
             let epoch = "12345678-1234-4321-8234-123456789abc";
             assert!(supported_api(&format!("{prefix}12?expected_epoch={epoch}")));

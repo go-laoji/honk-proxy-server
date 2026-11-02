@@ -13,6 +13,12 @@ pub struct ProbeProfile {
     pub tls_server_name: Option<String>,
     pub ca_certificate: Option<PathBuf>,
     pub expected_status: Option<u16>,
+    /// Read a bounded plain IP response from this explicitly configured target.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub capture_exit_ip: bool,
+}
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 impl Default for ProbeProfile {
     fn default() -> Self {
@@ -24,6 +30,7 @@ impl Default for ProbeProfile {
             tls_server_name: None,
             ca_certificate: None,
             expected_status: None,
+            capture_exit_ip: false,
         }
     }
 }

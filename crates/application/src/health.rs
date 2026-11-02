@@ -42,6 +42,30 @@ impl HealthRuntime {
     }
 }
 impl Supervisor {
+    pub async fn health_history(
+        &self,
+        query: hps_domain::HealthHistoryQuery,
+    ) -> Result<hps_domain::HealthHistory, ApplicationError> {
+        let now = hps_storage::unix_now();
+        let since = query.since_unix.unwrap_or(now.saturating_sub(3600));
+        let (records, next_before, oldest_retained_unix) = self.store.health_history(query).await?;
+        let usage = self.store.health_usage().await?;
+        Ok(hps_domain::HealthHistory {
+            source: "persisted_health_runs".into(),
+            observed_at_unix: now,
+            since_unix: since,
+            oldest_retained_unix,
+            retained_task_limit: 5000,
+            retained_run_target: 100000,
+            records,
+            next_before,
+            day_started_at: usage.day,
+            used_probes: usage.used,
+            daily_budget: self.current().config.health.daily_probe_budget,
+            exit_ip_source: "configured_plain_ip_probe_response_when_present".into(),
+            region_source: "unknown".into(),
+        })
+    }
     pub(super) async fn load_health(&self) -> Result<(), ApplicationError> {
         let states = self.store.health_states().await?;
         let current = self.current();
@@ -103,6 +127,7 @@ impl Supervisor {
                 state.result.node_id = event.node_id.clone();
                 state.result.target_ok = None;
                 state.result.http_status = None;
+                state.result.exit_ip = None;
                 state.result.endpoint_reachable = event.phase != ProbePhase::EndpointConnect;
                 state.result.authenticated = if event.phase == ProbePhase::Authentication {
                     Some(false)
@@ -670,6 +695,7 @@ fn placeholder(
         tunnel_established: false,
         http_status: None,
         target_ok: None,
+        exit_ip: None,
         latency_ms: 0,
         checked_at: 0,
     }

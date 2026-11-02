@@ -23,6 +23,7 @@ use tokio_util::sync::{CancellationToken, WaitForCancellationFutureOwned};
 
 pub const MAX_ACTIVE_RECORDS: usize = 10000;
 pub const MAX_RECENT_RECORDS: usize = 512;
+const MAX_RULE_COUNTERS: usize = 16384;
 const RECENT_TTL: Duration = Duration::from_secs(300);
 fn wall_ms() -> u64 {
     SystemTime::now()
@@ -57,6 +58,8 @@ struct State {
     errors: BTreeMap<String, u64>,
     records: BTreeMap<u64, Arc<FlowRecord>>,
     recent: VecDeque<(Instant, ConnectionInfo)>,
+    rule_hits: BTreeMap<(i64, Option<String>), u64>,
+    untracked_rule_hits: u64,
 }
 impl State {
     fn prune(&mut self) {
@@ -346,6 +349,13 @@ impl NodeRegistry {
         state.next = state.next.checked_add(1)?;
         let sequence = state.next;
         state.active += 1;
+        let rule = (routing.configuration_revision, routing.rule_id.clone());
+        if state.rule_hits.contains_key(&rule) || state.rule_hits.len() < MAX_RULE_COUNTERS {
+            let hits = state.rule_hits.entry(rule).or_default();
+            *hits = hits.saturating_add(1);
+        } else {
+            state.untracked_rule_hits = state.untracked_rule_hits.saturating_add(1);
+        }
         let truncated = context.observed_domains.len() > 8;
         context.observed_domains.truncate(8);
         for name in &mut context.observed_domains {
@@ -405,6 +415,27 @@ impl NodeRegistry {
         let mut state = runtime.state.lock().unwrap();
         state.prune();
         runtime.statistics(&state)
+    }
+    /// Exact business-admission hits, including untracked flows; simulations and probes never call observe.
+    pub fn rule_hit_statistics(&self) -> hps_domain::RuleHitStatistics {
+        let runtime = self.observations();
+        let state = runtime.state.lock().unwrap();
+        hps_domain::RuleHitStatistics {
+            epoch: runtime.epoch.clone(),
+            since_unix_ms: runtime.started_at,
+            observed_at_unix_ms: wall_ms(),
+            counter_limit: MAX_RULE_COUNTERS,
+            untracked_hits: state.untracked_rule_hits,
+            counters: state
+                .rule_hits
+                .iter()
+                .map(|((revision, id), hits)| hps_domain::RuleHitCounter {
+                    configuration_revision: *revision,
+                    rule_id: id.clone(),
+                    hits: *hits,
+                })
+                .collect(),
+        }
     }
     pub fn connection_record(&self, id: &str) -> Option<ConnectionInfo> {
         if !hps_domain::valid_connection_id(id) {
@@ -624,6 +655,31 @@ mod tests {
                 },
             )
             .unwrap()
+    }
+    #[test]
+    fn rule_hits_survive_record_eviction_and_report_counter_capacity_without_simulated_hits() {
+        let registry = Arc::new(NodeRegistry::default());
+        assert!(registry.rule_hit_statistics().counters.is_empty());
+        for _ in 0..MAX_RECENT_RECORDS + 1 {
+            drop(flow(&registry));
+        }
+        let counters = registry.rule_hit_statistics();
+        assert_eq!(counters.counters.len(), 1);
+        assert_eq!(counters.counters[0].hits, (MAX_RECENT_RECORDS + 1) as u64);
+        let runtime = registry.observations();
+        {
+            let mut state = runtime.state.lock().unwrap();
+            state.rule_hits.clear();
+            for n in 0..MAX_RULE_COUNTERS {
+                state.rule_hits.insert((n as i64, None), 1);
+            }
+        }
+        drop(flow(&registry));
+        assert_eq!(registry.rule_hit_statistics().untracked_hits, 1);
+        assert_eq!(
+            registry.rule_hit_statistics().counters.len(),
+            MAX_RULE_COUNTERS
+        );
     }
     struct PartialIo {
         input: VecDeque<u8>,

@@ -135,6 +135,24 @@ impl HpsClient {
         self.get_json(&format!("api/v1/health?{}", query.finish()))
             .await
     }
+    pub async fn health_history(
+        &self,
+        input: &hps_domain::HealthHistoryQuery,
+    ) -> Result<hps_domain::HealthHistory, ClientError> {
+        let mut query = url::form_urlencoded::Serializer::new(String::new());
+        if let Some(node) = &input.node {
+            query.append_pair("node", node);
+        }
+        if let Some(since) = input.since_unix {
+            query.append_pair("since_unix", &since.to_string());
+        }
+        if let Some(before) = input.before {
+            query.append_pair("before", &before.to_string());
+        }
+        query.append_pair("limit", &input.limit.unwrap_or(100).to_string());
+        self.get_json(&format!("api/v1/health/history?{}", query.finish()))
+            .await
+    }
     pub async fn dns(
         &self,
         after: Option<&str>,

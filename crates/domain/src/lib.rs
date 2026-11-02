@@ -11,6 +11,8 @@ mod linux;
 pub use linux::*;
 mod tasks;
 pub use tasks::*;
+mod observability;
+pub use observability::*;
 
 pub const API_VERSION: &str = "v1";
 
@@ -522,6 +524,9 @@ pub struct ProbeResult {
     pub tunnel_established: bool,
     pub http_status: Option<u16>,
     pub target_ok: Option<bool>,
+    /// Observed only from an explicitly configured plain-IP probe response.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exit_ip: Option<std::net::IpAddr>,
     pub latency_ms: u64,
     pub checked_at: i64,
 }

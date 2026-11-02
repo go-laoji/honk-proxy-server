@@ -6,10 +6,21 @@ use serde::Deserialize;
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/api/v1/health", get(overview))
+        .route("/api/v1/health/history", get(history))
         .route("/api/v1/health/probe", post(probe))
         .route("/api/v1/health/save", post(save))
         .route("/api/v1/health/tasks/{id}", get(task))
         .layer(DefaultBodyLimit::max(128 * 1024))
+}
+async fn history(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<hps_domain::HealthHistoryQuery>,
+) -> ApiResult<hps_domain::HealthHistory> {
+    application(&state)?
+        .health_history(query)
+        .await
+        .map(Json)
+        .map_err(application_error)
 }
 fn application(state: &AppState) -> Result<&Arc<Supervisor>, (StatusCode, Json<ApiError>)> {
     state
@@ -94,6 +105,25 @@ mod tests {
         let overview = client.health(None, 50).await.unwrap();
         assert!(overview.configuration.enabled);
         assert_eq!(overview.total_nodes, 0);
+        let history = client
+            .health_history(&hps_domain::HealthHistoryQuery::default())
+            .await
+            .unwrap();
+        assert!(history.records.is_empty());
+        assert_eq!(history.source, "persisted_health_runs");
+        assert_eq!(
+            history.daily_budget,
+            overview.configuration.daily_probe_budget
+        );
+        assert!(matches!(
+            client
+                .health_history(&hps_domain::HealthHistoryQuery {
+                    limit: Some(201),
+                    ..Default::default()
+                })
+                .await,
+            Err(hps_client::ClientError::Api { status: 422, .. })
+        ));
         let mut config = overview.configuration;
         config.enabled = false;
         let saved = client
