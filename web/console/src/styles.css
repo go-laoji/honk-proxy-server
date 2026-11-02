@@ -214,8 +214,7 @@
   }
   .stat-card {
     --stat-accent: var(--accent);
-    border-top: 2px solid
-      color-mix(in srgb, var(--stat-accent) 45%, var(--border));
+    border-color: var(--metric-border);
   }
   .stat-card[data-tone="blue"] {
     --stat-accent: var(--chart-up);
