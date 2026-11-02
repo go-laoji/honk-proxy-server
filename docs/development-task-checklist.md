@@ -39,7 +39,7 @@ T05 配置基础后推进 T06/T07 短效 API 与补池。T08–T14 逐步闭合�
 | T14 | P0 | [#19](https://github.com/go-laoji/honk-proxy-server/issues/19) 后台任务、SSE 与结构化事件 | T05, T06 | 已完成持久任务、三端事件流与实际窗口验收 |
 | T15 | P0 | [#20](https://github.com/go-laoji/honk-proxy-server/issues/20) Linux 透明数据面产品化与恢复 | T03, T09, T11, T13, T14 | 已完成，双架构/双内核 52 项实际用例与 CLI/MPA 通过 |
 | T16 | P0 | [#21](https://github.com/go-laoji/honk-proxy-server/issues/21) Desktop 本地远程档案与系统服务集成 | T02, T05, T15 | 已完成安全验收；真实 OS 写入限制单列 |
-| T17 | P0 | [#22](https://github.com/go-laoji/honk-proxy-server/issues/22) 分包发行、端到端与发布门槛 | T01, T02, T04, T05, T06, T07, T08, T09, T10, T11, T12, T13, T14, T15, T16 | 待开发 |
+| T17 | P0 | [#22](https://github.com/go-laoji/honk-proxy-server/issues/22) 分包发行、端到端与发布门槛 | T01, T02, T04, T05, T06, T07, T08, T09, T10, T11, T12, T13, T14, T15, T16 | 已交付发行候选与明确平台限制，非全平台无条件放行 |
 | T18 | P1 | [#23](https://github.com/go-laoji/honk-proxy-server/issues/23) 历史观测、诊断导出与任务增强 | T17 | 待开发 |
 | T19 | P1 | [#24](https://github.com/go-laoji/honk-proxy-server/issues/24) SOCKS5 UDP、订阅与高级分组扩展 | T17 | 待开发 |
 | T20 | P1 | [#25](https://github.com/go-laoji/honk-proxy-server/issues/25) 备份恢复、系统体验与高级 Linux 诊断 | T17 | 待开发 |
@@ -232,3 +232,5 @@ T02 随后接管现有模板：共享页面清单、Tailwind 布局与 API trans
 - 2026-11-02：T16 档案、持久 launchd/systemd 服务、原生请求代际与共享页面已实现并分批提交。重新通过 macOS 系统库9项、原生桥9项、Linux系统库5项、18项浏览器及两种 OS 服务真实流程。宿主网络事故已修复并作废旧的写入验收，后续禁止宿主网络写入；安全窗口因锁屏待复验，#21 和分支保留，继续 #22 可独立的打包工作。见 `desktop-service-usage.md`、`validation/desktop-service-2026-11-02.json` 与事故记录。
 
 - 2026-11-02：T16 安全包实际窗口只读复验完成：共享设置/原生 JSON、网络修改保护提示与两个按钮停用均确认；退出独立应用后自有 launchd PID 不变，API/真实 HTTP 代理继续服务。#21 按该明确边界收尾；macOS 实际持久代理修改仍标未验证，旧事故测试不作为证据。
+
+- 2026-11-02：T17 已交付共同 Web/源码元数据、独立包与工作流、80 项 P0 追踪、安装损坏/负载/故障/停机快照演练。Mac/Linux/Native/浏览器及真实静态 Daemon 双内核通过；远端 CI、Linux Desktop、Mac 持久系统代理写入和付费帐号调用未验收，不宣称全平台正式发布。见 [T17 验收](validation/release-packaging-2026-11-02.md)。
