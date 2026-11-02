@@ -35,6 +35,11 @@ for hps_name in hps hpsd; do
 done
 mv -f "$hps_stage/hps" "$hps_prefix/bin/hps"
 mv -f "$hps_stage/hpsd" "$hps_prefix/bin/hpsd"
+if [ -f share/ebpf/hps-ebpf.elf ]; then
+    mkdir -p "$hps_prefix/share/hps/ebpf"
+    install -m 644 share/ebpf/hps-ebpf.elf "$hps_prefix/share/hps/ebpf/hps-ebpf.elf"
+    install -m 644 share/ebpf/acceptance.json "$hps_prefix/share/hps/ebpf/acceptance.json"
+fi
 if [ -n "$hps_config_dir" ]; then
     mkdir -p "$hps_config_dir"
     if [ ! -e "$hps_config_dir/hps.toml" ]; then

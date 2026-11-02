@@ -24,6 +24,8 @@ def main():
     parser.add_argument("--target-dir", type=Path, default=ROOT / "target/desktop-release")
     parser.add_argument("--output-dir", type=Path, default=ROOT / "target/packages-desktop")
     parser.add_argument("--allow-dirty", action="store_true")
+    parser.add_argument("--ebpf",type=Path)
+    parser.add_argument("--kernel-report",type=Path,default=ROOT/"docs/validation/linux-transparent-acceptance-2026-11-02.json")
     parser.add_argument("--debug", action="store_true", help="exploratory validation bundles only")
     parser.add_argument("--bundles", default="app" if platform.system() == "Darwin" else "deb")
     args = parser.parse_args()
@@ -34,6 +36,7 @@ def main():
     require(not args.debug or args.allow_dirty, "debug bundles must be explicitly marked exploratory")
     daemon = args.daemon.resolve()
     info = support.build_info(daemon, True)
+    kernel=support.verified_ebpf(args.ebpf,args.kernel_report) if platform.system()=="Linux" else None
     web_directory = args.web_dir.resolve()
     web = json.loads((web_directory / "web-manifest.json").read_text())
     require(info["version"]["web_build_id"] == web["web_build_id"], "daemon and Desktop must consume the same Web artifact")
@@ -65,6 +68,9 @@ def main():
     }
     if platform.system() == "Darwin":
         config["bundle"]["macOS"] = {"signingIdentity": "-"}
+    if kernel:
+        config["bundle"]["resources"][str(args.ebpf.resolve())]="ebpf/hps-ebpf.elf"
+        config["bundle"]["resources"][str(args.kernel_report.resolve())]="ebpf/acceptance.json"
     override = staging / "tauri-package.json"
     override.write_text(json.dumps(config, indent=2) + "\n")
     environment = dict(os.environ, CARGO_TARGET_DIR=str(target_directory), HPS_WEB_ASSETS_DIR=str(web_directory), HPS_SOURCE_REVISION=revision, HPS_SOURCE_DIRTY="1" if dirty else "0", HPS_FORBID_HOST_NETWORK_CHANGES="1")
@@ -72,19 +78,19 @@ def main():
     # notarization, updater publishing, or inherit credentials for those actions.
     for key in ("APPLE_ID", "APPLE_PASSWORD", "APPLE_TEAM_ID", "APPLE_API_ISSUER", "APPLE_API_KEY", "APPLE_API_KEY_PATH", "APPLE_SIGNING_IDENTITY", "TAURI_SIGNING_PRIVATE_KEY", "TAURI_SIGNING_PRIVATE_KEY_PASSWORD"):
         environment.pop(key, None)
-    command = ["pnpm", "tauri", "build", "--ci", "--target", target, "--config", str(override), "--bundles", args.bundles]
+    command = ["pnpm", "tauri", "build", "--ci", "--config", str(override), "--bundles", args.bundles]
     if args.debug:
         command.append("--debug")
     command.extend(["--", "--locked"])
     subprocess.run(command, cwd=ROOT, env=environment, check=True)
     mode = "debug" if args.debug else "release"
-    binary = target_directory / target / mode / "hps-desktop"
+    binary = target_directory / mode / "hps-desktop"
     result = subprocess.run([str(binary), "--build-info"], env=environment, capture_output=True, text=True, check=True, timeout=20)
     desktop = json.loads(result.stdout)
     require(desktop["version"]["web_build_id"] == info["version"]["web_build_id"], "compiled Desktop embeds different Web bytes")
     require(desktop["source_revision"] == revision and desktop["source_dirty"] == dirty, "compiled Desktop source metadata mismatch")
     bundles = []
-    bundle_root = target_directory / target / mode / "bundle"
+    bundle_root = target_directory / mode / "bundle"
     for path in sorted(bundle_root.rglob("*")):
         if path.suffix == ".app" and path.is_dir():
             require(support.digest(path / "Contents/Resources/bin/hpsd") == support.digest(resource_daemon), "bundled daemon bytes differ")

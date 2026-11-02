@@ -57,6 +57,17 @@ def build_info(path, daemon):
     return info
 
 
+def verified_ebpf(path, report_path):
+    require(path and path.is_file(), "Linux packages require the actual verified eBPF object")
+    report=json.loads(report_path.read_text())
+    require(report.get("full_transparent_datapath_ready") is True and report.get("total_actual_kernel_cases",0)>=52,"complete real-kernel evidence is required")
+    require(report.get("ebpf_abi")==4 and digest(path)==report.get("ebpf_object_sha256"),"eBPF artifact does not match actual kernel acceptance")
+    with path.open("rb") as stream:
+        header=stream.read(20)
+    require(header[:4]==b"\x7fELF" and struct.unpack_from("<H",header,18)[0]==247,"expected an eBPF ELF object")
+    return report
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bin-dir", required=True, type=Path)
@@ -103,13 +114,7 @@ def main():
 
     kernel = None
     if "linux" in args.target:
-        require(args.ebpf and args.ebpf.is_file(), 'Linux packages require the actual verified eBPF object')
-        kernel = json.loads(args.kernel_report.read_text())
-        require(kernel['full_transparent_datapath_ready'] is True and kernel['total_actual_kernel_cases'] >= 52, 'invalid compiled package metadata')
-        require(kernel['ebpf_abi'] == 4 and digest(args.ebpf) == kernel['ebpf_object_sha256'], 'eBPF artifact does not match actual kernel acceptance')
-        with args.ebpf.open("rb") as stream:
-            header = stream.read(20)
-        require(header[:4] == b'\x7fELF' and struct.unpack_from('<H', header, 18)[0] == 247, 'invalid compiled package metadata')
+        kernel=verified_ebpf(args.ebpf,args.kernel_report)
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     name = "hps-headless-{}-{}{}".format(version, args.target, "-no-web" if args.without_web else "")
