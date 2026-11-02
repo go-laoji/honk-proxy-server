@@ -429,12 +429,21 @@ impl Dialer {
         }
     }
     pub fn can_forward(&self, inbound: &str, protocol: &str) -> bool {
+        self.can_forward_transport(inbound, protocol, hps_domain::SelectionTransport::Tcp)
+    }
+    pub fn can_forward_transport(
+        &self,
+        inbound: &str,
+        protocol: &str,
+        transport: hps_domain::SelectionTransport,
+    ) -> bool {
         self.router
-            .potential_actions(inbound, protocol)
+            .potential_actions(inbound, protocol, transport)
             .iter()
             .any(|action| {
                 let mut query = hps_domain::SelectionQuery {
-                    inbound: Some(inbound.into()),
+                    inbound: (!inbound.is_empty()).then(|| inbound.into()),
+                    transport,
                     ..Default::default()
                 };
                 match action {

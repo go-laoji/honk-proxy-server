@@ -518,6 +518,18 @@ impl Engine {
                         .is_none_or(|certificate| certificate.valid_now)
             })
     }
+    /// Availability of a potential forwarding route is separate from verified
+    /// kernel capture readiness. The application must require both.
+    pub fn transparent_forwarding_available(&self, tcp: bool, udp: bool) -> bool {
+        !self.cancel.is_cancelled()
+            && ((tcp && self.dialer.can_forward("", "transparent"))
+                || (udp
+                    && self.dialer.can_forward_transport(
+                        "",
+                        "transparent",
+                        hps_domain::SelectionTransport::Udp,
+                    )))
+    }
 }
 impl Entry {
     fn should_start(&self) -> bool {
@@ -558,5 +570,41 @@ impl Entry {
             certificate,
             last_error: self.last_error.lock().unwrap().clone(),
         }
+    }
+}
+
+#[cfg(test)]
+mod readiness_tests {
+    use super::*;
+    use hps_config::{RuleConditions, RuleConfig};
+    use hps_domain::{RouteAction, SelectionTransport};
+    #[tokio::test]
+    async fn transparent_forwarding_requires_a_route_for_the_actual_enabled_transport() {
+        let mut config = ProxyConfig::default();
+        config.routing.default_action = RouteAction::Reject;
+        config.routing.rules.push(RuleConfig {
+            id: "udp-only".into(),
+            enabled: true,
+            conditions: RuleConditions {
+                transports: vec![SelectionTransport::Udp],
+                ..Default::default()
+            },
+            action: RouteAction::Direct,
+        });
+        let engine = Engine::prepare(
+            config,
+            None,
+            crate::routing::RoutingCapabilities {
+                local_process: false,
+                udp: true,
+            },
+            true,
+        )
+        .unwrap();
+        assert!(!engine.ready());
+        assert!(!engine.transparent_forwarding_available(true, false));
+        assert!(engine.transparent_forwarding_available(false, true));
+        engine.shutdown().await;
+        assert!(!engine.transparent_forwarding_available(false, true));
     }
 }

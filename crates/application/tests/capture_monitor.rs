@@ -98,6 +98,11 @@ async fn real_capture_monitor_suspends_after_route_loss() {
     assert_eq!(initial.program_ids.len(), 8);
     assert_eq!(initial.links_present, Some(true));
     assert_eq!(initial.routes_present, Some(true));
+    let rules = service.rules_overview(None).await.unwrap().capabilities;
+    assert!(
+        rules.local_process_available && rules.udp_data_plane_available && rules.kernel_rules_ready
+    );
+    assert_eq!(rules.kernel_rule_revision, Some(1));
     // Exact capture rule from this fixture identity, no wildcard deletion.
     let mut rule = vec![libc::AF_INET as u8, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0];
     for (kind, value) in [
@@ -130,6 +135,8 @@ async fn real_capture_monitor_suspends_after_route_loss() {
     assert_eq!(fault.routes_present, Some(false));
     assert_eq!(fault.links_present, Some(true));
     assert_eq!(fault.kernel_revision, Some(1));
+    let degraded_rules = service.rules_overview(None).await.unwrap().capabilities;
+    assert!(!degraded_rules.local_process_available && !degraded_rules.kernel_rules_ready);
     let group_path = group.0.clone();
     let output = tokio::task::spawn_blocking(move || {
         Command::new(std::env::current_exe().unwrap())
@@ -247,6 +254,13 @@ async fn real_capture_monitor_suspends_after_route_loss() {
     assert_eq!(stopped_by_user.state, "stopped");
     assert!(!stopped_by_user.ready);
     assert!(stopped_by_user.program_ids.is_empty());
+    let stopped_rules = service.rules_overview(None).await.unwrap().capabilities;
+    assert!(
+        !stopped_rules.local_process_available
+            && !stopped_rules.udp_data_plane_available
+            && !stopped_rules.kernel_rules_ready
+    );
+    assert_eq!(stopped_rules.kernel_rule_revision, None);
     assert_eq!(
         explicit_before.iter().filter(|i| i.running).count(),
         service

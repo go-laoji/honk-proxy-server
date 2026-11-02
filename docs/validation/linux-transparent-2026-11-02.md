@@ -211,3 +211,11 @@ Linux MPA 展示实际监听、链接/路由、内核与用户态代际、原位
 双栈 TCP 各 256 KiB 双向字节，经来源网段规则、固定组和受控 HTTP 上游；双栈 UDP 各 1200 字节，经来源规则、固定组和实际 SOCKS5 UDP association，核对中继建立数及真实收发数各 2。两条旁路端口连接直接到达目标，目标核对实际 LAN 源地址，业务引擎总记录仅 4 条，旁路不登记透明 owner。每条透明连接均为 Gateway、原始目标与源地址正确、process=None、revision=1，并具有实际规则和出口节点证据。
 
 受控 UDP 目标与透明回复 socket 同处测试服务器 namespace，目标需允许复用该测试端口；首轮排查并修正此夹具占用，未把超时算作通过。QEMU initrd 显式加载自有 veth 模块。本机既有 UDP Direct/SOCKS5 16 条实际流回归也通过。未因此声称 x86_64、异常退出恢复或整个 T15 验收完成。证据为 `linux-transparent-gateway-kernel7-2026-11-02.json` 与 `linux-transparent-gateway-kernel612-2026-11-02.json`。
+
+## 第 22 批：实际规则能力与总就绪状态
+
+规则 overview 改用相同实际捕获诊断，核验本机 cgroup、UDP 与内核 revision；暂停/停止立即降为不可用，Gateway-only 不声称本机进程能力。候选规则模拟和生产准备共用捕获能力的引擎构造，允许在已配置的 Linux 上诊断进程/UDP 规则；调用者声明的进程仍仅是假设，不进入生产身份源。
+
+服务 `/status` 和 `/readyz` 将实际捕获就绪与可用的转发策略共同计算；没有显式 listener 的透明服务也可正确就绪，UDP-only 策略不会冒充 TCP 转发能力。新增 transport 回归：UDP Direct 规则只让 UDP 潜在路径可用，关闭引擎后不可用；只有对象就绪、无实际可用出口时不宣称 proxy_ready。
+
+验证：Mac engine/application/API 普通回归 101 项通过，另新增就绪传输回归 1 项通过；Mac Clippy 通过。Linux 7.0 的实际故障/恢复与 LAN 用例通过，覆盖规则 capability 在本机、网关、暂停、停止时的实际变化；Linux engine/application/API Clippy 通过。完整跨架构矩阵、SIGKILL 和实际 Linux 浏览器操作仍继续验证。

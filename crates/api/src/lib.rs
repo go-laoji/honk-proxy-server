@@ -177,7 +177,27 @@ pub fn router(state: Arc<AppState>) -> Router {
 }
 
 async fn status(State(state): State<Arc<AppState>>) -> Json<ServiceStatus> {
-    Json(state.status())
+    let mut status = state.status();
+    if transparent_ready(&state).await {
+        status.proxy_ready = true;
+        status.engine_state = "running".into();
+    }
+    Json(status)
+}
+async fn transparent_ready(state: &AppState) -> bool {
+    let Some(application) = &state.application else {
+        return false;
+    };
+    let current = application.current();
+    let Some(config) = &current.config.linux_capture else {
+        return false;
+    };
+    let capture = application.linux_capture_status().await;
+    capture.ready
+        && capture.userspace_revision == current.revision
+        && current
+            .engine
+            .transparent_forwarding_available(config.tcp, config.udp)
 }
 async fn version(State(state): State<Arc<AppState>>) -> Json<VersionInfo> {
     Json(state.version())
@@ -201,7 +221,9 @@ async fn capabilities(State(state): State<Arc<AppState>>) -> Json<Capabilities> 
 }
 
 async fn ready(State(state): State<Arc<AppState>>) -> (StatusCode, Json<serde_json::Value>) {
-    let ready = state.runtime_engine().is_some_and(|engine| engine.ready());
+    let explicit = state.runtime_engine().is_some_and(|engine| engine.ready());
+    let transparent = transparent_ready(&state).await;
+    let ready = explicit || transparent;
     (
         if ready {
             StatusCode::OK
@@ -209,7 +231,7 @@ async fn ready(State(state): State<Arc<AppState>>) -> (StatusCode, Json<serde_js
             StatusCode::SERVICE_UNAVAILABLE
         },
         Json(
-            serde_json::json!({"ready":ready,"reason":if ready {if state.effective_config().health.enabled {"explicit ingress running with fresh healthy upstream"} else {"explicit ingress running; health checking explicitly disabled"}} else {"no ready inbound/upstream or runtime stopping"}}),
+            serde_json::json!({"ready":ready,"explicit_ready":explicit,"transparent_ready":transparent,"reason":if transparent {"verified transparent capture with an available forwarding path"} else if ready {if state.effective_config().health.enabled {"explicit ingress running with fresh healthy upstream"} else {"explicit ingress running; health checking explicitly disabled"}} else {"no ready inbound/upstream or runtime stopping"}}),
         ),
     )
 }

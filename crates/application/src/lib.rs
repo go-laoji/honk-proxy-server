@@ -1021,6 +1021,27 @@ struct PreparedRuntime {
     engine: Arc<Engine>,
     management_tls: Option<hps_engine::tls::PreparedServer>,
 }
+fn prepare_proxy_engine(
+    config: &DaemonConfig,
+    previous: Option<&Arc<Engine>>,
+) -> Result<Arc<Engine>, ApplicationError> {
+    #[cfg(target_os = "linux")]
+    let engine = if let Some(capture) = &config.linux_capture {
+        Engine::with_capture(
+            config.proxy.clone(),
+            previous,
+            hps_engine::routing::RoutingCapabilities {
+                local_process: capture.local_cgroup.is_some(),
+                udp: capture.udp,
+            },
+        )?
+    } else {
+        Engine::with_previous(config.proxy.clone(), previous)?
+    };
+    #[cfg(not(target_os = "linux"))]
+    let engine = Engine::with_previous(config.proxy.clone(), previous)?;
+    Ok(engine)
+}
 fn prepare_engine(
     config: &DaemonConfig,
     previous: Option<&RuntimeSnapshot>,
@@ -1040,21 +1061,7 @@ fn prepare_engine(
     let dns = dns::prepare(config, previous)?;
     let capture = dns_capture::PreparedCapture::prepare(config, previous)?;
     let transparent = transparent::Prepared::prepare(config, previous)?;
-    #[cfg(target_os = "linux")]
-    let engine = if let Some(capture) = &config.linux_capture {
-        Engine::with_capture(
-            config.proxy.clone(),
-            previous.map(|p| &p.engine),
-            hps_engine::routing::RoutingCapabilities {
-                local_process: capture.local_cgroup.is_some(),
-                udp: capture.udp,
-            },
-        )?
-    } else {
-        Engine::with_previous(config.proxy.clone(), previous.map(|p| &p.engine))?
-    };
-    #[cfg(not(target_os = "linux"))]
-    let engine = Engine::with_previous(config.proxy.clone(), previous.map(|p| &p.engine))?;
+    let engine = prepare_proxy_engine(config, previous.map(|p| &p.engine))?;
     let health_profiles = prepare_network(config, &engine, &dns)?;
     if engine.status().inbounds.iter().any(|entry| {
         entry

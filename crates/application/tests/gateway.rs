@@ -347,6 +347,10 @@ async fn real_gateway_shared_engine() {
     .unwrap();
     service.confirm_startup().await.unwrap();
     assert!(service.linux_capture_status().await.ready);
+    let rules = service.rules_overview(None).await.unwrap().capabilities;
+    assert!(!rules.local_process_available);
+    assert!(rules.udp_data_plane_available && rules.kernel_rules_ready);
+    assert_eq!(rules.kernel_rule_revision, Some(1));
     control.write_all(b"N").await.unwrap();
     let done = tokio::time::timeout(Duration::from_secs(15), control.read_exact(&mut signal)).await;
     let output = tokio::task::spawn_blocking(move || child.wait_with_output().unwrap())
