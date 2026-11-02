@@ -207,7 +207,7 @@ def main():
                     archive.addfile(entry)
     checksum = digest(output)
     output.with_suffix(output.suffix + ".sha256").write_text(checksum + "  " + output.name + "\n")
-    print(json.dumps({"package": str(output), "sha256": checksum, "source_revision": revision, "runtime_checked": can_run, "web_build_id": manifest["web_build_id"]}))
+    print(json.dumps({"package": str(output), "sha256": checksum, "source_revision": manifest["source_revision"], "packaging_revision": revision, "runtime_checked": can_run, "web_build_id": manifest["web_build_id"]}))
 
 
 if __name__ == "__main__":

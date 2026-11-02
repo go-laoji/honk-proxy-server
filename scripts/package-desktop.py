@@ -9,6 +9,7 @@ import platform
 import shutil
 import subprocess
 import sys
+import tempfile
 
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
@@ -96,7 +97,11 @@ def main():
         if args.bundles == "app" and path == bundle_root / "macos" / (product + ".app") and path.is_dir():
             require(support.digest(path / "Contents/Resources/bin/hpsd") == support.digest(resource_daemon), "bundled daemon bytes differ")
             bundles.append({"path": str(path), "type": "app", "resource_daemon_sha256": support.digest(resource_daemon)})
-        elif args.bundles == "deb" and path.is_file() and path.suffix == ".deb" and path.name.startswith(product + "_"):
+        elif args.bundles == "deb" and path.is_file() and path.suffix == ".deb" and path.name.startswith(product + "_" + info["version"]["version"] + "_"):
+            with tempfile.TemporaryDirectory(prefix="hps-deb-inspect-") as extracted:
+                subprocess.run(["dpkg-deb", "--extract", str(path), extracted], check=True)
+                resources = [candidate for candidate in Path(extracted).rglob("hpsd") if candidate.is_file()]
+                require(len(resources) == 1 and support.digest(resources[0]) == support.digest(resource_daemon), "deb must contain exactly the matching daemon resource")
             bundles.append({"path": str(path), "sha256": support.digest(path), "type": path.suffix[1:]})
     require(bundles, "no Desktop installation bundle was produced")
     manifest = {"format_version": 1, "package": "desktop", "source_revision": revision, "dirty_tracked_source": dirty, "exploratory_artifact": args.allow_dirty, "target": target, "profile": mode, "web_build_id": web["web_build_id"], "web_pages": web["pages"], "daemon_sha256": support.digest(resource_daemon), "desktop_metadata": desktop, "bundles": bundles, "cloud_signed_or_notarized": False, "published": False, "macos_actual_proxy_persistent_change_verified": False}
