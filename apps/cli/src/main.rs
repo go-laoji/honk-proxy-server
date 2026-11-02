@@ -3,6 +3,7 @@ use hps_client::{ClientError, HpsClient};
 use hps_config::DaemonConfig;
 use std::{io::Write, path::PathBuf, process::ExitCode, time::Duration};
 mod backup;
+mod diagnostics;
 mod local;
 mod tasks;
 
@@ -58,6 +59,10 @@ enum Command {
     Task {
         #[command(subcommand)]
         command: tasks::TaskCommand,
+    },
+    Diagnostic {
+        #[command(subcommand)]
+        command: diagnostics::DiagnosticCommand,
     },
     Event {
         #[command(subcommand)]
@@ -859,6 +864,7 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
     )
     .map_err(client_error)?;
     let value = match &args.command {
+        Command::Diagnostic { command } => return diagnostics::run(&client, command).await,
         Command::Task { command } => return tasks::run_task(&client, command).await,
         Command::Event { command } => {
             return tasks::run_events(&client, command, args.output).await;

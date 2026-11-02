@@ -21,6 +21,7 @@ struct Control {
     retry_of: Option<i64>,
     finished: Mutex<Option<Instant>>,
     persistence_failed: std::sync::atomic::AtomicBool,
+    durable_terminal: std::sync::atomic::AtomicBool,
 }
 #[derive(Default)]
 pub(super) struct Runtime {
@@ -37,10 +38,12 @@ impl Runtime {
     }
     fn prune(&self) {
         self.controls.lock().unwrap().retain(|_, c| {
-            c.finished
-                .lock()
-                .unwrap()
-                .is_none_or(|at| at.elapsed() <= RETENTION)
+            !c.durable_terminal
+                .load(std::sync::atomic::Ordering::Acquire)
+                || c.finished
+                    .lock()
+                    .unwrap()
+                    .is_none_or(|at| at.elapsed() <= RETENTION)
         });
     }
     fn get(&self, id: i64) -> Option<Arc<Control>> {
@@ -53,7 +56,11 @@ impl Runtime {
         if controls.len() >= CONTROLS {
             let oldest = controls
                 .iter()
-                .find(|(_, c)| c.finished.lock().unwrap().is_some())
+                .find(|(_, c)| {
+                    c.durable_terminal
+                        .load(std::sync::atomic::Ordering::Acquire)
+                        && c.finished.lock().unwrap().is_some()
+                })
                 .map(|(id, _)| *id);
             if let Some(oldest) = oldest {
                 controls.remove(&oldest);
@@ -234,6 +241,7 @@ impl Supervisor {
             retry_of,
             finished: Mutex::new(None),
             persistence_failed: std::sync::atomic::AtomicBool::new(false),
+            durable_terminal: std::sync::atomic::AtomicBool::new(false),
         });
         if !self.diagnostics.insert(id, control.clone()) {
             let _ = self
@@ -253,7 +261,11 @@ impl Supervisor {
         }
         let _ = sender.send(Ok(task));
         if let Err(error) = self.store.start_work(id).await {
-            if !matches!(error, StorageError::Conflict) {
+            if matches!(error, StorageError::Conflict) {
+                control
+                    .durable_terminal
+                    .store(true, std::sync::atomic::Ordering::Release);
+            } else {
                 self.diagnostics.mark_persistence_failure(&control);
             }
             *control.finished.lock().unwrap() = Some(Instant::now());
@@ -298,7 +310,11 @@ impl Supervisor {
             };
             // A concurrent versioned cancellation may already own the terminal row.
             match self.store.finish_work(id, outcome).await {
-                Ok(_) | Err(StorageError::Conflict) => {}
+                Ok(_) | Err(StorageError::Conflict) => {
+                    control
+                        .durable_terminal
+                        .store(true, std::sync::atomic::Ordering::Release);
+                }
                 Err(_) => self.diagnostics.mark_persistence_failure(&control),
             }
         }
@@ -391,6 +407,14 @@ impl Supervisor {
                     e.into()
                 }
             })?;
+        control
+            .durable_terminal
+            .store(true, std::sync::atomic::Ordering::Release);
+        let mut finished = control.finished.lock().unwrap();
+        if finished.is_some() {
+            *finished = Some(Instant::now());
+        }
+        drop(finished);
         control.cancel.cancel();
         Ok(result)
     }
@@ -473,6 +497,92 @@ mod tests {
         })
         .await
         .unwrap()
+    }
+    #[tokio::test]
+    async fn failed_terminal_write_retains_cancellation_past_retry_ttl_and_cache_pressure() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut config = DaemonConfig::default();
+        config.health.enabled = false;
+        let store = Store::open(Some(directory.path()), config).unwrap();
+        let database = store.database_path.clone().unwrap();
+        let service = Supervisor::boot(store, StartupOverrides::default())
+            .await
+            .unwrap();
+        let lock = service.operation.lock().await;
+        let job = service
+            .submit_diagnostic(
+                DiagnosticInput {
+                    expected_epoch: service.event_epoch().into(),
+                    request_id: "failed-result-write".into(),
+                    window_secs: 300,
+                },
+                version(),
+            )
+            .await
+            .unwrap();
+        let connection = rusqlite::Connection::open(database).unwrap();
+        connection.execute_batch(&format!("CREATE TRIGGER fail_diagnostic_result BEFORE UPDATE OF state ON task_records WHEN OLD.id={} AND NEW.state='completed' BEGIN SELECT RAISE(ABORT,'injected result failure'); END;",job.id)).unwrap();
+        drop(lock);
+        tokio::time::timeout(Duration::from_secs(3), async {
+            loop {
+                let hints = service.task_controls(job.id, None).await.unwrap();
+                if hints.collection_finished && hints.result_persistence_failed {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        connection
+            .execute_batch("DROP TRIGGER fail_diagnostic_result;")
+            .unwrap();
+        let control = service.diagnostics.get(job.id).unwrap();
+        *control.finished.lock().unwrap() =
+            Some(Instant::now() - RETENTION - Duration::from_secs(1));
+        service.diagnostics.prune();
+        assert!(service.diagnostics.get(job.id).is_some());
+        for id in 1000..(1000 + CONTROLS as i64) {
+            assert!(service.diagnostics.insert(
+                id,
+                Arc::new(Control {
+                    cancel: CancellationToken::new(),
+                    query: hps_domain::ObservationQuery::default(),
+                    version: version(),
+                    revision: 1,
+                    retry_of: None,
+                    finished: Mutex::new(Some(Instant::now())),
+                    persistence_failed: std::sync::atomic::AtomicBool::new(false),
+                    durable_terminal: std::sync::atomic::AtomicBool::new(true)
+                })
+            ));
+        }
+        let hints = service.task_controls(job.id, None).await.unwrap();
+        assert!(hints.can_cancel && hints.result_persistence_failed);
+        let cancelled = service
+            .cancel_task(
+                job.id,
+                TaskControlInput {
+                    expected_epoch: service.event_epoch().into(),
+                    expected_version: hints.version,
+                },
+            )
+            .await
+            .unwrap();
+        assert!(cancelled.terminal);
+        assert_eq!(cancelled.phase, "cancelled");
+        assert!(service.task_controls(job.id, None).await.unwrap().can_retry);
+        assert!(
+            control
+                .durable_terminal
+                .load(std::sync::atomic::Ordering::Acquire)
+        );
+        *control.finished.lock().unwrap() =
+            Some(Instant::now() - RETENTION - Duration::from_secs(1));
+        service.diagnostics.prune();
+        assert!(service.diagnostics.get(job.id).is_none());
+        drop(connection);
+        service.shutdown().await.unwrap();
     }
     #[tokio::test]
     async fn actual_read_only_job_cancels_while_waiting_for_publication_and_retry_is_idempotent() {

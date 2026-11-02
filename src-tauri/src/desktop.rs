@@ -1,5 +1,6 @@
 //! Desktop-only preferences and OS adapters. Never controls daemon services or network.
 use super::*;
+use hps_domain::AlertFeed as Feed;
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
@@ -155,21 +156,6 @@ pub(super) fn desktop_preferences_set(
     drop(saved);
     state.view(&app)
 }
-#[derive(serde::Deserialize)]
-struct Notice {
-    sequence: u64,
-    state: String,
-    code: String,
-    message: String,
-}
-#[derive(serde::Deserialize)]
-struct Feed {
-    epoch: String,
-    latest_sequence: u64,
-    notices: Vec<Notice>,
-    #[serde(default)]
-    truncated: bool,
-}
 // Validate the whole feed before any OS effect. None means establish a fresh baseline.
 fn delivery_plan(cursor: Option<&Cursor>, feed: &Feed) -> Result<Option<Vec<usize>>, String> {
     if !hps_domain::valid_connection_epoch(&feed.epoch) || feed.notices.len() > 100 {
@@ -226,17 +212,10 @@ async fn poll(app: &tauri::AppHandle) -> Result<(), String> {
         .cursors
         .get(&key)
         .cloned();
-    let path = format!(
-        "api/v1/observability/alerts?limit=100{}",
-        cursor
-            .as_ref()
-            .map(|v| format!("&after={}", v.sequence))
-            .unwrap_or_default()
-    );
-    let feed: Feed = target
+    let feed = target
         .client(Duration::from_secs(10))
         .map_err(|e| e.to_string())?
-        .get_json(&path)
+        .alerts(cursor.as_ref().map(|v| v.sequence), 100)
         .await
         .map_err(|e| e.to_string())?;
     let plan = delivery_plan(cursor.as_ref(), &feed)?;
@@ -377,6 +356,7 @@ fn show_window(app: &tauri::AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use hps_domain::AlertFeed as Feed;
     #[test]
     fn alert_baselines_skip_history_and_only_same_epoch_new_sequences_deliver() {
         let epoch = "12345678-1234-4321-8234-123456789abc";
@@ -384,7 +364,16 @@ mod tests {
             epoch: epoch.into(),
             latest_sequence: 5,
             truncated: false,
-            notices: vec![Notice {
+            settings: Default::default(),
+            oldest_sequence: Some(5),
+            running_revision: 1,
+            retention_limit: 128,
+            resets_on_restart: true,
+            source: "daemon".into(),
+            notices: vec![hps_domain::AlertNotice {
+                occurred_at: 0,
+                key: "engine".into(),
+                suppressed_changes: 0,
                 sequence: 5,
                 state: "problem".into(),
                 code: "engine_unready".into(),

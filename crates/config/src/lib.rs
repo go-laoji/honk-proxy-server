@@ -24,6 +24,7 @@ pub struct DaemonConfig {
     pub log_filter: String,
     pub management_tls: Option<ServerTls>,
     pub retention: RetentionConfig,
+    pub alerts: hps_domain::AlertSettings,
     pub proxy: ProxyConfig,
     pub providers: Vec<ProviderConfig>,
     pub health: HealthConfig,
@@ -39,6 +40,7 @@ impl Default for DaemonConfig {
             log_filter: "info".into(),
             management_tls: None,
             retention: RetentionConfig::default(),
+            alerts: Default::default(),
             proxy: ProxyConfig::default(),
             providers: vec![],
             health: HealthConfig::default(),
@@ -168,6 +170,14 @@ impl DaemonConfig {
     }
 
     pub fn validate(&self) -> Result<(), ConfigError> {
+        if !(5..=3600).contains(&self.alerts.cooldown_secs)
+            || !(1..=100000).contains(&self.alerts.failure_min_count)
+            || !(1..=100).contains(&self.alerts.failure_percent)
+        {
+            return Err(ConfigError::Invalid(
+                "alert thresholds are out of range".into(),
+            ));
+        }
         if let Some(capture) = &self.linux_capture {
             capture.validate()?;
         }

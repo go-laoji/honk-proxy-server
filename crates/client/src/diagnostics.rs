@@ -12,6 +12,24 @@ impl HpsClient {
     pub async fn linux_diagnostics(&self) -> Result<hps_domain::LinuxDiagnostics, ClientError> {
         self.get_json("api/v1/linux/diagnostics").await
     }
+    pub async fn alerts(
+        &self,
+        after: Option<u64>,
+        limit: u32,
+    ) -> Result<hps_domain::AlertFeed, ClientError> {
+        self.get_json(&format!(
+            "api/v1/observability/alerts?limit={limit}{}",
+            after.map_or(String::new(), |n| format!("&after={n}"))
+        ))
+        .await
+    }
+    pub async fn save_alerts(
+        &self,
+        input: &hps_domain::AlertSave,
+    ) -> Result<hps_domain::ConfigRevision, ClientError> {
+        self.post_body("api/v1/observability/alerts/save", input)
+            .await
+    }
     pub async fn submit_diagnostic(
         &self,
         input: &hps_domain::DiagnosticInput,
