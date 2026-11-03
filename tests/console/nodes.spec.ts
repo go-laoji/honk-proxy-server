@@ -75,13 +75,11 @@ test("nodes MPA previews imports, restores filters, gates actual proxy traffic a
       page.getByLabel("来源水位与异常", { exact: true }),
     ).toContainText("最小 1 / 目标 2 / 上限 3");
     await expect(
-      page.getByText("没有符合筛选的节点；可调整条件或导入节点。", {
+      page.getByText("没有符合筛选的节点；可手动添加、批量导入或调整筛选。", {
         exact: true,
       }),
     ).toBeVisible();
-    await page
-      .getByRole("button", { name: "添加 / 导入", exact: true })
-      .click();
+    await page.getByRole("button", { name: "批量导入", exact: true }).click();
     await page
       .getByRole("textbox", { name: "节点导入内容", exact: true })
       .fill(
