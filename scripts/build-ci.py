@@ -157,8 +157,10 @@ def desktop(target, revision, web, environment, release, destination):
     write_json(override, config)
     # Invoke the JS CLI directly so Windows does not need to execute pnpm.cmd.
     cli = ROOT / "node_modules/@tauri-apps/cli/tauri.js"
+    # Keep the .app for resource verification; a DMG-only build removes it.
+    bundles = "app,dmg" if platform == "macos" else bundle
     subprocess.run(["node", str(cli), "build", "--ci", "--target", target, "--config", str(override),
-                    "--bundles", bundle, "--", "--locked"], cwd=ROOT, env=environment, check=True)
+                    "--bundles", bundles, "--", "--locked"], cwd=ROOT, env=environment, check=True)
     info = metadata(release / ("hps-desktop" + suffix), "hps-desktop", target, revision, web, environment)
     require(info["version"]["version"] == daemon_info["version"]["version"], "Desktop/Daemon version mismatch")
     # Verify the uncompressed bundle's resource before publishing an installer.
