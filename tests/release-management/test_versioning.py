@@ -76,6 +76,7 @@ class VersioningTests(unittest.TestCase):
         self.assertEqual(result.count("Synchronized all product manifests"), 1)
         self.assertEqual(versioning.check_versions(self.root, "v0.1.1"), "0.1.1")
         self.assertEqual(self.run_command("git", "rev-list", "--count", "HEAD"), "2")
+        self.assertEqual(self.run_command("git", "log", "-1", "--format=%s"), "chore(release): v0.1.1")
         self.assertEqual(self.run_command("git", "status", "--porcelain"), "")
         self.assertEqual(self.run_command("git", "tag", "--list"), "v0.1.0\nv0.1.1")
         self.assertEqual(self.run_command("git", "rev-parse", "v0.1.1^{commit}"), self.run_command("git", "rev-parse", "HEAD"))
