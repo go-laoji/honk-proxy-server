@@ -184,6 +184,18 @@ def desktop(target, revision, web, environment, release, destination):
     write_json(destination / "manifest.json", report)
 
 
+def build_environment(revision):
+    environment = dict(os.environ, CARGO_TARGET_DIR=str(OUTPUT / "cargo"),
+                       HPS_WEB_ASSETS_DIR=str(ROOT / "dist"), HPS_SOURCE_REVISION=revision,
+                       HPS_SOURCE_DIRTY="0", HPS_FORBID_HOST_NETWORK_CHANGES="1", CI="true")
+    # --ci alone does not disable Tauri's Finder automation during DMG bundling.
+    for key in ("TAURI_BUNDLER_DMG_IGNORE_CI", "APPLE_ID", "APPLE_PASSWORD", "APPLE_TEAM_ID",
+                "APPLE_API_ISSUER", "APPLE_API_KEY", "APPLE_API_KEY_PATH", "APPLE_SIGNING_IDENTITY",
+                "TAURI_SIGNING_PRIVATE_KEY", "TAURI_SIGNING_PRIVATE_KEY_PASSWORD"):
+        environment.pop(key, None)
+    return environment
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("package", choices=["headless", "desktop"])
@@ -198,12 +210,7 @@ def main():
     destination = OUTPUT / "artifacts" / args.package
     # Refuse stale outputs; never delete a previous build or the original targets.
     destination.mkdir(parents=True, exist_ok=False)
-    environment = dict(os.environ, CARGO_TARGET_DIR=str(OUTPUT / "cargo"),
-                       HPS_WEB_ASSETS_DIR=str(ROOT / "dist"), HPS_SOURCE_REVISION=revision,
-                       HPS_SOURCE_DIRTY="0", HPS_FORBID_HOST_NETWORK_CHANGES="1")
-    for key in ("APPLE_ID", "APPLE_PASSWORD", "APPLE_TEAM_ID", "APPLE_API_ISSUER", "APPLE_API_KEY",
-                "APPLE_API_KEY_PATH", "APPLE_SIGNING_IDENTITY", "TAURI_SIGNING_PRIVATE_KEY", "TAURI_SIGNING_PRIVATE_KEY_PASSWORD"):
-        environment.pop(key, None)
+    environment = build_environment(revision)
     release = OUTPUT / "cargo" / args.target / "release"
     builders = {"headless": headless, "desktop": desktop}
     builders[args.package](args.target, revision, web, environment, release, destination)

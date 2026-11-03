@@ -3,6 +3,7 @@ import copy
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
 import tarfile
@@ -41,7 +42,8 @@ class ArchiveTests(unittest.TestCase):
                 else:
                     with tarfile.open(archive) as contents:
                         member = contents.getmember("hps-ci/bin/hpsd")
-                        self.assertEqual(member.mode & 0o111, 0o111)
+                        if os.name != "nt":
+                            self.assertEqual(member.mode & 0o111, 0o111)
                         self.assertEqual(contents.extractfile(member).read(), binary.read_bytes())
                 for line in (stage / "SHA256SUMS").read_text().splitlines():
                     expected, path = line.split("  ", 1)
@@ -99,6 +101,15 @@ class WebTests(unittest.TestCase):
 
 
 class MetadataTests(unittest.TestCase):
+    def test_local_replay_enforces_headless_bundling_and_network_guard(self):
+        with mock.patch.dict(os.environ, {"CI": "false", "TAURI_BUNDLER_DMG_IGNORE_CI": "true",
+                                         "HPS_FORBID_HOST_NETWORK_CHANGES": "0", "APPLE_PASSWORD": "fixture"}):
+            environment = ci.build_environment("abc123")
+        self.assertEqual(environment["CI"], "true")
+        self.assertEqual(environment["HPS_FORBID_HOST_NETWORK_CHANGES"], "1")
+        self.assertNotIn("TAURI_BUNDLER_DMG_IGNORE_CI", environment)
+        self.assertNotIn("APPLE_PASSWORD", environment)
+
     def test_checks_source_web_and_architecture_for_all_targets(self):
         for target, (platform, suffix, _) in ci.TARGETS.items():
             with self.subTest(target=target):

@@ -60,6 +60,6 @@ python3 -B scripts/build-ci.py desktop --target aarch64-apple-darwin
 
 构建工具链来自 `rust-toolchain.toml`、`package.json`、`packaging/toolchains.json`，全部 Cargo/pnpm 命令使用锁文件。Windows 也可使用 `python` 调用脚本。输出固定在独立的 `target/ci-build`；脚本拒绝覆盖已存在的同类 artifacts 目录，复跑前自行保存并移走该目录。不要删除原 `src-tauri/target` 或已安装应用。
 
-构建始终设置 `HPS_FORBID_HOST_NETWORK_CHANGES=1`，仅执行无窗口的编译元数据检查，不安装或启动系统服务，不写系统代理、DNS 或路由。开发应用运行时仍需设置该变量。
+构建始终设置 `HPS_FORBID_HOST_NETWORK_CHANGES=1`，仅执行无窗口的编译元数据检查，不安装或启动系统服务，不写系统代理、DNS 或路由。脚本还强制 `CI=true` 并移除 `TAURI_BUNDLER_DMG_IGNORE_CI`，本地复跑 DMG 时跳过 Finder 自动化与图标排版，避免图形权限等待。开发应用运行时仍需设置网络保护变量。
 
 参考：[GitHub runner 清单](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)、[Artifacts](https://github.com/actions/upload-artifact)、[Tauri CI](https://v2.tauri.app/distribute/pipelines/github/) 与 [Linux 依赖](https://v2.tauri.app/start/prerequisites/)。本地检查与 GitHub 实际执行结果应分别记录，未运行的平台不能记为验收通过。
