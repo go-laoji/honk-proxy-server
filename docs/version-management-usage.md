@@ -82,7 +82,7 @@ git push origin v0.1.1
 
 正常共 27 个附件。原生文件名和字节不变，命令行包的 `-ci` 后缀也保留；总校验和使用实际发布的文件名。汇总结果还保存为 `release-<tag>` Actions Artifact。查看 **Releases → 对应版本 → Assets** 下载，或继续使用 Actions Artifacts。
 
-新 Release 先创建为 draft，附件上传、远端 SHA256 确认全部成功后自动转为公开发布，不需要额外手动发布草稿。`-rc.1` 等预发行版本标为 prerelease。分支 push、PR 和普通手动 workflow 不创建 Release；失败或缺失任一平台产物也不会新建公开 Release。
+新 Release 先创建为 draft，附件上传、远端 SHA256 确认全部成功后自动转为公开发布，不需要额外手动发布草稿。`-rc.1` 等预发行版本标为 prerelease。工作流仅保留 `v*` 标签 push，分支 push、PR 和手动 workflow 不启动构建或创建 Release；失败或缺失任一平台产物也不会新建公开 Release。
 
 发布中断时保留 draft，重新运行失败的发布 job 会跳过字节一致的附件并补齐缺失附件。已发布版本也允许补齐缺失附件；遇到同名但不同字节的附件则失败，不使用 `--clobber` 或删除原附件。若全量重建同一 tag 产生不同字节，应检查差异并发新版本，不能把不同产物静默替换到原标签下。
 

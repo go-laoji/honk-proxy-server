@@ -164,7 +164,7 @@ flowchart TB
 
 ## 下载与快速开始
 
-从 [GitHub Releases](https://github.com/go-laoji/honk-proxy-server/releases) 下载匹配系统/架构的 `hps-headless-<版本>-<target>-ci` 压缩包及对应 `.sha256`。Desktop 选择平台安装包。日常分支构建也可在 [GitHub Actions](https://github.com/go-laoji/honk-proxy-server/actions/workflows/build.yml) 的 Artifacts 下载，默认保留 14 天。
+从 [GitHub Releases](https://github.com/go-laoji/honk-proxy-server/releases) 下载匹配系统/架构的 `hps-headless-<版本>-<target>-ci` 压缩包及对应 `.sha256`。Desktop 选择平台安装包。版本标签构建的产物也可在 [GitHub Actions](https://github.com/go-laoji/honk-proxy-server/actions/workflows/build.yml) 的 Artifacts 下载，默认保留 14 天；普通分支提交和 PR 不触发构建。
 
 以下以 **v0.1.1 / Apple Silicon** 为例，其他平台替换文件名与 target。先在下载目录核对摘要，再解压：
 
@@ -503,7 +503,7 @@ python -B -m unittest discover -s tests/release-management -p 'test_*.py' -v
 
 Desktop 检查需要平台 SDK/图形开发依赖。Playwright 自动在 `127.0.0.1:17991` 启动自有临时 Daemon，不复用已有服务器。真实 Linux 数据面必须在隔离内核环境另行验收；管理 API 测试不能替代它。宿主 Mac 仅允许网络配置只读和无 OS 写入的事务测试，禁止重跑事故前的旧网络写入测试二进制。
 
-[Cross-platform builds](.github/workflows/build.yml) 在分支 push、PR、版本标签和手动触发时构建同一 Web，再生成五组原生 CLI/Daemon 与 Desktop 包。普通运行保存 Artifacts；`v*` 标签的全部构建成功后，把原始包、清单和摘要自动同步到同名 GitHub Release。完整 eBPF 发行使用独立的 [release.yml](.github/workflows/release.yml) 和实际内核门槛。流程细节见 [三系统 CI](docs/ci-builds-usage.md)。
+[Cross-platform builds](.github/workflows/build.yml) 仅在推送 `v*` 版本标签时构建同一 Web，再生成五组原生 CLI/Daemon 与 Desktop 包。产物保存为 Artifacts，全部构建成功后，把原始包、清单和摘要自动同步到同名 GitHub Release。普通分支 push、PR 和手动入口均不触发新构建，文档提交无需启动 CI。完整 eBPF 发行使用独立的 [release.yml](.github/workflows/release.yml)，同样仅由 `v*` 标签推送触发，并保留实际内核门槛。流程细节见 [三系统 CI](docs/ci-builds-usage.md)。
 
 ## 版本与发布
 

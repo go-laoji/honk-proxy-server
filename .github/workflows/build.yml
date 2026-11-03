@@ -2,10 +2,7 @@ name: Cross-platform builds
 
 on:
   push:
-    branches: [main, develop, 'feature/**', 'release/**', 'hotfix/**']
     tags: ['v*']
-  pull_request:
-  workflow_dispatch:
 
 permissions:
   contents: read
