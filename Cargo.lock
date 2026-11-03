@@ -777,7 +777,7 @@ dependencies = [
 
 [[package]]
 name = "hps-api"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-stream",
  "axum",
@@ -801,7 +801,7 @@ dependencies = [
 
 [[package]]
 name = "hps-application"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "arc-swap",
  "axum",
@@ -843,7 +843,7 @@ dependencies = [
 
 [[package]]
 name = "hps-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "clap",
  "hps-client",
@@ -863,7 +863,7 @@ dependencies = [
 
 [[package]]
 name = "hps-client"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "hps-config",
  "hps-dns",
@@ -878,7 +878,7 @@ dependencies = [
 
 [[package]]
 name = "hps-config"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "hps-domain",
  "hps-net",
@@ -892,7 +892,7 @@ dependencies = [
 
 [[package]]
 name = "hps-daemon"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "axum",
  "aya",
@@ -919,7 +919,7 @@ dependencies = [
 
 [[package]]
 name = "hps-dns"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bytes",
  "hickory-proto",
@@ -947,7 +947,7 @@ dependencies = [
 
 [[package]]
 name = "hps-domain"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -955,14 +955,14 @@ dependencies = [
 
 [[package]]
 name = "hps-ebpf-abi"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "aya",
 ]
 
 [[package]]
 name = "hps-engine"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-stream",
  "base64 0.22.1",
@@ -995,7 +995,7 @@ dependencies = [
 
 [[package]]
 name = "hps-health"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bytes",
  "hps-config",
@@ -1017,7 +1017,7 @@ dependencies = [
 
 [[package]]
 name = "hps-net"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "libc",
  "serde",
@@ -1028,7 +1028,7 @@ dependencies = [
 
 [[package]]
 name = "hps-platform"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "aya",
  "fs2",
@@ -1053,7 +1053,7 @@ dependencies = [
 
 [[package]]
 name = "hps-provider"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -1076,7 +1076,7 @@ dependencies = [
 
 [[package]]
 name = "hps-storage"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "fs2",
  "hps-config",
@@ -1094,7 +1094,7 @@ dependencies = [
 
 [[package]]
 name = "hps-system"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "core-foundation",
  "fs2",
@@ -1113,7 +1113,7 @@ dependencies = [
 
 [[package]]
 name = "hps-web-assets"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde_json",
  "sha2",

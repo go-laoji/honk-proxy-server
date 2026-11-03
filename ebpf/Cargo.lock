@@ -98,7 +98,7 @@ dependencies = [
 
 [[package]]
 name = "hps-ebpf"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "aya-ebpf",
  "hps-ebpf-abi",
@@ -106,7 +106,7 @@ dependencies = [
 
 [[package]]
 name = "hps-ebpf-abi"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "itoa"
