@@ -1,6 +1,6 @@
 # GitHub Actions 三系统构建与下载
 
-工作流为 `.github/workflows/build.yml`，在 Actions 中显示为 **Cross-platform builds**。提交到 `main`、`develop`、`feature/**`、`release/**`、`hotfix/**`，创建 PR 或推送 `v*` 标签时自动执行，也支持 **Run workflow** 手动选择分支。工作流文件必须先推送到 GitHub；手动按钮还要求工作流存在于默认分支。
+工作流为 `.github/workflows/build.yml`，在 Actions 中显示为 **Cross-platform builds**。仅在推送 `v*` 版本标签（如 `v0.1.2`、`v0.2.0-rc.1`）时自动执行。普通分支 push、PR 和手动 workflow_dispatch 均不触发，不会因单独提交或推送文档而构建。工作流配置必须包含在所推送标签指向的提交中。
 
 ## 产物矩阵
 
@@ -22,7 +22,7 @@
 
 Artifacts 保存 14 天。每个平台先上传 headless，再构建 Desktop；Desktop 构建失败时，同平台已经成功上传的 headless 包仍可下载。矩阵使用 `fail-fast: false`，单个平台失败不会取消其他平台。
 
-版本标签 push 的全部构建成功后，还会把十份原生包及校验清单同步到 **Releases → 同名版本 → Assets**。该发布 job 校验 tag/版本/源码、十份产物和共同 Web，附件名称不会发生清单覆盖；预发行 tag 自动标为 prerelease。普通分支、PR 和手动运行只上传 Artifacts。版本管理、27 个 Release 附件和失败重跑规则见 [cargo-release 与 GitHub Release](version-management-usage.md)。
+版本标签 push 的全部构建成功后，还会把十份原生包及校验清单同步到 **Releases → 同名版本 → Assets**。该发布 job 校验 tag/版本/源码、十份产物和共同 Web，附件名称不会发生清单覆盖；预发行 tag 自动标为 prerelease。普通分支、PR 和手动运行不启动工作流，也不会生成新 Artifacts。完整 eBPF 验收入口 `release.yml` 同样仅由 `v*` 标签推送触发；`headless.yml` / `desktop.yml` 只供该链通过 `workflow_call` 复用，不单独监听 push/PR/手动事件。版本管理、27 个 Release 附件和失败重跑规则见 [cargo-release 与 GitHub Release](version-management-usage.md)。
 
 ## 使用与能力边界
 

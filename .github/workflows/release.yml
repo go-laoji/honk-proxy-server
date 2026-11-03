@@ -1,7 +1,7 @@
 name: Release candidates and quality gates
 on:
-  pull_request:
-  workflow_dispatch:
+  push:
+    tags: ['v*']
 permissions:
   contents: read
 concurrency:

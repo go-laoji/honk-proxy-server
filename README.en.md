@@ -164,7 +164,7 @@ The main Cargo workspace contains 17 packages: 2 applications and 15 libraries. 
 
 ## Download and quick start
 
-From [GitHub Releases](https://github.com/go-laoji/honk-proxy-server/releases), download the `hps-headless-<version>-<target>-ci` archive matching your system/architecture and its `.sha256` file. For Desktop, choose the platform installer. Branch builds are also available as Artifacts in [GitHub Actions](https://github.com/go-laoji/honk-proxy-server/actions/workflows/build.yml), retained for 14 days by default.
+From [GitHub Releases](https://github.com/go-laoji/honk-proxy-server/releases), download the `hps-headless-<version>-<target>-ci` archive matching your system/architecture and its `.sha256` file. For Desktop, choose the platform installer. Version tag build outputs are also available as Artifacts in [GitHub Actions](https://github.com/go-laoji/honk-proxy-server/actions/workflows/build.yml), retained for 14 days by default. Ordinary branch commits and PRs do not trigger builds.
 
 This example uses **v0.1.1 / Apple Silicon**. Substitute the filename and target for other platforms. Verify the digest in your download directory before extracting:
 
@@ -503,7 +503,7 @@ python -B -m unittest discover -s tests/release-management -p 'test_*.py' -v
 
 Desktop checks require platform SDK/graphical development dependencies. Playwright starts an owned ephemeral daemon at `127.0.0.1:17991` and does not reuse an existing server. Real Linux forwarding requires separate isolated-kernel acceptance; management API tests cannot replace it. On the development Mac, only read-only network checks and transactions without OS writes are allowed. Do not rerun old network-writing test binaries from before the recorded incident.
 
-[Cross-platform builds](.github/workflows/build.yml) handles branch pushes, PRs, version tags, and manual runs. It builds Web once, then five native CLI/Daemon and Desktop pairs. Ordinary runs upload Artifacts. After every build for a `v*` tag succeeds, original packages, manifests, and checksums are synchronized to the matching GitHub Release. Full eBPF releases use the separate [release.yml](.github/workflows/release.yml) and actual kernel gates. See [cross-platform CI](docs/ci-builds-usage.md).
+[Cross-platform builds](.github/workflows/build.yml) runs only when a `v*` version tag is pushed. It builds Web once, then five native CLI/Daemon and Desktop pairs. Outputs are uploaded as Artifacts; after every build succeeds, original packages, manifests, and checksums are synchronized to the matching GitHub Release. Branch pushes, PRs, and manual dispatch do not start new builds, so documentation commits do not launch CI. Full eBPF releases use the separate [release.yml](.github/workflows/release.yml), also triggered only by `v*` tag pushes, with the actual kernel gates retained. See [cross-platform CI](docs/ci-builds-usage.md).
 
 ## Versioning and releases
 

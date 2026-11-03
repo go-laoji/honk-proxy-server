@@ -34,12 +34,12 @@ Desktop 打包默认写入独立的 `target/desktop-release`，拒绝覆盖原�
 
 ## 工作流与证据范围
 
-日常 Windows/Linux/macOS 构建使用独立的 `build.yml`，支持 push、PR、标签和手动执行，产物及下载说明见 [三系统 CI](ci-builds-usage.md)。它生成明确标记的普通 CI 包，不包含 Linux eBPF 对象、不替代以下发行验收门槛。
+Windows/Linux/macOS 通用构建使用独立的 `build.yml`，仅在推送 `v*` 版本标签时执行，产物及下载说明见 [三系统 CI](ci-builds-usage.md)。普通分支、PR 和手动事件不触发构建。它生成明确标记的普通 CI 包，不包含 Linux eBPF 对象、不替代以下发行验收门槛。
 
 产品版本由 cargo-release 统一管理，不发布 registry、不自动 push；版本 tag 推送后，`build.yml` 的全部原生构建成功才会自动发布对应 GitHub Release 附件，见 [版本与 Release 使用说明](version-management-usage.md)。GitHub Release 的通用构建附件与下述完整内核验收包保持各自的真实能力记录。
 
-`.github/workflows/release.yml` 只在 PR 或手动启动时运行，没有发布、push、远端删分支、自动启用服务或系统网络操作。它只构建一次 Web，真实内核工作并行跑两种架构的两个客体内核，全部 48+4 案例通过后才把对象与证据传给独立 headless/Desktop 工作流。Actions 和 Rust 基础镜像固定摘要，官方 bpf-linker 0.12.0 下载需先核对固定 SHA256。
+`.github/workflows/release.yml` 同样仅在推送 `v*` 版本标签时运行，`headless.yml` / `desktop.yml` 仅通过它复用。该完整内核验收链没有发布、push、远端删分支、自动启用服务或宿主系统网络操作。它只构建一次 Web，真实内核工作并行跑两种架构的两个客体内核，全部 48+4 案例通过后才把对象与证据传给独立 headless/Desktop 工作流。Actions 和 Rust 基础镜像固定摘要，官方 bpf-linker 0.12.0 下载需先核对固定 SHA256。
 
-工作流已加入源码；没有获授权推送，远端 CI 尚未实际执行。本地验证结果独立记录在 `docs/validation`。GitHub runner 标签参考 [官方 runner 清单](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)，Linux Desktop 依赖参考 [Tauri 官方前置条件](https://tauri.app/start/prerequisites/)。
+各版本的本地与远端验证结果独立记录在 `docs/validation`；通用包已有 v0.1.1 发布记录，不能据此推断完整内核发行链或本轮标签触发调整已经完成实际远端内核验收。GitHub runner 标签参考 [官方 runner 清单](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)，Linux Desktop 依赖参考 [Tauri 官方前置条件](https://tauri.app/start/prerequisites/)。
 
 宿主 Mac 始终设置 `HPS_FORBID_HOST_NETWORK_CHANGES=1`；只能读配置和无 OS 写入的事务/恢复验证。真实持久代理修改明确未验收，事故前的旧测试无效。付费供应商帐号调用也未验收；按用户授权，快代理官方契约/故障夹具和免费源实测分别列出。
