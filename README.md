@@ -72,7 +72,7 @@ flowchart TB
         CLI -. "显式本机操作" .-> Local
         Desktop -. "显式本机操作" .-> Local
     end
-    subgraph Daemon["hpsd · 独立 Daemon"]
+    subgraph Daemon["hpsd · 后台服务"]
         API["hps-api · REST / SSE / 嵌入式 Web"]
         App["hps-application · 配置 / 节点 / 分组 / 规则 / 任务"]
         Controllers["供应商 / 补池 / 订阅 / 健康控制器"]
@@ -204,7 +204,7 @@ curl --proxy http://127.0.0.1:17901 https://example.com/
 curl --proxy socks5h://127.0.0.1:17903 https://example.com/
 ```
 
-健康默认启用，新节点需要获得新鲜成功证据才可准入；凭据、到期时间、最低剩余寿命、规则和容量也会影响选点。可以在健康页面或 `hps health probe --help` 查看主动检测入口。不要为了让请求“成功”而把未知出口伪装成健康。
+健康默认启用，新节点需要获得新鲜成功证据才可准入；凭据、到期时间、最低剩余寿命、规则和容量也会影响选点。默认 TCP IPv4 检测目标是 `https://www.baidu.com/`，TCP IPv6 默认停用；可在健康策略中改为自己的稳定检测站点。可以在健康页面或 `hps health probe --help` 查看主动检测入口，未知或过期证据不会显示为健康。
 
 HTTPS **代理入口**还需配置证书/私钥，HTTPS **上游**按供应商证书名称验证；两者不是目标网站的 HTTPS。相对证书路径按 TOML 所在目录解析。详见 [显式代理接入](docs/explicit-proxy-usage.md)。
 

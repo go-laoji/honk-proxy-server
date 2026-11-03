@@ -72,7 +72,7 @@ flowchart TB
         CLI -. "Explicit local actions" .-> Local
         Desktop -. "Explicit local actions" .-> Local
     end
-    subgraph Daemon["hpsd · Independent daemon"]
+    subgraph Daemon["hpsd · Daemon"]
         API["hps-api · REST / SSE / Embedded Web"]
         App["hps-application · Config / nodes / groups / rules / tasks"]
         Controllers["Provider / replenishment / subscription / health controllers"]
@@ -204,7 +204,7 @@ curl --proxy http://127.0.0.1:17901 https://example.com/
 curl --proxy socks5h://127.0.0.1:17903 https://example.com/
 ```
 
-Health checking is enabled by default. New nodes require fresh successful evidence for admission; credentials, expiry, minimum remaining lifetime, rules, and capacity also affect selection. Use the health page or `hps health probe --help` for active probing. Do not present unknown egress as healthy just to make a request pass.
+Health checking is enabled by default. New nodes require fresh successful evidence for admission; credentials, expiry, minimum remaining lifetime, rules, and capacity also affect selection. The default TCP IPv4 probe target is `https://www.baidu.com/`; TCP IPv6 probing is off by default. You can choose your own stable target in the health policy. Use the health page or `hps health probe --help` for active probing. Unknown or stale evidence is not shown as healthy.
 
 An HTTPS **proxy ingress** needs a certificate/private key; an HTTPS **upstream** validates the provider's certificate name. These are distinct from HTTPS at the destination website. Relative certificate paths resolve against the TOML directory. See [explicit proxy usage](docs/explicit-proxy-usage.md).
 
