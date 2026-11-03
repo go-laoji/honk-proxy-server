@@ -1,0 +1,176 @@
+{
+  "issue": 29,
+  "tested_at": "2026-11-03T08:25:36.152540+08:00",
+  "target": "https://myip.ipip.net/",
+  "scope": "Authenticated static SOCKS5 upstream; HTTPS IPv4 over TCP",
+  "passed": true,
+  "runtime": {
+    "source_commit": "c79e07dc626f37fb41d78b83fa340648afe7968f",
+    "validation_branch_head": "f364a0d387d53f6872cda19f63ced9cd728a3a9f",
+    "rust_sources_and_workspace_manifests_unchanged_between_commits": true,
+    "binary_sha256": "6fcd7db562d1b3cffd0585b547b76f513df097b78e768fba3305c45032dd9055",
+    "ephemeral": true,
+    "management_and_ingress_loopback_only": true,
+    "host_network_changes_forbidden": true,
+    "daemon_stopped": true
+  },
+  "privacy": {
+    "credentials_included": false,
+    "supplier_endpoint_included": false,
+    "host_direct_egress_included": false
+  },
+  "baseline": {
+    "curl_exit": 0,
+    "http_status": 200,
+    "ssl_verify_result": 0,
+    "proxy_disabled_explicitly": true
+  },
+  "curl_results": {
+    "direct-socks5": {
+      "curl_exit": 0,
+      "http_status": 200,
+      "connect_status": 0,
+      "ssl_verify_result": 0,
+      "exit_ip": "106.38.56.186",
+      "elapsed_secs": 0.292,
+      "peer_matches_expected_proxy": true,
+      "egress_differs_from_baseline": true,
+      "egress_matches_direct_socks5": true,
+      "verified": true
+    },
+    "direct-socks5h": {
+      "curl_exit": 0,
+      "http_status": 200,
+      "connect_status": 0,
+      "ssl_verify_result": 0,
+      "exit_ip": "106.38.56.186",
+      "elapsed_secs": 0.339,
+      "peer_matches_expected_proxy": true,
+      "egress_differs_from_baseline": true,
+      "egress_matches_direct_socks5": true,
+      "verified": true
+    },
+    "hps-http-connect": {
+      "curl_exit": 0,
+      "http_status": 200,
+      "connect_status": 200,
+      "ssl_verify_result": 0,
+      "exit_ip": "106.38.56.186",
+      "elapsed_secs": 0.369,
+      "peer_matches_expected_proxy": true,
+      "egress_differs_from_baseline": true,
+      "egress_matches_direct_socks5": true,
+      "verified": true
+    },
+    "hps-socks5": {
+      "curl_exit": 0,
+      "http_status": 200,
+      "connect_status": 0,
+      "ssl_verify_result": 0,
+      "exit_ip": "106.38.56.186",
+      "elapsed_secs": 0.291,
+      "peer_matches_expected_proxy": true,
+      "egress_differs_from_baseline": true,
+      "egress_matches_direct_socks5": true,
+      "verified": true
+    },
+    "hps-socks5h": {
+      "curl_exit": 0,
+      "http_status": 200,
+      "connect_status": 0,
+      "ssl_verify_result": 0,
+      "exit_ip": "106.38.56.186",
+      "elapsed_secs": 0.319,
+      "peer_matches_expected_proxy": true,
+      "egress_differs_from_baseline": true,
+      "egress_matches_direct_socks5": true,
+      "verified": true
+    }
+  },
+  "health": {
+    "node_id": "long-lived-socks5",
+    "eligible": true,
+    "probe": {
+      "transport": "tcp",
+      "family": "ipv4",
+      "verdict": "healthy",
+      "phase": "complete",
+      "error_code": null,
+      "endpoint_reachable": true,
+      "authenticated": true,
+      "tunnel_established": true,
+      "http_status": 200,
+      "target_ok": true,
+      "latency_ms": 267
+    }
+  },
+  "connections": {
+    "query": "/api/v1/connections?state=all&limit=20",
+    "statistics": {
+      "started": 3,
+      "opened": 3,
+      "closed": 3,
+      "active": 0,
+      "failed": 0,
+      "rejected": 0,
+      "untracked_total": 0,
+      "bytes_up": 1566,
+      "bytes_down": 14323,
+      "errors": {}
+    },
+    "records": [
+      {
+        "inbound": "validation-socks5",
+        "destination_host": "myip.ipip.net",
+        "destination_port": 443,
+        "state": "closed",
+        "bytes_up": 522,
+        "bytes_down": 4775,
+        "error_code": null,
+        "node_id": "long-lived-socks5",
+        "upstream_protocol": "socks5",
+        "upstream_matches_supplied_endpoint": true
+      },
+      {
+        "inbound": "validation-socks5",
+        "destination_host": "220.185.184.53",
+        "destination_port": 443,
+        "state": "closed",
+        "bytes_up": 522,
+        "bytes_down": 4775,
+        "error_code": null,
+        "node_id": "long-lived-socks5",
+        "upstream_protocol": "socks5",
+        "upstream_matches_supplied_endpoint": true
+      },
+      {
+        "inbound": "validation-http",
+        "destination_host": "myip.ipip.net",
+        "destination_port": 443,
+        "state": "closed",
+        "bytes_up": 522,
+        "bytes_down": 4773,
+        "error_code": null,
+        "node_id": "long-lived-socks5",
+        "upstream_protocol": "socks5",
+        "upstream_matches_supplied_endpoint": true
+      }
+    ]
+  },
+  "previous_fresh_free_provider_attempt": {
+    "round": "fresh-1793661075",
+    "source": "http://www.ip3366.net/free/?stype=1",
+    "count": 8,
+    "verified_proxy_access": 0,
+    "request_age_seconds_after_lease_received_min": 0.519,
+    "request_age_seconds_after_lease_received_max": 0.532,
+    "healthy_nodes": 0,
+    "hps_connect_status": 503,
+    "elapsed_seconds": 5.511,
+    "cache_bypass_headers": true,
+    "cache_busting_query": true,
+    "local_cache_ttl_is_not_supplier_lifetime_guarantee": true
+  },
+  "application_code_changed": false,
+  "conclusion": "All authenticated SOCKS5 HTTPS egress comparisons passed; no application defect reproduced in this path. Previous sampled public free endpoints did not provide verified access from this host."
+}
