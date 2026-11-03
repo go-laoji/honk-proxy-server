@@ -7,6 +7,7 @@ honk 仅作为能力参考；项目不集成其 crate、二进制或 fork。
 ## 开发与任务
 
 - [开发任务和进度](docs/development-task-checklist.md)：21 个开发 Issue，覆盖 99 项功能。
+- [GitHub Actions 三系统构建与下载](docs/ci-builds-usage.md)：Windows、Linux、macOS 的 CLI/Daemon 包及 Desktop 安装包。
 - [技术规划](docs/technical-architecture-plan.md)、[控制台功能](docs/console-feature-checklist.md)。
 - 全部可达使用者可直接操作已实现功能，无登录、账号或权限验证。
 - 代理入口、短效供应商 API 和真实 Linux eBPF 分阶段交付；管理服务启动不代表代理已就绪。

@@ -34,6 +34,8 @@ Desktop 打包默认写入独立的 `target/desktop-release`，拒绝覆盖原�
 
 ## 工作流与证据范围
 
+日常 Windows/Linux/macOS 构建使用独立的 `build.yml`，支持 push、PR、标签和手动执行，产物及下载说明见 [三系统 CI](ci-builds-usage.md)。它生成明确标记的普通 CI 包，不包含 Linux eBPF 对象、不替代以下发行验收门槛。
+
 `.github/workflows/release.yml` 只在 PR 或手动启动时运行，没有发布、push、远端删分支、自动启用服务或系统网络操作。它只构建一次 Web，真实内核工作并行跑两种架构的两个客体内核，全部 48+4 案例通过后才把对象与证据传给独立 headless/Desktop 工作流。Actions 和 Rust 基础镜像固定摘要，官方 bpf-linker 0.12.0 下载需先核对固定 SHA256。
 
 工作流已加入源码；没有获授权推送，远端 CI 尚未实际执行。本地验证结果独立记录在 `docs/validation`。GitHub runner 标签参考 [官方 runner 清单](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)，Linux Desktop 依赖参考 [Tauri 官方前置条件](https://tauri.app/start/prerequisites/)。

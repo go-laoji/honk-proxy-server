@@ -141,7 +141,7 @@ pub(super) async fn local_context(
                 .path()
                 .resource_dir()
                 .ok()
-                .map(|p| p.join("bin/hpsd"))
+                .map(|p| p.join(format!("bin/hpsd{}", std::env::consts::EXE_SUFFIX)))
                 .filter(|p| p.is_file())
                 .map(|p| p.to_string_lossy().into_owned()),
             bundled_config: app
