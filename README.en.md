@@ -11,6 +11,7 @@ It suits individuals and controlled networks that need to manage multiple proxy 
 ## Contents
 
 - [Fixed proxy endpoint and request flow](#fixed-proxy-endpoint-and-request-flow)
+- [Runtime screenshots](#runtime-screenshots)
 - [Features and platform support](#features-and-platform-support)
 - [Architecture and components](#architecture-and-components)
 - [Download and quick start](#download-and-quick-start)
@@ -47,6 +48,26 @@ A request forwarded through an upstream proxy follows these steps:
 3. HPS connects to the destination through the selected upstream proxy and returns the response along the connection path.
 
 This lets crawlers and other callers keep one local proxy address while HPS handles node maintenance and egress selection. Rules can also explicitly choose Direct or Reject. Proxy forwarding rejects requests when no eligible node exists, without silently connecting directly. Egress changes apply to subsequent new connections; connection reuse or session pinning may retain a node. This does not mean every HTTP request gets a new IP, nor does it migrate existing connections or automatically replay failed requests.
+
+## Runtime screenshots
+
+These screenshots show a running v0.1.1 Web console. The instance uses local loopback test upstreams and destination services, with real health checks, rule-based selection, and connection traffic. The interface is currently in Chinese.
+
+**Overview**: management and proxy readiness, eligible nodes, active connections, and cumulative traffic.
+
+![Overview: proxy ready, two eligible nodes, and three forwarding connections](docs/screenshots/overview.png)
+
+**Proxy nodes**: node sources, health, manual restrictions, and related connections, including eligible and disabled nodes.
+
+![Proxy nodes: two healthy upstreams and one disabled node](docs/screenshots/nodes.png)
+
+**Routing rules**: forwarding to the `crawler-pool` group and explicit rejection, with rule order and the current runtime revision.
+
+![Routing rules: matching destinations and inbounds to a group or rejection](docs/screenshots/rules.png)
+
+**Active connections**: actual CONNECT tunnels with their matched rule, egress node, and traffic in both directions.
+
+![Active connections: three local test tunnels using two upstream nodes in the pool](docs/screenshots/connections.png)
 
 ## Features and platform support
 
