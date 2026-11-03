@@ -86,6 +86,9 @@ class VersioningTests(unittest.TestCase):
         self.run_command("cargo", "release", "0.2.0-rc.1", "--workspace", "--execute", "--no-confirm")
         self.assertEqual(versioning.check_versions(self.root, "v0.2.0-rc.1"), "0.2.0-rc.1")
         self.assertEqual(self.run_command("git", "rev-list", "--count", "HEAD"), "3")
+        self.run_command("cargo", "release", "0.3.0", "--metadata", "build.7", "--workspace", "--execute", "--no-confirm")
+        self.assertEqual(versioning.check_versions(self.root, "v0.3.0"), "0.3.0+build.7")
+        self.assertEqual(self.run_command("git", "rev-list", "--count", "HEAD"), "4")
 
     def test_rejects_mismatched_tag_and_independent_version(self):
         with self.assertRaisesRegex(ValueError, "does not match"):

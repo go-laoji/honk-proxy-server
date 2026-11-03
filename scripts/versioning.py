@@ -36,6 +36,11 @@ def product_version(root=ROOT):
     return valid_version(read_toml(root / "Cargo.toml")["workspace"]["package"]["version"])
 
 
+def version_tag(version):
+    # cargo-release's {{version}} excludes build metadata, but includes prerelease.
+    return "v" + valid_version(version).split("+", 1)[0]
+
+
 def workspace_packages(root):
     workspace = read_toml(root / "Cargo.toml")["workspace"]
     packages = {}
@@ -52,7 +57,7 @@ def workspace_packages(root):
 def check_versions(root=ROOT, tag=None):
     version = product_version(root)
     if tag is not None:
-        require(tag == "v" + version, f"tag {tag!r} does not match product version v{version}")
+        require(tag == version_tag(version), f"tag {tag!r} does not match product version {version}")
     members = workspace_packages(root)
     names = set(members)
     for relative in STANDALONES:

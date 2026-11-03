@@ -25,6 +25,8 @@ python -B scripts/versioning.py --check
 
 根 `release.toml` 配置 `publish = false`、`push = false`、共享版本和统一 `v{{version}}` 标签。Hook 仅配置在 `hps-cli`，避免每个 crate 重复执行。请使用整个 workspace 的命令，不用 `--package`/`--exclude` 发单个内部 crate。
 
+遵循 cargo-release 的标签规则，预发行段包含在标签中（如 `v0.2.0-rc.1`），`+build.7` 这样的 build metadata 会同步到产品文件，但不进入标签；同一版本不能用不同 build metadata 重复占用原标签。
+
 ## 提升版本与打标签
 
 在干净的发布工作区操作。cargo-release 会检查未提交及未跟踪内容；当前主工作区保留的原始演示/编辑器文件不要为了发布而加入版本提交或删除，可在干净的源码副本中完成发布操作。

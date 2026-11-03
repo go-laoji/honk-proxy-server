@@ -11,7 +11,7 @@ import subprocess
 import tempfile
 from urllib.parse import quote
 
-from versioning import check_versions, require, valid_version
+from versioning import check_versions, require, version_tag
 
 ROOT = Path(__file__).resolve().parents[1]
 TARGETS = {
@@ -51,7 +51,7 @@ def verified_files(directory):
 
 
 def prepare(source, destination, tag, revision, version):
-    require(tag == "v" + valid_version(version), "tag does not match source version")
+    require(tag == version_tag(version), "tag does not match source version")
     require(re.fullmatch(r"[0-9a-f]{40}", revision), "expected a full source commit")
     folders = {f"{package}-{target}" for target in TARGETS for package in ("headless", "desktop")}
     require({path.name for path in source.iterdir()} == folders, "all ten native artifacts are required")
@@ -149,7 +149,7 @@ def publish(directory, repo, tag, revision):
     files = verified_files(directory)
     manifest = json.loads(files["release-manifest.json"].read_text(encoding="utf-8"))
     require(manifest["tag"] == tag and manifest["source_revision"] == revision, "Release manifest source/tag mismatch")
-    require(tag == "v" + valid_version(manifest["version"]), "Release manifest version mismatch")
+    require(tag == version_tag(manifest["version"]), "Release manifest version mismatch")
     expected_names = set(manifest["assets"]) | {"release-manifest.json", "SHA256SUMS"}
     require(set(files) == expected_names, "Release manifest and staged assets differ")
     require(all(digest(files[name]) == value for name, value in manifest["assets"].items()), "Release manifest checksums differ")
