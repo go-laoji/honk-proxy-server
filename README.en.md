@@ -10,6 +10,7 @@ It suits individuals and controlled networks that need to manage multiple proxy 
 
 ## Contents
 
+- [Fixed proxy endpoint and request flow](#fixed-proxy-endpoint-and-request-flow)
 - [Features and platform support](#features-and-platform-support)
 - [Architecture and components](#architecture-and-components)
 - [Download and quick start](#download-and-quick-start)
@@ -23,6 +24,29 @@ It suits individuals and controlled networks that need to manage multiple proxy 
 - [Versioning and releases](#versioning-and-releases)
 - [Troubleshooting](#troubleshooting)
 - [Further documentation](#further-documentation)
+- [AI authorship and feedback](#ai-authorship-and-feedback)
+
+## Fixed proxy endpoint and request flow
+
+Configure your browser or crawler to use a fixed HPS proxy endpoint. HPS maintains the upstream pool and selects the actual egress. For example, after starting the proxy configuration shown below, set the browser's HTTP proxy host to `127.0.0.1` and port to `17901`. A crawler can keep using `http://127.0.0.1:17901` without repeatedly changing its proxy configuration as upstream nodes change.
+
+> `127.0.0.1:17900` is the default management API and console address. In the proxy example, `127.0.0.1:17901` is the HTTP traffic ingress. Inbound addresses are configurable; clients must use the actual enabled proxy listener.
+
+```mermaid
+flowchart LR
+    Client["Browser / crawler"] --> Inbound["Fixed HPS HTTP endpoint<br/>127.0.0.1:17901"]
+    Inbound --> Selection["Rule matching / pool filtering / selection"]
+    Selection --> Upstream["Selected eligible upstream proxy"]
+    Upstream --> Target["Destination website"]
+```
+
+A request forwarded through an upstream proxy follows these steps:
+
+1. The client sends a proxy request to the fixed HPS endpoint, identifying the destination. An HTTPS destination can be reached through an HTTP proxy using a CONNECT tunnel.
+2. HPS uses the first matching rule to determine a node, group, or default pool, then selects an eligible node within that scope using health, remaining lifetime, capacity, and selection policy. Without routing rules, it uses the default pool policy.
+3. HPS connects to the destination through the selected upstream proxy and returns the response along the connection path.
+
+This lets crawlers and other callers keep one local proxy address while HPS handles node maintenance and egress selection. Rules can also explicitly choose Direct or Reject. Proxy forwarding rejects requests when no eligible node exists, without silently connecting directly. Egress changes apply to subsequent new connections; connection reuse or session pinning may retain a node. This does not mean every HTTP request gets a new IP, nor does it migrate existing connections or automatically replay failed requests.
 
 ## Features and platform support
 
@@ -500,3 +524,7 @@ The detailed guides below are currently primarily in Chinese. This English READM
 | Design and progress         | [Technical architecture](docs/technical-architecture-plan.md), [console checklist](docs/console-feature-checklist.md), [development tasks](docs/development-task-checklist.md), [Git Flow](docs/git-flow-workflow.md), [future platform contracts](docs/future-platform-contracts.md) |
 
 Usage guides describe current implementation. Plans and future contracts do not mean a capability is enabled. Actual verification scope is recorded under `docs/validation/`; read historical records together with their source revision and later corrections.
+
+## AI authorship and feedback
+
+The current program was written entirely by AI and is not guaranteed to be free of bugs. If you encounter a problem or have a suggestion, please open a [GitHub Issue](https://github.com/go-laoji/honk-proxy-server/issues). For bug reports, include the program version, operating system, reproduction steps, and redacted logs where possible. Do not include passwords, proxy credentials, or other private information.
