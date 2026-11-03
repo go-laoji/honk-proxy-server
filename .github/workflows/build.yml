@@ -1,0 +1,123 @@
+name: Cross-platform builds
+
+on:
+  push:
+    branches: [main, develop, 'feature/**', 'release/**', 'hotfix/**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  HPS_FORBID_HOST_NETWORK_CHANGES: '1'
+  CARGO_BUILD_JOBS: '2'
+  CARGO_TERM_COLOR: always
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  web:
+    name: Shared Web and packaging checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288 # v5
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24.15.0
+          cache: pnpm
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck && pnpm format:check && pnpm build
+      - run: python -B -m unittest discover -s tests/ci -p 'test_*.py' -v
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-shared-web
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+
+  native:
+    name: ${{ matrix.target }}
+    needs: web
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2022
+            target: x86_64-pc-windows-msvc
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+          - runner: macos-15
+            target: aarch64-apple-darwin
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288 # v5
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24.15.0
+          cache: pnpm
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+      - run: pnpm install --frozen-lockfile
+      - name: Install the repository Rust toolchain
+        run: |
+          toolchain=$(node -p "require('./packaging/toolchains.json').rust")
+          rustup toolchain install "$toolchain" --profile minimal --component rustfmt --component clippy
+          rustc --version
+          cargo --version
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v8
+        with:
+          name: ci-shared-web
+          path: dist
+      - name: Check packaging on the native platform
+        run: python -B -m unittest discover -s tests/ci -p 'test_*.py' -v
+      - name: Build CLI and Daemon archive
+        env:
+          HPS_CI_TARGET: ${{ matrix.target }}
+        run: python -B scripts/build-ci.py headless --target "$HPS_CI_TARGET"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: headless-${{ matrix.target }}
+          path: target/ci-build/artifacts/headless/
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+      - name: Install Linux Desktop dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf
+      - name: Build Desktop installer
+        env:
+          HPS_CI_TARGET: ${{ matrix.target }}
+        run: python -B scripts/build-ci.py desktop --target "$HPS_CI_TARGET"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-${{ matrix.target }}
+          path: target/ci-build/artifacts/desktop/
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
