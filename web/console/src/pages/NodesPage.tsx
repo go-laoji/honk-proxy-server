@@ -1,9 +1,17 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Globe2, RefreshCw, Upload, Filter, ArrowLeft } from "lucide-react";
+import {
+  Globe2,
+  RefreshCw,
+  Upload,
+  Filter,
+  ArrowLeft,
+  Plus,
+} from "lucide-react";
 import { Badge, Details } from "../components/ui";
 import { NodeStats, SourceStats } from "../components/NodeSummary";
 import { getJson, postJson } from "../platform";
 import HealthHistoryPanel from "../components/HealthHistoryPanel";
+import ManualNodePanel from "../components/ManualNodePanel";
 import {
   nodeAddress,
   nodeReasons,
@@ -40,6 +48,7 @@ export default function NodesPage() {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [document, setDocument] = useState("");
   const [format, setFormat] = useState("lines");
   const [protocol, setProtocol] = useState("http");
@@ -223,6 +232,18 @@ export default function NodesPage() {
           </div>
           <div className="flex flex-wrap gap-2">
             <button
+              className="btn-primary"
+              disabled={busy || loading || !value}
+              onClick={() => {
+                setAdding(!adding);
+                setEditing(false);
+              }}
+              aria-expanded={adding}
+            >
+              <Plus size={15} />
+              手动添加
+            </button>
+            <button
               className="btn"
               disabled={busy || loading}
               onClick={() => setReload((n) => n + 1)}
@@ -233,10 +254,14 @@ export default function NodesPage() {
             <button
               className="btn"
               disabled={busy}
-              onClick={() => setEditing(!editing)}
+              onClick={() => {
+                setEditing(!editing);
+                setAdding(false);
+              }}
+              aria-expanded={editing}
             >
               <Upload size={15} />
-              添加 / 导入
+              批量导入
             </button>
           </div>
         </div>
@@ -409,9 +434,25 @@ export default function NodesPage() {
           {notice}
         </p>
       )}
+      {adding && (
+        <ManualNodePanel
+          revision={loading ? null : (value?.running_revision ?? null)}
+          busy={busy}
+          onBusy={setBusy}
+          onRefresh={() => setReload((n) => n + 1)}
+          onClose={() => setAdding(false)}
+          onAdded={(id) => {
+            setAdding(false);
+            setError("");
+            setNotice(`已添加静态节点 ${id}，可在列表查看健康与准入状态。`);
+            navigate(new URLSearchParams({ provider: "@static", search: id }));
+            setReload((n) => n + 1);
+          }}
+        />
+      )}
       {editing && (
         <section className="panel space-y-4 p-5" aria-label="节点导入">
-          <h2 className="font-semibold">添加节点与批量导入</h2>
+          <h2 className="font-semibold">批量导入节点</h2>
           <p className="muted text-xs leading-6">
             每行一个 HTTP / HTTPS / SOCKS5 地址或 host:port；支持 URL
             中的上游凭据。JSON 使用静态 UpstreamConfig 数组。最多 1000 条、1
@@ -711,7 +752,7 @@ export default function NodesPage() {
       </div>
       {value && !loading && value.nodes.length === 0 && (
         <p className="panel p-8 text-center text-sm">
-          没有符合筛选的节点；可调整条件或导入节点。
+          没有符合筛选的节点；可手动添加、批量导入或调整筛选。
         </p>
       )}
       {value && (
