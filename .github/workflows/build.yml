@@ -167,6 +167,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
           compression-level: 0
+          overwrite: true
       - name: Publish verified assets and complete the Release
         env:
           GH_TOKEN: ${{ github.token }}

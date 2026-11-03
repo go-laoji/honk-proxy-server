@@ -63,7 +63,11 @@ class ReleaseTests(unittest.TestCase):
     def fake_gh(self, *args, check=True):
         self.calls.append(args)
         if args[0] == "api":
-            status = 404 if self.remote is None else 200
+            if "--slurp" in args:
+                pages = [[self.remote]] if self.remote is not None else [[]]
+                return subprocess.CompletedProcess(args, 0, json.dumps(pages), "")
+            # Match the real API: /releases/tags/{tag} cannot read drafts.
+            status = 404 if self.remote is None or self.remote["draft"] else 200
             return subprocess.CompletedProcess(args, int(status == 404),
                 f"HTTP/2.0 {status} Test\nContent-Type: application/json\n\n" + json.dumps(self.remote), "")
         if args[:2] == ("release", "create"):
@@ -155,6 +159,21 @@ class ReleaseTests(unittest.TestCase):
         result = subprocess.CompletedProcess([], 1, "HTTP/2.0 403 Forbidden\n\n{}", "denied")
         with mock.patch.object(release, "gh", return_value=result):
             with self.assertRaisesRegex(ValueError, "lookup failed"):
+                release.remote_release("fixture/repo", self.tag)
+
+    def test_draft_is_found_through_authenticated_list_after_tag_404(self):
+        self.remote = {"tag_name": self.tag, "prerelease": True, "draft": True, "assets": []}
+        with mock.patch.object(release, "gh", side_effect=self.fake_gh):
+            self.assertEqual(release.remote_release("fixture/repo", self.tag), self.remote)
+        self.assertIn("--paginate", self.calls[1])
+        self.assertIn("--slurp", self.calls[1])
+
+    def test_ambiguous_drafts_fail_before_any_write(self):
+        draft = {"tag_name": self.tag, "draft": True}
+        responses = [subprocess.CompletedProcess([], 1, "HTTP/2.0 404 Not Found\n\n{}", ""),
+                     subprocess.CompletedProcess([], 0, json.dumps([[draft, draft]]), "")]
+        with mock.patch.object(release, "gh", side_effect=responses):
+            with self.assertRaisesRegex(ValueError, "multiple Releases"):
                 release.remote_release("fixture/repo", self.tag)
 
 
