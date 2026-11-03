@@ -129,7 +129,13 @@ def remote_release(repo, tag):
     status = re.match(r"HTTP/\S+ (\d+)", header)
     require(separator and status is not None, "could not read GitHub Release response")
     if status[1] == "404":
-        return None
+        # The tag endpoint only indexes published releases. List releases with
+        # this authenticated client to find a newly created or interrupted draft.
+        listed = gh("api", "--paginate", "--slurp", f"repos/{repo}/releases?per_page=100")
+        matches = [release for page in json.loads(listed.stdout) for release in page
+                   if release["tag_name"] == tag]
+        require(len(matches) <= 1, "multiple Releases match the same tag; refusing to choose a draft")
+        return matches[0] if matches else None
     require(result.returncode == 0 and status[1] == "200", "GitHub Release lookup failed: " + result.stderr)
     return json.loads(body)
 
