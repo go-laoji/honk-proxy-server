@@ -18,4 +18,11 @@
 
 ProviderClient 默认不继承环境代理、不重定向、不自动重试；YunFree 解析 GBK HTML，HTTP/HTTPS 表格标签均视为 HTTP/CONNECT 端点，TTL 仅为本地缓存上限。健康默认启用，新租约须实际穿透后才能准入。重点检查 `crates/provider`、`crates/health`、`crates/engine` 与 `crates/application` 的真实链路。
 
-所有开发/测试进程设置 `HPS_FORBID_HOST_NETWORK_CHANGES=1`。不修改宿主 Wi-Fi/DNS/路由/系统代理，不安装或重启原服务，不运行旧网络写入测试，不覆盖原 Desktop bundle、持久数据库或原始未跟踪文件。网络请求无账号、Cookie、采购或用户业务凭据。
+所有开发/测试进程设置 `HPS_FORBID_HOST_NETWORK_CHANGES=1`。不修改宿主 Wi-Fi/DNS/路由/系统代理，不安装或重启原服务，不运行旧网络写入测试，不覆盖原 Desktop bundle、持久数据库或原始未跟踪文件。免费来源提取不使用账号、Cookie、采购或用户业务凭据；恢复测试时仅使用用户明确提供的代理认证，私有配置不进入仓库或 Issue。
+
+
+## 2026-11-03 恢复与验收
+
+用户提供长效 SOCKS5 节点后恢复测试：先直接 curl 验证节点，再用隔离 hps 的 HTTP CONNECT、SOCKS5、SOCKS5h 入口访问同一国内 HTTPS 接口，核对有效出口 IP、TCP peer、目标 TLS、健康认证与业务连接选点。节点与凭据仅放仓库外私有配置，不再拉取免费列表。
+
+已完成：五种代理访问方式的出口均为 `106.38.56.186`，不同于直连基线；hps 健康准入与三条业务连接均通过，没有复现应用缺陷。只保存脱敏验收记录，应用代码未改；临时实例已停止。详细结果见 [真实代理出口验收](validation/proxy-egress-2026-11-03.md) 与对应 JSON。分支保留，不主动 push/finish。
