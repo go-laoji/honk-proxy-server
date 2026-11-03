@@ -1,0 +1,9 @@
+# Product versions and local Git tags only. Never publish a Cargo registry or push.
+publish = false
+push = false
+shared-version = true
+consolidate-commits = true
+pre-release-commit-message = "chore(release): v{{version}}"
+tag = true
+tag-name = "v{{version}}"
+tag-message = "Honk Proxy v{{version}}"

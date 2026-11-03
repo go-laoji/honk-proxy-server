@@ -40,6 +40,17 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: '3.12'
+      - name: Check unified versions and tag
+        env:
+          HPS_VERSION_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: |
+          args=()
+          if [[ -n "$HPS_VERSION_TAG" ]]; then args+=(--tag "$HPS_VERSION_TAG"); fi
+          python -B scripts/versioning.py --check "${args[@]}"
+      - name: Install the pinned version-management tool
+        run: cargo install cargo-release --locked --version 1.1.7 --debug
+      - name: Test versioning and Release delivery in isolated fixtures
+        run: python -B -m unittest discover -s tests/release-management -p 'test_*.py' -v
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck && pnpm format:check && pnpm build
       - run: python -B -m unittest discover -s tests/ci -p 'test_*.py' -v
@@ -121,3 +132,42 @@ jobs:
           if-no-files-found: error
           retention-days: 14
           compression-level: 0
+
+  github-release:
+    name: Publish tagged build assets to GitHub Release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [web, native]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      HPS_RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: headless-*
+          path: target/release-downloads
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: desktop-*
+          path: target/release-downloads
+      - name: Verify and prepare all native Release assets
+        run: python -B scripts/github-release.py prepare --tag "$HPS_RELEASE_TAG"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-${{ github.ref_name }}
+          path: target/release-assets/
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+      - name: Publish verified assets and complete the Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python -B scripts/github-release.py publish --tag "$HPS_RELEASE_TAG" --repo "$GITHUB_REPOSITORY"

@@ -22,6 +22,8 @@
 
 Artifacts 保存 14 天。每个平台先上传 headless，再构建 Desktop；Desktop 构建失败时，同平台已经成功上传的 headless 包仍可下载。矩阵使用 `fail-fast: false`，单个平台失败不会取消其他平台。
 
+版本标签 push 的全部构建成功后，还会把十份原生包及校验清单同步到 **Releases → 同名版本 → Assets**。该发布 job 校验 tag/版本/源码、十份产物和共同 Web，附件名称不会发生清单覆盖；预发行 tag 自动标为 prerelease。普通分支、PR 和手动运行只上传 Artifacts。版本管理、27 个 Release 附件和失败重跑规则见 [cargo-release 与 GitHub Release](version-management-usage.md)。
+
 ## 使用与能力边界
 
 解压后先核对 SHA256，再直接运行 `bin/hps`、`bin/hpsd`，Windows 使用对应 `.exe`。例如在解压目录中：
@@ -43,7 +45,7 @@ Get-FileHash .\hps-headless-*-ci.zip -Algorithm SHA256
 
 运行 CLI/Daemon 无需 Node、Python、Tauri 或 Desktop。Linux CI 包在 Ubuntu 24.04 上链接 glibc，运行时需要兼容的 glibc；它不是静态 musl 便携包。Desktop 仍需要对应系统的 WebView/图形依赖。Windows 持久系统服务与系统代理集成尚未实现，可直接运行 Daemon 或让 Desktop 连接已运行的目标服务。
 
-所有这些产物标记 `artifact_kind: ci-build` 和 `release_qualified: false`。普通 Linux CI 不打包 eBPF 对象，也不声明透明接管已经通过内核验收；需要完整 eBPF 的发行包继续使用 [发行流程](release-usage.md) 中的 `release.yml`，满足真实双架构/双内核门槛。Windows 安装包未做云签名；macOS 仅 ad-hoc 签名，未做 Apple 公证。工作流上传 Artifacts，不创建 GitHub Release。
+所有这些产物标记 `artifact_kind: ci-build` 和 `release_qualified: false`，即使同步到 GitHub Release 也不改变此能力边界。普通 Linux CI 不打包 eBPF 对象，也不声明透明接管已经通过内核验收；需要完整 eBPF 的发行包继续使用 [发行流程](release-usage.md) 中的 `release.yml`，满足真实双架构/双内核门槛。Windows 安装包未做云签名；macOS 仅 ad-hoc 签名，未做 Apple 公证。
 
 ## 本地复跑
 

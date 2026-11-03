@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 
+# Run once for the whole product, rather than once for each workspace crate.
+[package.metadata.release]
+pre-release-hook = ["python", "../../scripts/versioning.py", "--hook"]
+
 [[bin]]
 name = "hps"
 path = "src/main.rs"
