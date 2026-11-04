@@ -40,57 +40,48 @@
 
 :root {
   color-scheme: light;
-  --page: #f4f7fc;
+  --page: #fbfaf7;
   --surface: #ffffff;
-  --surface-soft: #f5f8ff;
-  --sidebar: #fcfdff;
-  --sidebar-line: #dbe5f7;
-  --nav-active: #dbe8ff;
-  --nav-active-ink: #1d4ed8;
-  --nav-hover: #f0f5ff;
-  --metric-border: #c5d5f4;
-  --chart-surface: #f7faff;
-  --stat-icon-ink: #ffffff;
-  --border: #dce5f2;
-  --ink: #1d2e49;
-  --muted: #536681;
-  --accent: #2563eb;
-  --accent-soft: #e7efff;
-  --accent-ink: #1d4ed8;
-  --chart-up: #0284c7;
-  --chart-down: #2563eb;
-  --chart-failed: #b46819;
-  --chart-active: #2563eb;
-  --success-soft: #e9f7ef;
-  --success-ink: #26734d;
-  --panel-shadow: 0 2px 7px #142b5205, 0 12px 28px #142b5203;
+  --surface-soft: #f6f3ee;
+  --sidebar: #f5f2ec;
+  --nav-active: #dcebe9;
+  --nav-active-ink: #1a585a;
+  --nav-hover: #ece8e0;
+  --border: #e4dfd7;
+  --ink: #272c38;
+  --muted: #5f636d;
+  --accent: #246e73;
+  --accent-soft: #e3f0ee;
+  --accent-ink: #1a585a;
+  --chart-up: #a05c20;
+  --chart-down: #246e73;
+  --chart-failed: #a04455;
+  --chart-active: #67519b;
+  --success-soft: #e6f1e9;
+  --success-ink: #236241;
+  --sidebar-width: 13rem;
 }
 .dark {
   color-scheme: dark;
-  --page: #0b1220;
-  --surface: #111c30;
-  --surface-soft: #15223a;
-  --sidebar: #0f192c;
-  --sidebar-line: #24334d;
-  --nav-active: #203f73;
-  --nav-active-ink: #dbeafe;
-  --nav-hover: #172944;
-  --metric-border: #314b72;
-  --chart-surface: #132039;
-  --stat-icon-ink: #0b1220;
-  --border: #24334d;
-  --ink: #e4edff;
-  --muted: #a0b1cc;
-  --accent: #60a5fa;
-  --accent-soft: #1b3259;
-  --accent-ink: #b9d6ff;
-  --chart-up: #38bdf8;
-  --chart-down: #60a5fa;
-  --chart-failed: #e4b56c;
-  --chart-active: #93c5fd;
-  --success-soft: #132f29;
-  --success-ink: #82cfaa;
-  --panel-shadow: 0 4px 16px #00000014;
+  --page: #191c24;
+  --surface: #212630;
+  --surface-soft: #272d38;
+  --sidebar: #1c2029;
+  --nav-active: #263e43;
+  --nav-active-ink: #b5e5df;
+  --nav-hover: #2a303c;
+  --border: #343b48;
+  --ink: #e8ebf2;
+  --muted: #abb3c2;
+  --accent: #84c9c6;
+  --accent-soft: #283d44;
+  --accent-ink: #b5e5df;
+  --chart-up: #eeb278;
+  --chart-down: #84c9c6;
+  --chart-failed: #f29aae;
+  --chart-active: #c1adea;
+  --success-soft: #263d34;
+  --success-ink: #a2d9b7;
 }
 
 @layer base {
@@ -128,8 +119,7 @@
   .panel {
     border: 1px solid var(--border);
     background: var(--surface);
-    box-shadow: var(--panel-shadow);
-    @apply rounded-2xl;
+    @apply rounded-xl;
   }
   .btn {
     border: 1px solid var(--border);
@@ -142,8 +132,12 @@
     color: var(--accent-ink);
   }
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-brand-700 dark:bg-brand-400 dark:text-brand-950 dark:hover:bg-brand-300;
-    box-shadow: 0 2px 4px #2563eb18;
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors;
+    background: var(--accent);
+    color: var(--page);
+  }
+  .btn-primary:not(:disabled):hover {
+    background: color-mix(in srgb, var(--accent) 90%, var(--ink));
   }
   .muted {
     color: var(--muted);
@@ -160,76 +154,113 @@
   }
   .sidebar {
     background: var(--sidebar);
-    border-color: var(--sidebar-line);
+    border-inline-end: 1px solid var(--border);
+    color: var(--ink);
   }
-  .brand-mark {
-    @apply flex size-9 shrink-0 items-center justify-center rounded-xl bg-brand-600 text-white dark:bg-brand-400 dark:text-brand-950;
-    box-shadow: 0 4px 10px #2563eb20;
+  .desktop-sidebar {
+    @apply fixed inset-y-0 left-0 z-30 hidden flex-col lg:flex;
+    width: var(--sidebar-width);
+  }
+  .mobile-sidebar {
+    @apply fixed inset-y-0 left-0 m-0 max-h-none p-0;
+    width: min(17rem, calc(100% - 2rem));
+    height: 100dvh;
+  }
+  .mobile-sidebar::backdrop {
+    background: #11151db0;
+  }
+  @media (width >= 64rem) {
+    .app-content {
+      margin-inline-start: var(--sidebar-width);
+    }
+  }
+  .brand-link {
+    @apply flex h-16 shrink-0 items-center gap-2.5 px-5;
+  }
+  .nav-group + .nav-group {
+    @apply mt-4;
   }
   .nav-group-label {
-    @apply mb-2 px-3 text-[10px] font-semibold tracking-widest;
+    @apply mb-1 px-2.5 text-[11px] font-medium;
     color: var(--muted);
   }
   .nav-link {
+    @apply relative flex min-h-9 items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium transition-colors;
     color: var(--muted);
-    @apply flex items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-[13px] font-medium transition-colors;
   }
   .nav-link:hover {
     background: var(--nav-hover);
     color: var(--ink);
   }
-  .nav-link[aria-current="page"] {
+  .nav-link[aria-current] {
     color: var(--nav-active-ink);
     background: var(--nav-active);
     font-weight: 600;
   }
-  .nav-icon {
-    @apply inline-flex size-8 shrink-0 items-center justify-center rounded-lg;
+  .nav-link[aria-current]::before {
+    position: absolute;
+    inset-block: 9px;
+    inset-inline-start: 0;
+    width: 2px;
+    border-radius: 2px;
+    background: currentColor;
+    content: "";
   }
-  .nav-link[aria-current="page"] .nav-icon {
-    background: transparent;
-    color: inherit;
+  .nav-icon {
+    @apply inline-flex size-5 shrink-0 items-center justify-center;
   }
   .sidebar-instance {
-    border: 1px solid var(--sidebar-line);
-    background: color-mix(in srgb, var(--surface) 65%, transparent);
-    @apply m-3 rounded-xl p-3;
+    @apply mx-3 my-2 shrink-0 px-2.5 py-3;
+    border-block-start: 1px solid var(--border);
+  }
+  .instance-dot {
+    @apply size-2 shrink-0 rounded-full;
+    background: var(--muted);
+  }
+  .instance-dot[data-connected="true"] {
+    background: var(--success-ink);
   }
   .app-header {
+    @apply sticky top-0 z-20 flex h-14 items-center justify-between gap-3 border-b px-3 backdrop-blur sm:px-7 xl:px-9;
     border-color: var(--border);
-    background: color-mix(in srgb, var(--surface) 90%, transparent);
+    background: color-mix(in srgb, var(--page) 94%, transparent);
   }
   .icon-button {
-    @apply rounded-lg p-2;
+    @apply inline-flex shrink-0 rounded-lg p-2;
     color: var(--muted);
   }
   .icon-button:hover {
     background: var(--accent-soft);
     color: var(--accent-ink);
   }
+  .page-heading {
+    @apply mb-5 flex flex-wrap items-center justify-between gap-x-6 gap-y-3;
+  }
   .page-heading-mark {
-    @apply inline-flex size-10 shrink-0 items-center justify-center rounded-xl;
+    @apply inline-flex size-10 shrink-0 items-center justify-center rounded-lg;
     background: var(--accent-soft);
     color: var(--accent-ink);
   }
+  .text-link {
+    @apply inline-flex shrink-0 items-center gap-1 text-xs font-medium;
+    color: var(--accent-ink);
+  }
+  .text-link:hover {
+    @apply underline;
+  }
   .stat-card {
-    --stat-accent: var(--accent);
-    border-color: var(--metric-border);
+    --stat-accent: var(--accent-ink);
   }
   .stat-card[data-tone="blue"] {
-    --stat-accent: var(--chart-up);
+    --stat-accent: var(--chart-active);
   }
   .stat-card[data-tone="neutral"] {
     --stat-accent: var(--muted);
   }
   .stat-icon {
-    color: var(--stat-icon-ink);
-    background: var(--stat-accent);
-    @apply inline-flex size-9 shrink-0 items-center justify-center rounded-xl;
-  }
-  .stat-card[data-tone="neutral"] .stat-icon {
-    color: var(--muted);
-    background: var(--surface-soft);
+    @apply inline-flex size-7 shrink-0 items-center justify-center rounded-md;
+    color: var(--stat-accent);
+    background: color-mix(in srgb, var(--stat-accent) 10%, var(--surface));
   }
   .status-badge {
     @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium;
@@ -247,8 +278,8 @@
     background: currentColor;
   }
   .chart-card {
-    background: var(--chart-surface);
-    border: 1px solid var(--metric-border);
+    background: var(--surface-soft);
+    border: 1px solid var(--border);
     color: var(--ink);
     @apply min-w-0 rounded-xl p-3;
   }
@@ -292,7 +323,6 @@
 /* Motion belongs to icon wrappers; service state stays in text and badges. */
 .nav-icon,
 .stat-icon,
-.brand-mark,
 .theme-icon,
 .action-icon {
   transition: transform 180ms ease-out;
@@ -310,8 +340,7 @@
   .nav-link:focus-visible .nav-icon {
     transform: translateY(-1px) rotate(-7deg);
   }
-  .stat-card:hover .stat-icon,
-  .brand-link:hover .brand-mark {
+  .stat-card:hover .stat-icon {
     transform: translateY(-2px) rotate(-5deg);
   }
   .icon-button:hover .theme-icon {
@@ -331,7 +360,6 @@
   }
   .nav-icon,
   .stat-icon,
-  .brand-mark,
   .theme-icon,
   .action-icon {
     transform: none !important;
