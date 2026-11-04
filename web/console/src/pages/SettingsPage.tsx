@@ -7,6 +7,7 @@ import type { ConfigWorkspace } from "../types";
 import DesktopPreferencesPanel from "../components/DesktopPreferencesPanel";
 import BackupPanel from "../components/BackupPanel";
 import LocalSystemPanel from "../components/LocalSystemPanel";
+import ManagedServicePanel from "../components/ManagedServicePanel";
 
 export default function SettingsPage({
   data,
@@ -26,7 +27,8 @@ export default function SettingsPage({
   return (
     <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-2">
       {isDesktop && (
-        <div className="lg:col-span-2">
+        <div className="space-y-4 lg:col-span-2">
+          <ManagedServicePanel />
           <LocalSystemPanel data={data} refreshService={refreshService} />
         </div>
       )}
