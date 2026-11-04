@@ -22,12 +22,12 @@ export default function RefillPanel({
   value,
   busy,
   onAction,
-  onTemplate,
+  onConfigure,
 }: {
   value: ProviderControllerStatus;
   busy: boolean;
   onAction: (action: ControllerAction) => void;
-  onTemplate: () => void;
+  onConfigure: () => void;
 }) {
   return (
     <section className="panel overflow-hidden" aria-label="补池控制器">
@@ -110,8 +110,8 @@ export default function RefillPanel({
           >
             确认结果并恢复提取
           </button>
-          <button className="btn" disabled={busy} onClick={onTemplate}>
-            加入补池配置模板
+          <button className="btn" disabled={busy} onClick={onConfigure}>
+            打开补池设置
           </button>
         </div>
         <p className="muted text-xs leading-6">
@@ -119,8 +119,7 @@ export default function RefillPanel({
           Retry-After。结果不确定时请先核对供应商记录，恢复后可能产生新的提取费用。暂停不取消已发送的请求，也不关闭已有代理连接。
         </p>
         <p className="muted text-xs leading-6">
-          当前库存依据来源、期限与配置准入，健康状态由健康模块接续。按需模式在无连接或最近拨号需求时停止自动购买；持续维护需要显式启用。参数编辑在下方
-          JSON 的 refill 字段，保存后才生效。
+          当前库存依据来源、期限与配置准入，健康状态由健康模块接续。按需模式在无连接或最近拨号需求时停止自动购买；持续维护需要显式启用。补池参数在下方供应商表单中保存后生效。
         </p>
       </div>
     </section>

@@ -1,3 +1,9 @@
+import { ConfigFields, ConfigForm } from "../components/config/ConfigFields";
+import {
+  routingFields,
+  ruleFields,
+  simulationFields,
+} from "../components/config/routingFields";
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowDown,
@@ -125,12 +131,24 @@ function description(c: Conditions) {
   return parts.join(" · ") || "空条件：匹配全部流量";
 }
 const blankRule: Rule = {
-  id: "new-rule",
+  id: "",
   enabled: false,
   conditions: {},
   action: { kind: "reject" },
 };
-const defaultContext = {
+type RoutingContext = {
+  destination_host: string;
+  destination_port: number;
+  transport: "tcp" | "udp";
+  source_ip: string | null;
+  source_port?: number | null;
+  inbound: string | null;
+  inbound_protocol: string | null;
+  observed_domains: string[];
+  origin: "explicit" | "linux_local" | "gateway";
+  process: { pid: number; command: string; cgroup_id: number } | null;
+};
+const defaultContext: RoutingContext = {
   destination_host: "example.com",
   destination_port: 443,
   transport: "tcp",
@@ -154,16 +172,16 @@ export default function RulesPage({
   const [info, setInfo] = useState("");
   const [busy, setBusy] = useState(false);
   const [page, setPage] = useState(0);
-  const [editor, setEditor] = useState<{
-    mode: "rule" | "policy";
-    original: string | null;
-    revision: number;
-    base: number;
-    body: string;
-  }>();
-  const [context, setContext] = useState(
-    JSON.stringify(defaultContext, null, 2),
-  );
+  const [editor, setEditor] = useState<
+    {
+      revision: number;
+      base: number;
+    } & (
+      | { mode: "rule"; original: string | null; value: Rule }
+      | { mode: "policy"; original: null; value: Policy }
+    )
+  >();
+  const [context, setContext] = useState(defaultContext);
   const [simulation, setSimulation] = useState<Simulation>();
   const mounted = useRef(true);
   const sequence = useRef(0);
@@ -258,30 +276,38 @@ export default function RulesPage({
       : blankRule;
     if (!selected) throw new Error("规则已移除，请刷新后重试");
     if (mounted.current)
-      setEditor({
-        mode,
-        original: id ?? null,
-        revision: value.running_revision,
-        base: value.viewed_revision,
-        body: JSON.stringify(
-          mode === "policy" ? value.configuration : selected,
-          null,
-          2,
-        ),
-      });
+      setEditor(
+        mode === "policy"
+          ? {
+              mode,
+              original: null,
+              revision: value.running_revision,
+              base: value.viewed_revision,
+              value: value.configuration,
+            }
+          : {
+              mode,
+              original: id ?? null,
+              revision: value.running_revision,
+              base: value.viewed_revision,
+              value: selected,
+            },
+      );
   }
   async function save() {
     if (!editor) return;
-    const value: unknown = JSON.parse(editor.body);
-    if (
-      editor.mode === "rule" &&
-      editor.original &&
-      (!value ||
-        typeof value !== "object" ||
-        !("id" in value) ||
-        value.id !== editor.original)
-    )
-      throw new Error("编辑时请保留规则 ID，新规则使用新增按钮。");
+    // Switching a tagged action can leave an earlier target in the draft.
+    const cleanAction = (action: Action): Action =>
+      action.kind === "node" || action.kind === "group"
+        ? action
+        : { kind: action.kind };
+    const value =
+      editor.mode === "policy"
+        ? {
+            ...editor.value,
+            default_action: cleanAction(editor.value.default_action),
+          }
+        : { ...editor.value, action: cleanAction(editor.value.action) };
     await candidate(
       `api/v1/rules/${editor.mode === "policy" ? "save" : "upsert"}`,
       {
@@ -319,7 +345,7 @@ export default function RulesPage({
     if (!data) return;
     const value = await postJson<Simulation>("api/v1/rules/simulate", {
       revision: data.viewed_revision,
-      context: JSON.parse(context),
+      context,
     });
     if (mounted.current) setSimulation(value);
   }
@@ -538,38 +564,43 @@ export default function RulesPage({
             · 运行基准 r{editor.revision} / 内容 r{editor.base}
           </h2>
           <p className="muted text-xs leading-6">
-            条件列表内部为 OR，域名类别与
-            CIDR、端口、传输、入口、来源等类别之间为
-            AND。空条件匹配全部。新规则默认停用，action.kind 可选
-            default/node/group/direct/reject。
+            {editor.mode === "policy"
+              ? "没有规则命中时使用默认动作。候选版本需显式激活后才接管流量。"
+              : "同类条件满足任意一项即可，不同类别需要同时满足。空条件匹配全部流量。新规则默认停用。"}
           </p>
-          <label className="form-field">
-            {editor.mode === "policy" ? "规则策略 JSON" : "规则 JSON"}
-            <textarea
-              className="field editor-field min-h-80"
-              spellCheck={false}
-              value={editor.body}
-              onChange={(event) =>
-                setEditor({ ...editor, body: event.target.value })
-              }
-            />
-          </label>
-          <div className="flex flex-wrap gap-2">
-            <button
-              className="btn-primary"
-              disabled={busy}
-              onClick={() => void action(save)}
-            >
-              保存为候选
-            </button>
-            <button
-              className="btn"
-              disabled={busy}
-              onClick={() => setEditor(undefined)}
-            >
-              取消编辑
-            </button>
-          </div>
+          <ConfigForm
+            label="规则配置"
+            onSave={() => {
+              if (!busy) void action(save);
+            }}
+          >
+            {editor.mode === "policy" ? (
+              <ConfigFields
+                fields={routingFields}
+                value={editor.value}
+                onChange={(value) => setEditor({ ...editor, value })}
+              />
+            ) : (
+              <ConfigFields
+                fields={ruleFields(Boolean(editor.original))}
+                value={editor.value}
+                onChange={(value) => setEditor({ ...editor, value })}
+              />
+            )}
+            <div className="flex flex-wrap gap-2">
+              <button className="btn-primary" type="submit" disabled={busy}>
+                保存为候选
+              </button>
+              <button
+                className="btn"
+                type="button"
+                disabled={busy}
+                onClick={() => setEditor(undefined)}
+              >
+                取消编辑
+              </button>
+            </div>
+          </ConfigForm>
         </section>
       )}
       <section className="space-y-2" aria-label="有序规则">
@@ -727,22 +758,25 @@ export default function RulesPage({
           不连接目标、不解析新的域名、不购买节点，不推进轮询或创建会话。候选使用当前非规则设置与实时健康/租约。显式域名优先，CIDR
           需要字面目标 IP；未提供进程不能推断。
         </p>
-        <label className="form-field">
-          连接上下文 JSON
-          <textarea
-            className="field editor-field min-h-72"
-            spellCheck={false}
-            value={context}
-            onChange={(event) => setContext(event.target.value)}
-          />
-        </label>
-        <button
-          className="btn-primary"
-          disabled={busy || !data || Boolean(editor)}
-          onClick={() => void action(simulate)}
+        <ConfigForm
+          label="规则模拟条件"
+          onSave={() => {
+            if (!busy && data && !editor) void action(simulate);
+          }}
         >
-          执行规则模拟
-        </button>
+          <ConfigFields
+            fields={simulationFields}
+            value={context}
+            onChange={setContext}
+          />
+          <button
+            className="btn-primary"
+            type="submit"
+            disabled={busy || !data || Boolean(editor)}
+          >
+            执行规则模拟
+          </button>
+        </ConfigForm>
         {simulation && (
           <div className="space-y-4" aria-label="规则模拟结果">
             <p className="break-all text-sm">

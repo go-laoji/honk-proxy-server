@@ -9,11 +9,11 @@ test("standard subscription MPA persists imports, source inventory and nested Sc
   await panel
     .getByRole("button", { name: "新增标准订阅", exact: true })
     .click();
-  const editor = panel.getByRole("textbox", { name: /订阅定义 JSON/ });
-  const source = JSON.parse(await editor.inputValue());
-  source.id = "browser-sub";
-  source.url = "https://example.test/sub?token=private-browser-secret";
-  await editor.fill(JSON.stringify(source));
+  const editor = panel.getByRole("form", { name: "订阅编辑器" });
+  await editor.getByLabel("订阅 ID").fill("browser-sub");
+  await editor
+    .getByLabel("订阅 URL")
+    .fill("https://example.test/sub?token=private-browser-secret");
   await panel
     .getByRole("button", { name: "保存并应用订阅", exact: true })
     .click();
@@ -31,6 +31,15 @@ test("standard subscription MPA persists imports, source inventory and nested Sc
     .click();
   await expect(panel).toContainText("2 个快照节点");
   await expect(panel).not.toContainText("private-browser-password");
+  await panel.getByRole("button", { name: "编辑订阅", exact: true }).click();
+  await expect(editor.getByLabel("订阅 URL")).toHaveValue("[REDACTED]");
+  await editor.getByLabel("显示名称").fill("测试订阅");
+  await editor.getByRole("button", { name: "保存并应用订阅" }).click();
+  await expect(
+    panel.getByRole("heading", { name: "测试订阅 · browser-sub" }),
+  ).toBeVisible();
+  await expect(panel).toContainText("2 个快照节点");
+
   await expect(panel).not.toContainText("private-browser-secret");
   await page.reload();
   await expect(panel).toContainText("2 个快照节点");

@@ -39,22 +39,36 @@ test("groups MPA edits, explains strict pins and UDP exclusions, rejects stale w
       page.getByText("尚未配置分组，当前使用全池轮询。", { exact: true }),
     ).toBeVisible();
     await page.getByRole("button", { name: "新增分组", exact: true }).click();
-    const editor = page.getByRole("textbox", {
-      name: "分组 JSON",
-      exact: true,
-    });
-    const group = JSON.parse(await editor.inputValue());
-    group.id = "browser";
-    group.members = ["group-a", "group-b"];
-    group.strategy = "fixed";
-    group.pinned_node = "group-a";
-    await editor.fill(JSON.stringify(group));
+    const editor = page.getByRole("form", { name: "分组配置" });
+    await editor.getByLabel("分组 ID", { exact: true }).fill("browser");
+    await editor
+      .getByLabel("成员节点 ID", { exact: true })
+      .fill("group-a\ngroup-b");
+    await editor
+      .getByRole("combobox", { name: "选点策略", exact: true })
+      .selectOption("fixed");
+    await editor.getByLabel("固定节点 ID", { exact: true }).fill("group-a");
     await page
       .getByRole("button", { name: "保存并应用分组", exact: true })
       .click();
     await expect(page.getByRole("main").getByRole("status")).toContainText(
       "分组配置已保存",
     );
+    await page
+      .getByRole("button", { name: "编辑选择策略", exact: true })
+      .click();
+    await editor.getByRole("button", { name: "添加节点标签" }).click();
+    const tags = editor.getByRole("group", { name: "节点标签", exact: true });
+    await tags.getByLabel("节点 ID", { exact: true }).fill("group-a");
+    await tags.getByLabel("标签", { exact: true }).fill("local\npreferred");
+    await editor.getByRole("button", { name: "保存并应用分组" }).click();
+    await expect(page.getByRole("main").getByRole("status")).toContainText(
+      "分组配置已保存",
+    );
+    const saved = (await (await request.get("/api/v1/groups")).json())
+      .configuration;
+    expect(saved.node_tags["group-a"]).toEqual(["local", "preferred"]);
+    expect(saved.groups[0].members).toEqual(["group-a", "group-b"]);
     await page.goto("/console/group-detail.html?id=browser");
     await expect(
       page.getByRole("heading", { name: "分组详情", exact: true }),

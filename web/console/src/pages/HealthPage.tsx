@@ -1,3 +1,5 @@
+import { ConfigFields, ConfigForm } from "../components/config/ConfigFields";
+import { healthFields } from "../components/config/networkFields";
 import { useEffect, useRef, useState } from "react";
 import {
   Activity,
@@ -122,7 +124,7 @@ export default function HealthPage({
   const [error, setError] = useState("");
   const [loadError, setLoadError] = useState("");
   const [info, setInfo] = useState("");
-  const [editor, setEditor] = useState<string | null>(null);
+  const [editor, setEditor] = useState<HealthConfig | null>(null);
   const [revision, setRevision] = useState(0);
   const [pending, setPending] = useState<Pending | null>(null);
   const storageKey = `hps.health.${serviceEndpoint}`;
@@ -222,14 +224,14 @@ export default function HealthPage({
     const snapshot = await getJson<HealthOverview>("api/v1/health?limit=1");
     if (mounted.current) {
       setRevision(snapshot.running_revision);
-      setEditor(JSON.stringify(snapshot.configuration, null, 2));
+      setEditor(snapshot.configuration);
     }
   }
   async function save() {
-    const configuration = JSON.parse(editor ?? "") as HealthConfig;
+    if (!editor) return;
     const result = await postJson<{ state: string; running_revision: number }>(
       "api/v1/health/save",
-      { configuration, expected_revision: revision },
+      { configuration: editor, expected_revision: revision },
     );
     if (!mounted.current) return;
     setEditor(null);
@@ -518,17 +520,21 @@ export default function HealthPage({
               保留可达证据。UDP 能力尚不支持时单独显示。
             </p>
             {editor !== null && (
-              <div className="mt-5 space-y-3">
-                <label className="form-field">
-                  检测策略 JSON · 基于配置 r{revision}
-                  <textarea
-                    id="health-policy"
-                    className="field editor-field min-h-80"
-                    value={editor}
-                    onChange={(event) => setEditor(event.target.value)}
-                    spellCheck={false}
-                  />
-                </label>
+              <ConfigForm
+                className="mt-5 space-y-3"
+                label="检测策略表单"
+                onSave={() => {
+                  if (!busy) void action("save", save);
+                }}
+              >
+                <h3 className="text-sm font-semibold">
+                  检测策略 · 基于配置 r{revision}
+                </h3>
+                <ConfigFields
+                  fields={healthFields}
+                  value={editor}
+                  onChange={setEditor}
+                />
                 <p className="muted text-xs">
                   服务端验证策略和 TLS
                   信任后应用。其他页面已修改配置时会提示冲突，请重新打开编辑器。
@@ -537,7 +543,7 @@ export default function HealthPage({
                   <button
                     className="btn-primary"
                     disabled={!!busy}
-                    onClick={() => void action("save", save)}
+                    type="submit"
                   >
                     <Save size={15} />
                     保存并应用策略
@@ -545,12 +551,13 @@ export default function HealthPage({
                   <button
                     className="btn"
                     disabled={!!busy}
+                    type="button"
                     onClick={() => setEditor(null)}
                   >
                     取消编辑
                   </button>
                 </div>
-              </div>
+              </ConfigForm>
             )}
           </section>
           <section className="panel panel-body" aria-label="健康检测任务">

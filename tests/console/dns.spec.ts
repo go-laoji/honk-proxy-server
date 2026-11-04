@@ -31,24 +31,49 @@ test("DNS MPA resolves through real UDP, shows TTL cache/context, clears and det
     await page
       .getByRole("button", { name: "编辑 DNS 策略", exact: true })
       .click();
-    const editor = page.getByRole("textbox", { name: /DNS 策略 JSON/ });
-    const policy = JSON.parse(await editor.inputValue());
-    policy.upstreams = [
-      {
-        id: "udp-fixture",
-        protocol: "udp",
-        addresses: [`127.0.0.1:${(upstream.address() as AddressInfo).port}`],
-        proxy_bootstrap_ips: [],
-      },
-    ];
-    policy.default_upstream = "udp-fixture";
-    await editor.fill(JSON.stringify(policy));
+    const editor = page.getByRole("form", { name: "DNS 策略表单" });
+    await editor.getByRole("textbox", { name: "上游 ID" }).fill("udp-fixture");
+    await editor
+      .getByRole("combobox", { name: "解析协议" })
+      .selectOption("udp");
+    await editor
+      .getByRole("textbox", { name: /上游 IP 与端口/ })
+      .fill(`127.0.0.1:${(upstream.address() as AddressInfo).port}`);
+    await editor
+      .getByRole("combobox", { name: "默认上游" })
+      .selectOption("udp-fixture");
+    for (const [index, id, domain] of [
+      [1, "fallback", "other.example"],
+      [2, "fixture", "console.example"],
+    ] as const) {
+      await editor.getByRole("button", { name: "添加解析路由" }).click();
+      const row = editor.getByRole("group", {
+        name: `解析路由 ${index}`,
+        exact: true,
+      });
+      await row.getByLabel("路由 ID", { exact: true }).fill(id);
+      await row
+        .getByRole("combobox", { name: "目标上游", exact: true })
+        .selectOption("udp-fixture");
+      await row.getByLabel("域名（留空匹配所有域名）").fill(domain);
+    }
+    await editor
+      .getByRole("group", { name: "解析路由 2", exact: true })
+      .getByRole("button", { name: "上移", exact: true })
+      .click();
+
     await page
       .getByRole("button", { name: "保存并应用 DNS", exact: true })
       .click();
     await expect(page.getByRole("main").getByRole("status")).toContainText(
       "DNS 策略已保存",
     );
+    const applied = (await (await request.get("/api/v1/dns")).json())
+      .configuration;
+    expect(applied.routes.map(({ id }: { id: string }) => id)).toEqual([
+      "fixture",
+      "fallback",
+    ]);
     await page
       .getByRole("textbox", { name: "查询域名", exact: true })
       .fill("console.example");
@@ -103,7 +128,10 @@ test("DNS MPA resolves through real UDP, shows TTL cache/context, clears and det
     await page
       .getByRole("button", { name: "编辑 DNS 策略", exact: true })
       .click();
-    expect(JSON.parse(await editor.inputValue()).timeout_ms).toBe(3000);
+    await editor.getByText("监听、缓存与 Linux 捕获", { exact: true }).click();
+    await expect(
+      editor.getByRole("spinbutton", { name: "解析超时（毫秒）" }),
+    ).toHaveValue("3000");
     await page.getByRole("button", { name: "取消编辑", exact: true }).click();
     await page.setViewportSize({ width: 390, height: 844 });
     expect(

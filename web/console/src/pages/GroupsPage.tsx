@@ -1,3 +1,8 @@
+import { ConfigFields, ConfigForm } from "../components/config/ConfigFields";
+import {
+  groupFields,
+  selectionFields,
+} from "../components/config/routingFields";
 import {
   type SelectionDecision as Decision,
   strategyLabels as strategies,
@@ -45,7 +50,7 @@ type Overview = {
   default_selection: Decision;
 };
 const blankGroup: Group = {
-  id: "new-group",
+  id: "",
   strategy: "round_robin",
   include_all: false,
   members: [],
@@ -78,12 +83,14 @@ export default function GroupsPage({
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [busy, setBusy] = useState(false);
-  const [editor, setEditor] = useState<{
-    mode: "group" | "policy";
-    revision: number;
-    original: string | null;
-    body: string;
-  }>();
+  const [editor, setEditor] = useState<
+    {
+      revision: number;
+    } & (
+      | { mode: "group"; original: string | null; value: Group }
+      | { mode: "policy"; original: null; value: Policy }
+    )
+  >();
   const [group, setGroup] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get("group") ?? params.get("id") ?? "";
@@ -150,16 +157,21 @@ export default function GroupsPage({
       : blankGroup;
     if (!selected) throw new Error("分组已被其他配置移除，请刷新");
     if (mounted.current)
-      setEditor({
-        mode,
-        revision: value.running_revision,
-        original: id ?? null,
-        body: JSON.stringify(
-          mode === "policy" ? value.configuration : selected,
-          null,
-          2,
-        ),
-      });
+      setEditor(
+        mode === "policy"
+          ? {
+              mode,
+              revision: value.running_revision,
+              original: null,
+              value: value.configuration,
+            }
+          : {
+              mode,
+              revision: value.running_revision,
+              original: id ?? null,
+              value: selected,
+            },
+      );
   }
   async function changed(path: string, body: unknown, label: string) {
     const result = await postJson<{ running_revision: number; state: string }>(
@@ -182,21 +194,10 @@ export default function GroupsPage({
   }
   async function save() {
     if (!editor) return;
-    const value: unknown = JSON.parse(editor.body);
-    if (
-      editor.mode === "group" &&
-      editor.original &&
-      (!value ||
-        typeof value !== "object" ||
-        !("id" in value) ||
-        value.id !== editor.original)
-    ) {
-      throw new Error("编辑时请保留分组 ID；创建新分组请使用新增按钮");
-    }
     await changed(
       `api/v1/groups/${editor.mode === "policy" ? "save" : "upsert"}`,
       {
-        [editor.mode === "policy" ? "configuration" : "group"]: value,
+        [editor.mode === "policy" ? "configuration" : "group"]: editor.value,
         expected_revision: editor.revision,
       },
       "分组配置已保存",
@@ -331,35 +332,41 @@ export default function GroupsPage({
           <p className="muted text-xs leading-6">
             {editor.mode === "policy"
               ? "配置默认组、入口绑定、节点和来源标签，以及会话表上限。删除被引用的分组前先移除引用。"
-              : "members、providers 与 groups 子组取并集，再按 tags/protocols 过滤。订阅来源写 subscription:来源ID；子组保留过滤与固定范围，最多 8 层且拒绝循环。strategy=score 使用 score 权重与显式 weights 运营优先级；缺失证据逐项扣分，不推断成本或地域。"}
+              : "成员节点、来源和子分组先合并，再按标签和协议筛选。固定节点和回退范围可单独设置。"}
           </p>
-          <label className="form-field">
-            {editor.mode === "policy" ? "选择策略 JSON" : "分组 JSON"}
-            <textarea
-              className="field editor-field min-h-80"
-              spellCheck={false}
-              value={editor.body}
-              onChange={(event) =>
-                setEditor({ ...editor, body: event.target.value })
-              }
-            />
-          </label>
-          <div className="flex gap-2">
-            <button
-              className="btn-primary"
-              disabled={busy}
-              onClick={() => void action(save)}
-            >
-              保存并应用分组
-            </button>
-            <button
-              className="btn"
-              disabled={busy}
-              onClick={() => setEditor(undefined)}
-            >
-              取消编辑
-            </button>
-          </div>
+          <ConfigForm
+            label="分组配置"
+            onSave={() => {
+              if (!busy) void action(save);
+            }}
+          >
+            {editor.mode === "policy" ? (
+              <ConfigFields
+                fields={selectionFields(editor.value.groups)}
+                value={editor.value}
+                onChange={(value) => setEditor({ ...editor, value })}
+              />
+            ) : (
+              <ConfigFields
+                fields={groupFields(Boolean(editor.original))}
+                value={editor.value}
+                onChange={(value) => setEditor({ ...editor, value })}
+              />
+            )}
+            <div className="flex flex-wrap gap-2">
+              <button className="btn-primary" type="submit" disabled={busy}>
+                保存并应用分组
+              </button>
+              <button
+                className="btn"
+                type="button"
+                disabled={busy}
+                onClick={() => setEditor(undefined)}
+              >
+                取消编辑
+              </button>
+            </div>
+          </ConfigForm>
         </section>
       )}
       <section className="grid gap-2 md:grid-cols-2" aria-label="分组列表">
