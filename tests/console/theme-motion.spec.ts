@@ -77,6 +77,19 @@ test("both themes keep navigation, primary actions and secondary text readable a
     await expect
       .poll(() => contrast(page, ".field", ".field", "border-top-color"))
       .toBeGreaterThanOrEqual(3);
+    for (const [icon, surface, minimum] of [
+      [".nav-link:not([aria-current]) .nav-icon svg", ".sidebar", 7],
+      [".nav-link[aria-current] .nav-icon svg", ".nav-link[aria-current]", 6],
+      [".page-heading-mark svg", ".page-heading-mark", 6],
+      [".theme-icon svg", ".app-header", 7],
+      [".page-heading .action-icon svg", ".page-heading .btn", 7],
+    ] as const) {
+      await expect
+        .poll(() => contrast(page, icon, surface, "stroke"), {
+          message: `${mode} ${icon}`,
+        })
+        .toBeGreaterThanOrEqual(minimum);
+    }
     await page.getByRole("link", { name: "运行概览", exact: true }).click();
     await expect(page.locator(".stat-card").first()).toBeVisible();
     await expect(page.getByRole("figure").first()).toBeVisible();

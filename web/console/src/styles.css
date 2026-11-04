@@ -38,12 +38,14 @@
   --accent-soft: #d9e7ff;
   --accent-ink: #173eaa;
   --signal: #00758c;
+  --icon-ink: #214698;
+  --icon-active: #00566d;
   --action-end: #00667d;
   --action-ink: #ffffff;
   --canvas-glow: #bcd8ff90;
   --canvas-grid: #2d5a9915;
   --panel-shadow: #17385c0c;
-  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%2349617e' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E");
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23214698' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E");
   --chart-up: #3659c9;
   --chart-down: #00778c;
   --chart-failed: #ac345d;
@@ -74,12 +76,14 @@
   --accent-soft: #1b335a;
   --accent-ink: #bfd7ff;
   --signal: #5ddbea;
+  --icon-ink: #b7d3ff;
+  --icon-active: #6ce8f2;
   --action-end: #68deea;
   --action-ink: #08172d;
   --canvas-glow: #214b8360;
   --canvas-grid: #6b9ce21c;
   --panel-shadow: #03081138;
-  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23a3b8d4' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E");
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23b7d3ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E");
   --chart-up: #8da4ff;
   --chart-down: #61d8e7;
   --chart-failed: #ff91b8;
@@ -164,6 +168,9 @@
   .btn {
     border-color: var(--border);
     background: var(--surface);
+  }
+  .btn:not(.text-console-danger) > :is(svg, .action-icon) {
+    color: var(--icon-ink);
   }
   .btn:not(:disabled):hover {
     background: var(--accent-soft);
@@ -329,6 +336,11 @@
   }
   .nav-icon {
     @apply inline-flex size-5 shrink-0 items-center justify-center;
+    color: var(--icon-ink);
+  }
+  .nav-link[aria-current] .nav-icon,
+  .nav-link:is(:hover, :focus-visible) .nav-icon {
+    color: var(--icon-active);
   }
   .sidebar-instance {
     @apply mx-3 my-2 shrink-0 px-2.5 py-3;
@@ -348,11 +360,11 @@
   }
   .icon-button {
     @apply inline-flex shrink-0 rounded-lg p-2;
-    color: var(--muted);
+    color: var(--icon-ink);
   }
-  .icon-button:hover {
+  .icon-button:is(:hover, :focus-visible) {
     background: var(--accent-soft);
-    color: var(--accent-ink);
+    color: var(--icon-active);
   }
   .page-heading {
     @apply mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2;
@@ -361,7 +373,18 @@
     @apply inline-flex size-8 shrink-0 items-center justify-center rounded-md;
     border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
     background: var(--accent-soft);
-    color: var(--accent-ink);
+    color: var(--icon-active);
+  }
+  :is(
+      .nav-icon,
+      .icon-button,
+      .page-heading-mark,
+      .stat-icon,
+      .btn,
+      .btn-primary
+    )
+    .lucide {
+    stroke-width: 2.25;
   }
   .text-link {
     @apply inline-flex shrink-0 items-center gap-1 text-xs font-medium;
