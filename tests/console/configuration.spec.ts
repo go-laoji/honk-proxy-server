@@ -11,7 +11,8 @@ test("shared config draft conflicts, activation, redacted export, pending restar
       page.goto("/console/config.html"),
       peer.goto("/console/config.html"),
     ]);
-    const editor = page.getByRole("textbox", {
+    const main = page.getByRole("main");
+    const editor = main.getByRole("textbox", {
       name: "配置 TOML",
       exact: true,
     });
@@ -32,7 +33,7 @@ test("shared config draft conflicts, activation, redacted export, pending restar
       '\n[[proxy.upstreams]]\nid="console-fixture"\nprotocol="http"\nhost="127.0.0.1"\nport=18080\nenabled=false\n[proxy.upstreams.credentials]\nusername="supplier"\npassword="console-private-password"\n';
     await editor.fill(candidate);
     await page.getByRole("button", { name: "保存草稿", exact: true }).click();
-    await expect(page.getByRole("status")).toContainText("共享草稿已保存");
+    await expect(main.getByRole("status")).toContainText("共享草稿已保存");
     await peerEditor.fill(
       initial.replace(
         'instance_name = "honk-proxy-server"',
@@ -40,18 +41,18 @@ test("shared config draft conflicts, activation, redacted export, pending restar
       ),
     );
     await peer.getByRole("button", { name: "保存草稿", exact: true }).click();
-    await expect(peer.getByRole("alert")).toContainText(
+    await expect(peer.getByRole("main").getByRole("alert")).toContainText(
       "configuration changed",
     );
     await page.reload();
     await expect(editor).toHaveValue(/\[REDACTED\]/);
     await page.getByRole("button", { name: "校验并预览", exact: true }).click();
-    await expect(page.getByRole("status")).toContainText("校验通过");
+    await expect(main.getByRole("status")).toContainText("校验通过");
     await expect(
       page.getByRole("button", { name: "保存版本", exact: true }),
     ).toBeEnabled();
     await page.getByRole("button", { name: "保存版本", exact: true }).click();
-    await expect(page.getByRole("status")).toContainText("已保存，尚未激活");
+    await expect(main.getByRole("status")).toContainText("已保存，尚未激活");
     let workspace = await (
       await request.get("/api/v1/config/workspace")
     ).json();
@@ -59,7 +60,7 @@ test("shared config draft conflicts, activation, redacted export, pending restar
     await page
       .getByRole("button", { name: `激活 r${revision}`, exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText(
+    await expect(main.getByRole("status")).toContainText(
       "已应用到实际运行代际",
     );
     expect(
@@ -91,13 +92,13 @@ test("shared config draft conflicts, activation, redacted export, pending restar
     await page
       .getByRole("button", { name: `激活版本 ${pending.id}`, exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText("需重启 Daemon");
+    await expect(main.getByRole("status")).toContainText("需重启 Daemon");
     workspace = await (await request.get("/api/v1/config/workspace")).json();
     expect(workspace.desired_revision).toBe(pending.id);
     expect(workspace.running_revision).toBe(revision);
     expect(workspace.pending_restart).toContain("log_filter");
     await page.getByRole("button", { name: "回滚版本 1", exact: true }).click();
-    await expect(page.getByRole("status")).toContainText(
+    await expect(main.getByRole("status")).toContainText(
       "已应用到实际运行代际",
     );
     expect(
