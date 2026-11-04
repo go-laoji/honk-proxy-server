@@ -6,9 +6,14 @@ import {
   Filter,
   ArrowLeft,
   Plus,
+  ChevronDown,
 } from "lucide-react";
 import { Badge, Details } from "../components/ui";
-import { NodeStats, SourceStats } from "../components/NodeSummary";
+import { SourceStats } from "../components/NodeSummary";
+import NodeTable, {
+  NodeActions,
+  type NodeAction,
+} from "../components/NodeTable";
 import { getJson, postJson } from "../platform";
 import HealthHistoryPanel from "../components/HealthHistoryPanel";
 import ManualNodePanel from "../components/ManualNodePanel";
@@ -26,6 +31,7 @@ const message = (cause: unknown) =>
   cause instanceof Error ? cause.message : String(cause);
 const date = (value: number | null) =>
   value === null ? "未提供" : new Date(value * 1000).toLocaleString("zh-CN");
+const defaultSort = "expiry_desc";
 const filters = [
   "search",
   "provider",
@@ -73,7 +79,14 @@ export default function NodesPage() {
     const request = ++generation.current;
     setLoading(true);
     setLoadError("");
-    void getJson<NodesOverview>(`api/v1/nodes${query}`, controller.signal)
+    const requestParams = new URLSearchParams(query);
+    if (!requestParams.has("sort") && !requestParams.has("id")) {
+      requestParams.set("sort", defaultSort);
+    }
+    void getJson<NodesOverview>(
+      `api/v1/nodes?${requestParams}`,
+      controller.signal,
+    )
       .then((result) => {
         if (!controller.signal.aborted && generation.current === request)
           setValue(result);
@@ -127,7 +140,7 @@ export default function NodesPage() {
     setPreview(null);
     setReviewed(null);
   }
-  async function action(node: NodeView, kind: string) {
+  async function action(node: NodeView, kind: NodeAction) {
     if (!value) return;
     setBusy(true);
     setError("");
@@ -146,7 +159,7 @@ export default function NodesPage() {
         },
       );
       setNotice(
-        `${node.id}：${kind === "enable" ? "已解除人工限制，仍需通过配置、健康与寿命准入" : kind === "delete" ? "已软删除，仅抑制此节点，可恢复" : kind === "drain" ? "已停止新连接，现有连接自然排空" : "已禁用新连接"}`,
+        `${node.id}：${kind === "enable" ? "已解除人工限制，仍需通过配置、健康与寿命准入" : kind === "drain" ? "已停止新连接，现有连接自然排空" : "已禁用新连接"}`,
       );
       if (!result.pool_refreshed)
         setError("节点操作已生效，当前池尚未完成重算；请刷新后重试此操作。");
@@ -214,213 +227,243 @@ export default function NodesPage() {
   }
   const selected = value?.nodes.find((n) => n.id === selectedId);
   return (
-    <div className="space-y-6">
-      {value && <NodeStats value={value.summary} />}
-      {value && value.sources.length > 0 && (
-        <SourceStats sources={value.sources} />
-      )}
-      <section className="panel p-5">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h2 className="flex items-center gap-2 font-semibold">
-              <Globe2 size={19} />
+    <div className="space-y-3">
+      {!selectedId && (
+        <section className="panel space-y-2.5 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="flex items-center gap-2 text-sm font-semibold">
+              <Globe2 size={16} aria-hidden="true" />
               节点库存
             </h2>
-            <p className="muted mt-2 text-xs leading-6">
-              配置、租约、健康与人工限制分别判断。禁用、排空和软删除均停止新拨号，已有连接继续排空。
+            <div className="flex flex-wrap gap-2">
+              <button
+                className="btn-primary"
+                disabled={busy || loading || !value}
+                onClick={() => {
+                  setAdding(!adding);
+                  setEditing(false);
+                }}
+                aria-expanded={adding}
+              >
+                <Plus size={15} />
+                手动添加
+              </button>
+              <button
+                className="btn"
+                disabled={busy || loading}
+                onClick={() => setReload((n) => n + 1)}
+              >
+                <RefreshCw size={15} />
+                刷新节点
+              </button>
+              <button
+                className="btn"
+                disabled={busy}
+                onClick={() => {
+                  setEditing(!editing);
+                  setAdding(false);
+                }}
+                aria-expanded={editing}
+              >
+                <Upload size={15} />
+                批量导入
+              </button>
+            </div>
+          </div>
+          {value && (
+            <dl
+              aria-label="节点库存摘要"
+              className="muted flex flex-wrap gap-x-4 gap-y-1 text-xs tabular-nums"
+            >
+              {[
+                ["库存", value.summary.inventory],
+                ["当前池", value.summary.published],
+                ["可准入", value.summary.eligible],
+                ["近到期", value.summary.near_expiry],
+                ["已到期", value.summary.expired],
+                ["人工限制", value.summary.restricted],
+              ].map(([label, count]) => (
+                <div key={label} className="flex gap-1.5">
+                  <dt>{label}</dt>
+                  <dd className="font-semibold text-current">{count}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+          <form
+            key={`${query}:${value?.providers.join(",") ?? ""}:${value?.groups.join(",") ?? ""}`}
+            onSubmit={filter}
+            className="space-y-2"
+            aria-label="节点筛选"
+          >
+            <div className="grid grid-cols-2 items-end gap-2 xl:grid-cols-[minmax(10rem,1.5fr)_minmax(8rem,1fr)_minmax(8rem,1fr)_auto]">
+              <label className="col-span-2 text-xs sm:col-span-1">
+                名称或端点
+                <input
+                  className="field mt-1"
+                  name="search"
+                  defaultValue={params.get("search") ?? ""}
+                />
+              </label>
+              <label className="text-xs">
+                来源
+                <select
+                  className="field mt-1"
+                  name="provider"
+                  defaultValue={params.get("provider") ?? ""}
+                >
+                  <option value="">全部来源</option>
+                  <option value="@static">静态节点</option>
+                  {value?.providers.map((id) => (
+                    <option key={id}>{id}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs">
+                状态
+                <select
+                  className="field mt-1"
+                  name="state"
+                  defaultValue={params.get("state") ?? ""}
+                >
+                  <option value="">全部状态</option>
+                  {Object.entries({
+                    eligible: "可准入",
+                    blocked: "不可准入",
+                    near_expiry: "60 秒内到期",
+                    expired: "已到期",
+                    disabled: "已禁用",
+                    draining: "排空中",
+                    deleted: "历史停用",
+                    retired: "已退休 / 来源不可用",
+                    healthy: "健康通过",
+                    unhealthy: "检测失败",
+                    unknown: "健康未知",
+                  }).map(([v, label]) => (
+                    <option value={v} key={v}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="col-span-2 flex items-end gap-2 sm:col-span-1">
+                <button className="btn" disabled={busy}>
+                  <Filter size={15} />
+                  应用筛选
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => navigate(new URLSearchParams())}
+                >
+                  重置
+                </button>
+              </div>
+            </div>
+            <details
+              className="group"
+              open={Boolean(
+                params.get("group") ||
+                params.get("protocol") ||
+                params.get("capability") ||
+                params.get("remaining_max_secs") ||
+                (params.get("sort") ?? defaultSort) !== defaultSort ||
+                (params.get("limit") ?? "50") !== "50",
+              )}
+            >
+              <summary className="muted flex w-fit list-none items-center gap-1 rounded-sm text-xs">
+                <ChevronDown
+                  size={14}
+                  className="-rotate-90 group-open:rotate-0"
+                  aria-hidden="true"
+                />
+                高级筛选
+              </summary>
+              <div className="mt-2 grid gap-2 sm:grid-cols-3 xl:grid-cols-6">
+                <label className="text-xs">
+                  分组
+                  <select
+                    className="field mt-1"
+                    name="group"
+                    defaultValue={params.get("group") ?? ""}
+                  >
+                    <option value="">全部分组</option>
+                    {value?.groups.map((id) => (
+                      <option key={id}>{id}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="text-xs">
+                  协议
+                  <select
+                    className="field mt-1"
+                    name="protocol"
+                    defaultValue={params.get("protocol") ?? ""}
+                  >
+                    <option value="">全部协议</option>
+                    {["http", "https", "socks5"].map((p) => (
+                      <option key={p}>{p}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="text-xs">
+                  能力
+                  <select
+                    className="field mt-1"
+                    name="capability"
+                    defaultValue={params.get("capability") ?? ""}
+                  >
+                    <option value="">全部能力</option>
+                    <option value="tcp">TCP</option>
+                    <option value="udp">UDP</option>
+                    <option value="ipv4">IPv4 健康已证实</option>
+                    <option value="ipv6">IPv6 健康已证实</option>
+                  </select>
+                </label>
+                <label className="text-xs">
+                  剩余寿命不超过（秒）
+                  <input
+                    className="field mt-1"
+                    name="remaining_max_secs"
+                    type="number"
+                    min="0"
+                    defaultValue={params.get("remaining_max_secs") ?? ""}
+                  />
+                </label>
+                <label className="text-xs">
+                  排序
+                  <select
+                    className="field mt-1"
+                    name="sort"
+                    defaultValue={params.get("sort") ?? defaultSort}
+                  >
+                    <option value="id">节点 ID</option>
+                    <option value="expiry_asc">最早到期</option>
+                    <option value="expiry_desc">最晚到期</option>
+                  </select>
+                </label>
+                <label className="text-xs">
+                  每页
+                  <select
+                    className="field mt-1"
+                    name="limit"
+                    defaultValue={params.get("limit") ?? "50"}
+                  >
+                    {pageSizes.map((n) => (
+                      <option key={n}>{n}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </details>
+          </form>
+          {value?.inventory_truncated && (
+            <p role="alert" className="mt-3 text-sm text-amber-700">
+              库存查询达到 200000 条租约上限，当前摘要为受限样本。
             </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              className="btn-primary"
-              disabled={busy || loading || !value}
-              onClick={() => {
-                setAdding(!adding);
-                setEditing(false);
-              }}
-              aria-expanded={adding}
-            >
-              <Plus size={15} />
-              手动添加
-            </button>
-            <button
-              className="btn"
-              disabled={busy || loading}
-              onClick={() => setReload((n) => n + 1)}
-            >
-              <RefreshCw size={15} />
-              刷新节点
-            </button>
-            <button
-              className="btn"
-              disabled={busy}
-              onClick={() => {
-                setEditing(!editing);
-                setAdding(false);
-              }}
-              aria-expanded={editing}
-            >
-              <Upload size={15} />
-              批量导入
-            </button>
-          </div>
-        </div>
-        <form
-          key={`${query}:${value?.providers.join(",") ?? ""}:${value?.groups.join(",") ?? ""}`}
-          onSubmit={filter}
-          className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
-          aria-label="节点筛选"
-        >
-          <label className="text-xs">
-            名称或端点
-            <input
-              className="field mt-1"
-              name="search"
-              defaultValue={params.get("search") ?? ""}
-            />
-          </label>
-          <label className="text-xs">
-            来源
-            <select
-              className="field mt-1"
-              name="provider"
-              defaultValue={params.get("provider") ?? ""}
-            >
-              <option value="">全部来源</option>
-              <option value="@static">静态节点</option>
-              {value?.providers.map((id) => (
-                <option key={id}>{id}</option>
-              ))}
-            </select>
-          </label>
-          <label className="text-xs">
-            分组
-            <select
-              className="field mt-1"
-              name="group"
-              defaultValue={params.get("group") ?? ""}
-            >
-              <option value="">全部分组</option>
-              {value?.groups.map((id) => (
-                <option key={id}>{id}</option>
-              ))}
-            </select>
-          </label>
-          <label className="text-xs">
-            协议
-            <select
-              className="field mt-1"
-              name="protocol"
-              defaultValue={params.get("protocol") ?? ""}
-            >
-              <option value="">全部协议</option>
-              {["http", "https", "socks5"].map((p) => (
-                <option key={p}>{p}</option>
-              ))}
-            </select>
-          </label>
-          <label className="text-xs">
-            能力
-            <select
-              className="field mt-1"
-              name="capability"
-              defaultValue={params.get("capability") ?? ""}
-            >
-              <option value="">全部能力</option>
-              <option value="tcp">TCP</option>
-              <option value="udp">UDP</option>
-              <option value="ipv4">IPv4 健康已证实</option>
-              <option value="ipv6">IPv6 健康已证实</option>
-            </select>
-          </label>
-          <label className="text-xs">
-            状态
-            <select
-              className="field mt-1"
-              name="state"
-              defaultValue={params.get("state") ?? ""}
-            >
-              <option value="">全部状态</option>
-              {Object.entries({
-                eligible: "可准入",
-                blocked: "不可准入",
-                near_expiry: "60 秒内到期",
-                expired: "已到期",
-                disabled: "已禁用",
-                draining: "排空中",
-                deleted: "软删除",
-                retired: "已退休 / 来源不可用",
-                healthy: "健康通过",
-                unhealthy: "检测失败",
-                unknown: "健康未知",
-              }).map(([v, label]) => (
-                <option value={v} key={v}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-xs">
-            剩余寿命不超过（秒）
-            <input
-              className="field mt-1"
-              name="remaining_max_secs"
-              type="number"
-              min="0"
-              defaultValue={params.get("remaining_max_secs") ?? ""}
-            />
-          </label>
-          <label className="text-xs">
-            排序
-            <select
-              className="field mt-1"
-              name="sort"
-              defaultValue={params.get("sort") ?? "id"}
-            >
-              <option value="id">节点 ID</option>
-              <option value="expiry_asc">最早到期</option>
-              <option value="expiry_desc">最晚到期</option>
-            </select>
-          </label>
-          <label className="text-xs">
-            每页
-            <select
-              className="field mt-1"
-              name="limit"
-              defaultValue={params.get("limit") ?? "50"}
-            >
-              {pageSizes.map((n) => (
-                <option key={n}>{n}</option>
-              ))}
-            </select>
-          </label>
-          <div className="flex items-end gap-2">
-            <button className="btn" disabled={busy}>
-              <Filter size={15} />
-              应用筛选
-            </button>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => navigate(new URLSearchParams())}
-            >
-              重置
-            </button>
-          </div>
-        </form>
-        {value && (
-          <p className="muted mt-4 text-xs">
-            运行配置 r{value.running_revision} · {date(value.evaluated_at_unix)}{" "}
-            · 匹配 {value.filtered_total}{" "}
-            个节点。分页反映实时库存，写操作校验所见版本。
-          </p>
-        )}
-        {value?.inventory_truncated && (
-          <p role="alert" className="mt-3 text-sm text-amber-700">
-            库存查询达到 200000 条租约上限，当前摘要为受限样本。
-          </p>
-        )}
-      </section>
+          )}
+        </section>
+      )}
       {(error || loadError) && (
         <p role="alert" className="panel break-words p-4 text-sm text-red-600">
           {error || loadError}
@@ -567,17 +610,49 @@ export default function NodesPage() {
       )}
       {selectedId && (
         <section className="panel" aria-label="节点详情">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 p-5 dark:border-slate-800">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 p-3 dark:border-slate-800">
             <h2 className="break-all font-semibold">节点详情 · {selectedId}</h2>
-            <a className="btn" href="./nodes.html">
-              <ArrowLeft size={15} />
-              返回列表
-            </a>
+            <div className="flex flex-wrap gap-2">
+              <button
+                className="btn"
+                disabled={busy || loading}
+                onClick={() => setReload((n) => n + 1)}
+              >
+                <RefreshCw size={15} />
+                刷新节点
+              </button>
+              <a className="btn" href="./nodes.html">
+                <ArrowLeft size={15} />
+                返回列表
+              </a>
+            </div>
           </div>
           {selected ? (
             <>
               <Details
                 rows={[
+                  ["端点", <code>{nodeAddress(selected)}</code>],
+                  [
+                    "准入状态",
+                    <Badge active={selected.eligible}>
+                      {selected.eligible ? "可准入" : "不可准入"}
+                    </Badge>,
+                  ],
+                  [
+                    "健康",
+                    nodeStates[selected.health_state] ?? selected.health_state,
+                  ],
+                  ["人工状态", nodeStates[selected.operation.state]],
+                  ...(selected.admission_reasons.length > 0
+                    ? [
+                        [
+                          "限制原因",
+                          selected.admission_reasons
+                            .map((reason) => nodeReasons[reason] ?? reason)
+                            .join(" · "),
+                        ] as [string, string],
+                      ]
+                    : []),
                   [
                     "来源",
                     selected.provider_id ? (
@@ -646,13 +721,20 @@ export default function NodesPage() {
                   ],
                 ]}
               />
-              <div className="space-y-3 border-t border-slate-100 p-5 dark:border-slate-800">
-                <a
-                  href={`./health.html?node=${encodeURIComponent(selected.id)}`}
-                  className="text-sm text-blue-600"
-                >
-                  健康检测与任务 →
-                </a>
+              <div className="space-y-2 border-t border-slate-100 p-3 dark:border-slate-800">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <NodeActions
+                    node={selected}
+                    disabled={busy || loading}
+                    onAction={action}
+                  />
+                  <a
+                    href={`./health.html?node=${encodeURIComponent(selected.id)}`}
+                    className="text-sm text-blue-600"
+                  >
+                    健康检测与任务 →
+                  </a>
+                </div>
                 {selected.health_results.length ? (
                   selected.health_results.map((r) => (
                     <p
@@ -681,112 +763,81 @@ export default function NodesPage() {
         </section>
       )}
       {selectedId && <HealthHistoryPanel key={selectedId} node={selectedId} />}
-      {loading && <p className="muted text-sm">正在读取实际节点库存…</p>}
-      <div className="record-list" aria-label="节点列表">
-        {value?.nodes.map((node) => (
-          <article
-            className="panel record-card"
-            key={node.id}
-            aria-label={`节点 ${node.id}`}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <a
-                  className="record-title"
-                  href={`./node-detail.html?id=${encodeURIComponent(node.id)}`}
-                >
-                  {node.id}
-                </a>
-                <p className="muted mt-1 font-mono text-xs [overflow-wrap:anywhere]">
-                  {nodeAddress(node)}
-                </p>
-              </div>
-              <Badge active={node.eligible}>
-                {node.eligible ? "可准入" : "不可准入"}
-              </Badge>
-            </div>
-            <div className="record-details">
-              <p>租约：{nodeStates[node.lease_state] ?? node.lease_state}</p>
-              <p>健康：{nodeStates[node.health_state] ?? node.health_state}</p>
-              <p>人工状态：{nodeStates[node.operation.state]}</p>
-              <p>
-                剩余：
-                {node.remaining_secs === null
-                  ? node.kind === "subscription"
-                    ? "供应商有效期未知"
-                    : "未设到期"
-                  : `${node.remaining_secs} 秒`}
+      {!selectedId && (
+        <section
+          className="panel overflow-hidden"
+          aria-label="节点查询结果"
+          aria-busy={loading}
+        >
+          {value && value.nodes.length > 0 ? (
+            <NodeTable
+              nodes={value.nodes}
+              disabled={busy || loading}
+              onAction={action}
+            />
+          ) : (
+            <p className="muted p-5 text-center text-sm">
+              {loading
+                ? "正在读取实际节点库存…"
+                : loadError
+                  ? "节点列表暂不可用。"
+                  : "没有符合筛选的节点；可手动添加、批量导入或调整筛选。"}
+            </p>
+          )}
+          {value && (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-3 py-2 dark:border-slate-800">
+              <p className="muted text-xs tabular-nums">
+                {value.nodes.length > 0 &&
+                  `第 ${value.offset + 1}–${value.offset + value.nodes.length} 个 · `}
+                共 {value.filtered_total} 个 · r{value.running_revision} ·{" "}
+                {date(value.evaluated_at_unix)}
               </p>
-              <p>
-                来源：{node.provider_id ?? "静态节点"}
-                {node.batch_id !== null ? ` / 批次 #${node.batch_id}` : ""}
-              </p>
-              <p>业务拨号 / 连接：{node.active_connections}</p>
-            </div>
-            {node.admission_reasons.length > 0 && (
-              <ul className="space-y-1 text-xs text-amber-700 dark:text-amber-300">
-                {node.admission_reasons.map((reason) => (
-                  <li key={reason}>{nodeReasons[reason] ?? reason}</li>
-                ))}
-              </ul>
-            )}
-            <div className="record-actions">
-              {[
-                ["enable", "解除限制"],
-                ["disable", "禁用"],
-                ["drain", "排空"],
-                ["delete", "软删除"],
-              ].map(([kind, label]) => (
+              <div className="flex gap-2">
                 <button
-                  key={kind}
-                  className="btn text-xs"
-                  disabled={
-                    busy ||
-                    loading ||
-                    (kind === "delete" && node.operation.state === "deleted")
+                  className="btn"
+                  disabled={loading || busy || value.offset === 0}
+                  onClick={() =>
+                    page(
+                      Math.max(
+                        0,
+                        value.offset - Number(params.get("limit") ?? 50),
+                      ),
+                    )
                   }
-                  onClick={() => void action(node, kind)}
                 >
-                  {label}
+                  上一页
                 </button>
-              ))}
+                <button
+                  className="btn"
+                  disabled={loading || busy || value.next_offset === null}
+                  onClick={() =>
+                    value.next_offset !== null && page(value.next_offset)
+                  }
+                >
+                  下一页
+                </button>
+              </div>
             </div>
-          </article>
-        ))}
-      </div>
-      {value && !loading && value.nodes.length === 0 && (
-        <p className="panel p-8 text-center text-sm">
-          没有符合筛选的节点；可手动添加、批量导入或调整筛选。
-        </p>
+          )}
+        </section>
       )}
-      {value && (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="muted text-xs">
-            匹配 {value.filtered_total} · 当前偏移 {value.offset}
-          </p>
-          <div className="flex gap-2">
-            <button
-              className="btn"
-              disabled={loading || value.offset === 0}
-              onClick={() =>
-                page(
-                  Math.max(0, value.offset - Number(params.get("limit") ?? 50)),
-                )
-              }
-            >
-              上一页
-            </button>
-            <button
-              className="btn"
-              disabled={loading || value.next_offset === null}
-              onClick={() =>
-                value.next_offset !== null && page(value.next_offset)
-              }
-            >
-              下一页
-            </button>
+      {!selectedId && value && value.sources.length > 0 && (
+        <details className="panel group p-3">
+          <summary className="flex w-fit list-none items-center gap-1 rounded-sm text-sm font-medium">
+            <ChevronDown
+              size={15}
+              className="-rotate-90 group-open:rotate-0"
+              aria-hidden="true"
+            />
+            来源水位与异常
+            <span className="muted ml-1 text-xs">
+              {value.sources.length} 个来源
+            </span>
+          </summary>
+          <div className="mt-3">
+            <SourceStats sources={value.sources} />
           </div>
-        </div>
+        </details>
       )}
     </div>
   );

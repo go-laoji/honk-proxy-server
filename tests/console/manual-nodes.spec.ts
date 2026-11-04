@@ -152,18 +152,18 @@ test("manual node form persists authenticated HTTP node, passes health and carri
       animations: "disabled",
     });
     await form.getByRole("button", { name: "添加节点", exact: true }).click();
-    await expect(page.getByRole("status")).toContainText(
+    await expect(page.getByRole("main").getByRole("status")).toContainText(
       "已添加静态节点 manual-http-proof",
     );
     await expect(page).toHaveURL(/search=manual-http-proof/);
-    const card = page.getByRole("article", {
+    const row = page.getByRole("row", {
       name: "节点 manual-http-proof",
       exact: true,
     });
-    await expect(card).toContainText(`http://127.0.0.1:${port}`);
-    await expect(card).toContainText("来源：静态节点");
+    await expect(row).toContainText(`http://127.0.0.1:${port}`);
+    await expect(row.getByRole("cell", { name: "静态节点" })).toBeVisible();
     await page.reload();
-    await expect(card).toBeVisible();
+    await expect(row).toBeVisible();
     await expect
       .poll(async () => {
         const inventory = await (
@@ -283,7 +283,7 @@ test("manual node URL, IPv6, expiry, duplicate and stale revisions keep credenti
     });
     await expiry.fill(future);
     await form.getByRole("button", { name: "添加节点", exact: true }).click();
-    await expect(page.getByRole("status")).toContainText(
+    await expect(page.getByRole("main").getByRole("status")).toContainText(
       "已添加静态节点 manual-socks-proof",
     );
     let inventory = await (await request.get("/api/v1/nodes")).json();
@@ -335,7 +335,7 @@ test("manual node URL, IPv6, expiry, duplicate and stale revisions keep credenti
       form.getByRole("button", { name: "添加节点", exact: true }),
     ).toBeEnabled();
     await form.getByRole("button", { name: "添加节点", exact: true }).click();
-    await expect(page.getByRole("status")).toContainText(
+    await expect(page.getByRole("main").getByRole("status")).toContainText(
       "已添加静态节点 manual-cas-proof",
     );
     inventory = await (await request.get("/api/v1/nodes")).json();
@@ -350,7 +350,7 @@ test("manual node URL, IPv6, expiry, duplicate and stale revisions keep credenti
       .fill("proxy.example.test");
     await form.getByLabel("添加后启用", { exact: true }).uncheck();
     await form.getByRole("button", { name: "添加节点", exact: true }).click();
-    await expect(page.getByRole("status")).toContainText(
+    await expect(page.getByRole("main").getByRole("status")).toContainText(
       /已添加静态节点 manual-\d+-\d+/,
     );
     inventory = await (await request.get("/api/v1/nodes")).json();

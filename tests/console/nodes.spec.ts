@@ -71,6 +71,10 @@ test("nodes MPA previews imports, restores filters, gates actual proxy traffic a
       ).ok(),
     ).toBe(true);
     await page.goto("/console/nodes.html");
+    await page.locator("summary").filter({ hasText: "来源水位与异常" }).click();
+    await expect(
+      page.getByLabel("来源水位与异常", { exact: true }),
+    ).toBeVisible();
     await expect(
       page.getByLabel("来源水位与异常", { exact: true }),
     ).toContainText("最小 1 / 目标 2 / 上限 3");
@@ -105,7 +109,7 @@ test("nodes MPA previews imports, restores filters, gates actual proxy traffic a
     await preview
       .getByRole("button", { name: "确认导入并激活所选节点", exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText(
+    await expect(page.getByRole("main").getByRole("status")).toContainText(
       "已导入并激活 2 个静态节点",
     );
     let inventory: NodesOverview = await (
@@ -113,6 +117,25 @@ test("nodes MPA previews imports, restores filters, gates actual proxy traffic a
     ).json();
     const node = inventory.nodes.find((n) => n.protocol === "http")!;
     expect(inventory.summary.inventory).toBe(2);
+    const table = page.getByRole("table", { name: "节点列表", exact: true });
+    const rows = table.locator("tbody").getByRole("row");
+    await expect(rows).toHaveCount(2);
+    await page.getByText("高级筛选", { exact: true }).click();
+    await page
+      .getByRole("combobox", { name: "每页", exact: true })
+      .selectOption("20");
+    await page.getByRole("button", { name: "应用筛选", exact: true }).click();
+    await expect(page).toHaveURL(/limit=20/);
+    await page.goto("/console/nodes.html?limit=1");
+    await expect(rows).toHaveCount(1);
+    const firstRow = await rows.first().getAttribute("aria-label");
+    await page.getByRole("button", { name: "下一页", exact: true }).click();
+    await expect(page).toHaveURL(/offset=1/);
+    await expect(rows.first()).not.toHaveAttribute("aria-label", firstRow!);
+    await page.getByRole("button", { name: "上一页", exact: true }).click();
+    await expect(rows.first()).toHaveAttribute("aria-label", firstRow!);
+    await page.getByRole("button", { name: "重置", exact: true }).click();
+    await expect(rows).toHaveCount(2);
     expect(
       (
         await request.post("/api/v1/groups/save", {
@@ -139,15 +162,17 @@ test("nodes MPA previews imports, restores filters, gates actual proxy traffic a
     const listenPort = Number(inlet.listen.split(":").at(-1));
     expect(await throughProxy(listenPort)).toBe(200);
     await page.getByRole("button", { name: "刷新节点", exact: true }).click();
-    const card = page.getByRole("article", {
+    const row = table.getByRole("row", {
       name: `节点 ${node.id}`,
       exact: true,
     });
     await expect(
-      card.getByRole("button", { name: "禁用", exact: true }),
+      row.getByRole("button", { name: "禁用", exact: true }),
     ).toBeEnabled();
-    await card.getByRole("button", { name: "禁用", exact: true }).click();
-    await expect(page.getByRole("status")).toContainText("已禁用新连接");
+    await row.getByRole("button", { name: "禁用", exact: true }).click();
+    await expect(page.getByRole("main").getByRole("status")).toContainText(
+      "已禁用新连接",
+    );
     expect(await throughProxy(listenPort)).toBe(503);
     await page
       .getByRole("combobox", { name: "状态", exact: true })
@@ -158,14 +183,17 @@ test("nodes MPA previews imports, restores filters, gates actual proxy traffic a
     await expect(
       page.getByRole("combobox", { name: "状态", exact: true }),
     ).toHaveValue("disabled");
-    await expect(
-      page.getByLabel("节点列表", { exact: true }).getByRole("article"),
-    ).toHaveCount(1);
+    await expect(rows).toHaveCount(1);
     await page.setViewportSize({ width: 390, height: 844 });
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= innerWidth,
       ),
+    ).toBe(true);
+    expect(
+      await page
+        .getByRole("region", { name: "节点表格滚动区" })
+        .evaluate((element) => element.scrollWidth > element.clientWidth),
     ).toBe(true);
     await page.screenshot({
       path: "/tmp/hps-t12-nodes-mobile.png",
@@ -182,19 +210,26 @@ test("nodes MPA previews imports, restores filters, gates actual proxy traffic a
         expected_control_version: current.operation.version,
       },
     });
-    await card.getByRole("button", { name: "排空", exact: true }).click();
+    await row.getByRole("button", { name: "排空", exact: true }).click();
     await expect(page.getByRole("alert")).toContainText(
       "configuration changed",
     );
     await page.getByRole("button", { name: "重置", exact: true }).click();
-    await expect(card).toBeVisible();
-    await card.getByRole("button", { name: "软删除", exact: true }).click();
-    await expect(page.getByRole("status")).toContainText("已软删除");
+    await expect(row).toBeVisible();
+    await expect(
+      row.getByRole("button", { name: "软删除", exact: true }),
+    ).toHaveCount(0);
+    await row.getByRole("button", { name: "排空", exact: true }).click();
+    await expect(page.getByRole("main").getByRole("status")).toContainText(
+      "已停止新连接",
+    );
     expect(await throughProxy(listenPort)).toBe(503);
-    await card.getByRole("button", { name: "解除限制", exact: true }).click();
-    await expect(page.getByRole("status")).toContainText("已解除人工限制");
+    await row.getByRole("button", { name: "解除限制", exact: true }).click();
+    await expect(page.getByRole("main").getByRole("status")).toContainText(
+      "已解除人工限制",
+    );
     expect(await throughProxy(listenPort)).toBe(200);
-    await card.getByRole("link", { name: node.id, exact: true }).click();
+    await row.getByRole("link", { name: node.id, exact: true }).click();
     await expect(page).toHaveURL(/node-detail\.html\?id=/);
     await expect(page.getByLabel("节点详情", { exact: true })).toContainText(
       "已配置（隐藏）",

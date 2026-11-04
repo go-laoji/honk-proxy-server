@@ -44,7 +44,7 @@ export const strategyLabels: Record<string, string> = {
 export const candidateReasons: Record<string, string> = {
   manually_disabled: "人工禁用",
   draining: "正在排空",
-  manually_deleted: "已软删除",
+  manually_deleted: "历史停用",
   different_explicit_node: "不是规则指定的节点",
   not_member: "不属于分组",
   tag_filter: "标签不匹配",

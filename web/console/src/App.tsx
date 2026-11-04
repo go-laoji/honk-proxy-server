@@ -249,17 +249,17 @@ export default function App() {
             </button>
           </div>
         </header>
-        <main className="mx-auto max-w-[1480px] px-4 py-5 sm:p-7 xl:px-9">
+        <main className="px-3 py-3 sm:px-4 xl:px-5">
           <div className="page-heading">
-            <div className="flex min-w-0 items-start gap-3">
+            <div className="flex min-w-0 items-center gap-2.5">
               <span className="page-heading-mark" aria-hidden="true">
-                <CurrentIcon size={21} />
+                <CurrentIcon size={18} />
               </span>
               <div className="min-w-0">
-                <h1 className="text-2xl leading-tight font-semibold tracking-tight sm:text-[28px]">
+                <h1 className="text-lg leading-tight font-semibold tracking-tight sm:text-xl">
                   {current.title}
                 </h1>
-                <p className="muted mt-1 text-sm">{current.description}</p>
+                <p className="muted mt-0.5 text-xs">{current.description}</p>
               </div>
             </div>
             <button
@@ -391,7 +391,7 @@ export default function App() {
               </section>
             )
           ) : null}
-          <footer className="muted mt-10 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/70 pt-5 text-[11px] dark:border-slate-800">
+          <footer className="muted mt-6 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/70 pt-3 text-[11px] dark:border-slate-800">
             <span>Honk Proxy · 统一代理控制台</span>
             <span className="flex items-center gap-1.5">
               <Shield size={12} />

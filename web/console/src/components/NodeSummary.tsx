@@ -8,7 +8,7 @@ import type {
 } from "../nodes";
 import { Stat } from "./ui";
 
-export function NodeStats({ value }: { value: Summary }) {
+function NodeStats({ value }: { value: Summary }) {
   return (
     <div className="metric-grid">
       <Stat
