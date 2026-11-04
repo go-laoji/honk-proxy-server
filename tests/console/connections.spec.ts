@@ -150,7 +150,9 @@ test("connections MPA freezes pages and disconnect scopes while new real tunnels
     };
     await evictSnapshots();
     await page.getByRole("button", { name: "下一页", exact: true }).click();
-    await expect(page.getByRole("status")).toContainText("原快照已失效");
+    await expect(page.getByRole("main").getByRole("status")).toContainText(
+      "原快照已失效",
+    );
     await expect(page).not.toHaveURL(/offset=/);
     await expect(
       page.getByRole("button", { name: "刷新连接", exact: true }),
@@ -180,7 +182,9 @@ test("connections MPA freezes pages and disconnect scopes while new real tunnels
     await confirm
       .getByRole("button", { name: "确认断开 2 条连接", exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText("2 条已请求取消");
+    await expect(page.getByRole("main").getByRole("status")).toContainText(
+      "2 条已请求取消",
+    );
     await Promise.all([firstClosed, secondClosed]);
     await echo(third, "survives-frozen-disconnect");
     expect(upstreamConnections).toBe(3);
@@ -243,7 +247,9 @@ test("connections MPA freezes pages and disconnect scopes while new real tunnels
       .getByRole("button", { name: "确认断开 1 条连接", exact: true })
       .click();
     await thirdClosed;
-    await expect(page.getByRole("status")).toContainText("1 条已请求取消");
+    await expect(page.getByRole("main").getByRole("status")).toContainText(
+      "1 条已请求取消",
+    );
     await expect(list.getByRole("article")).toHaveCount(0);
   } finally {
     for (const socket of sockets) socket.destroy();
