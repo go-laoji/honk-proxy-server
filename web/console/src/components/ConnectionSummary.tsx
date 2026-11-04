@@ -31,28 +31,28 @@ export function ConnectionStats({
       value: rates ? `${formatBytes(rates.down)}/s` : "采样中",
       detail: `本周期累计 ${formatBytes(value.bytes_down)}`,
       icon: ArrowDown,
-      tone: "brand",
+      tone: "down",
     },
     {
       title: "上传速率",
       value: rates ? `${formatBytes(rates.up)}/s` : "采样中",
       detail: `本周期累计 ${formatBytes(value.bytes_up)}`,
       icon: ArrowUp,
-      tone: "amber",
+      tone: "up",
     },
     {
       title: "活跃业务连接",
       value: String(value.active),
       detail: `完整观测 ${value.active_tracked} · 未完整观测 ${value.active_untracked}`,
       icon: Activity,
-      tone: "blue",
+      tone: "active",
     },
     {
       title: "失败 / 规则拒绝 / 主动断开",
       value: `${value.failed} / ${value.rejected} / ${value.disconnected}`,
       detail: `本周期已开始 ${value.started} · 已打开 ${value.opened}`,
       icon: CircleAlert,
-      tone: "neutral",
+      tone: "failed",
     },
   ] as const;
   if (compact) {
@@ -205,7 +205,7 @@ export default function ConnectionSummary({ endpoint }: { endpoint: string }) {
       {error && (
         <p
           role="alert"
-          className="panel panel-body break-words text-sm text-amber-700"
+          className="panel panel-body break-words text-sm text-console-warning"
         >
           连接摘要暂不可用：{error}。{value ? "保留上次成功快照。" : ""}
         </p>

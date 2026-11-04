@@ -72,10 +72,7 @@ export default function LinuxPage({
           </button>
         </div>
         {error && (
-          <p
-            role="alert"
-            className="p-5 text-sm text-red-600 dark:text-red-300"
-          >
+          <p role="alert" className="p-5 text-sm text-console-danger">
             {error}
           </p>
         )}

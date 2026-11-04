@@ -487,12 +487,12 @@ export default function NodesPage() {
             </details>
           </form>
           {value?.inventory_truncated && (
-            <p role="alert" className="mt-3 text-sm text-amber-700">
+            <p role="alert" className="mt-3 text-sm text-console-warning">
               库存查询达到 200000 条租约上限，当前摘要为受限样本。
             </p>
           )}
           {value && legacy && (
-            <p className="text-xs text-amber-700">
+            <p className="text-xs text-console-warning">
               当前服务版本仍返回到期记录。更新服务后可按有效期筛选并分页。
             </p>
           )}
@@ -501,7 +501,7 @@ export default function NodesPage() {
       {(error || loadError) && (
         <p
           role="alert"
-          className="panel panel-body break-words text-sm text-red-600"
+          className="panel panel-body break-words text-sm text-console-danger"
         >
           {error || loadError}
         </p>
@@ -509,7 +509,7 @@ export default function NodesPage() {
       {notice && (
         <p
           role="status"
-          className="panel panel-body break-words text-sm text-emerald-700"
+          className="panel panel-body break-words text-sm text-console-success"
         >
           {notice}
         </p>

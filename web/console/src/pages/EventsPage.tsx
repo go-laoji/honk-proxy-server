@@ -317,7 +317,7 @@ export default function EventsPage() {
       {notice && (
         <p
           role="status"
-          className="panel panel-body break-words text-sm text-amber-700"
+          className="panel panel-body break-words text-sm text-console-warning"
         >
           {notice}
         </p>

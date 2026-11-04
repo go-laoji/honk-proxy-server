@@ -372,7 +372,7 @@ export default function RulesPage({
       {error && (
         <p
           role="alert"
-          className="panel panel-body border-red-200 text-sm text-red-700 dark:text-red-300"
+          className="panel panel-body border-console-danger-border text-sm text-console-danger"
         >
           {error}
         </p>
@@ -380,7 +380,7 @@ export default function RulesPage({
       {info && (
         <p
           role="status"
-          className="panel panel-body border-emerald-200 text-sm text-emerald-700 dark:text-emerald-300"
+          className="panel panel-body border-console-success-border text-sm text-console-success"
         >
           {info}
         </p>
@@ -487,7 +487,7 @@ export default function RulesPage({
                 : "默认停用"}
             </p>
             {data.viewed_revision !== data.running_revision && (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs leading-6 text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+              <div className="rounded-xl border border-console-warning-border bg-console-warning-soft p-4 text-xs leading-6 text-console-warning">
                 <p>正在查看候选或历史版本，运行规则尚未被本次查看改变。</p>
                 <p className="break-all">
                   变更路径：
@@ -528,7 +528,7 @@ export default function RulesPage({
               </div>
             )}
             {data.desired_revision !== data.running_revision && (
-              <p className="text-xs text-amber-700 dark:text-amber-300">
+              <p className="text-xs text-console-warning">
                 有待重启配置，请先在配置工作台处理版本状态，再保存规则候选。
               </p>
             )}
@@ -792,7 +792,7 @@ export default function RulesPage({
                 : `候选准入评估时刻 ${new Date(simulation.health_evaluated_at_unix * 1000).toLocaleString()}`}
             </p>
             {!simulation.action_supported && (
-              <p className="text-xs text-amber-700 dark:text-amber-300">
+              <p className="text-xs text-console-warning">
                 当前数据面不支持此传输动作，模拟匹配不代表可以转发。
               </p>
             )}

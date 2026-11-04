@@ -106,7 +106,7 @@ export default function ObservationPanel({
         </p>
       )}
       {error && (
-        <p role="alert" className="break-all text-sm text-red-600">
+        <p role="alert" className="break-all text-sm text-console-danger">
           {error} · 已有数据可能过期
         </p>
       )}

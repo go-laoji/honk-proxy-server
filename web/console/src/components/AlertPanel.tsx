@@ -209,7 +209,7 @@ export default function AlertPanel() {
         </form>
       )}
       {error && (
-        <p role="alert" className="break-all text-xs text-red-600">
+        <p role="alert" className="break-all text-xs text-console-danger">
           {error}
         </p>
       )}

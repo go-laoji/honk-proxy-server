@@ -106,7 +106,7 @@ export default function DesktopPreferencesPanel() {
             开机启动由下面的本机服务管理单独设置；两者互不启停。
           </p>
           {value.delivery_error && (
-            <p role="alert" className="break-all text-xs text-amber-700">
+            <p role="alert" className="break-all text-xs text-console-warning">
               最近通知投递：{value.delivery_error}
             </p>
           )}

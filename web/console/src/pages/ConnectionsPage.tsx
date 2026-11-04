@@ -650,7 +650,7 @@ export default function ConnectionsPage() {
           </details>
         )}
         {value && value.statistics.active_untracked > 0 && (
-          <p role="alert" className="text-sm text-amber-700">
+          <p role="alert" className="text-sm text-console-warning">
             当前有 {value.statistics.active_untracked}{" "}
             条未完整观测的活动交换。当前列表和断开预览只涵盖已记录的具体
             ID，不能视为全部连接。
@@ -660,7 +660,7 @@ export default function ConnectionsPage() {
       {loadError && (
         <p
           role="alert"
-          className="panel panel-body break-words text-sm text-red-600"
+          className="panel panel-body break-words text-sm text-console-danger"
         >
           连接读取失败：{loadError}
         </p>
@@ -668,7 +668,7 @@ export default function ConnectionsPage() {
       {error && (
         <p
           role="alert"
-          className="panel panel-body break-words text-sm text-red-600"
+          className="panel panel-body break-words text-sm text-console-danger"
         >
           {error}
         </p>
@@ -676,7 +676,7 @@ export default function ConnectionsPage() {
       {notice && (
         <p
           role="status"
-          className="panel panel-body break-words text-sm text-emerald-700"
+          className="panel panel-body break-words text-sm text-console-success"
         >
           {notice}
         </p>
@@ -712,7 +712,7 @@ export default function ConnectionsPage() {
       </div>
       {(single || preview) && (
         <section
-          className="panel panel-body space-y-4 border-amber-300 dark:border-amber-900"
+          className="panel panel-body space-y-4 border-console-warning-border"
           aria-label="断开确认"
         >
           <h2 className="font-semibold">确认断开具体连接</h2>
@@ -756,7 +756,7 @@ export default function ConnectionsPage() {
             )}
           </div>
           {preview?.active_untracked_in_instance ? (
-            <p className="text-xs text-amber-700">
+            <p className="text-xs text-console-warning">
               实例另有 {preview.active_untracked_in_instance}{" "}
               条未完整观测连接，不在本次范围内。
             </p>
@@ -797,7 +797,7 @@ export default function ConnectionsPage() {
             </button>
           </div>
           {detailError ? (
-            <p className="break-words p-5 text-sm text-amber-700">
+            <p className="break-words p-5 text-sm text-console-warning">
               {detailError}
             </p>
           ) : detail && detail.id === detailId ? (
@@ -973,7 +973,7 @@ export default function ConnectionsPage() {
               </p>
               <p>快照时持续：{(record.elapsed_ms / 1000).toFixed(1)} s</p>
               {record.error_code && (
-                <p className="col-span-2 break-words text-amber-700">
+                <p className="col-span-2 break-words text-console-warning">
                   {connectionErrors[record.error_code] ?? record.error_code}
                 </p>
               )}

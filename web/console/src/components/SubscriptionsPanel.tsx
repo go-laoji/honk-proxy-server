@@ -113,7 +113,7 @@ export default function SubscriptionsPanel({
         GET，失败保留旧快照。
       </p>
       {error && (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className="text-sm text-console-danger">
           {error}
         </p>
       )}
@@ -204,7 +204,7 @@ export default function SubscriptionsPanel({
                 {source.enabled ? "停用订阅" : "启用订阅"}
               </button>
               <button
-                className="btn text-red-600"
+                className="btn text-console-danger"
                 disabled={busy}
                 onClick={() =>
                   void action(() =>

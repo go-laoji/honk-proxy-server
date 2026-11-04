@@ -105,7 +105,7 @@ export default function ManagedServicePanel() {
         )}
       </div>
       {error && (
-        <p role="alert" className="break-words text-sm text-red-600">
+        <p role="alert" className="break-words text-sm text-console-danger">
           {error}
         </p>
       )}

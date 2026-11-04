@@ -280,7 +280,7 @@ export default function App() {
           {service.error && current.id !== "index" && (
             <div
               role="alert"
-              className="panel panel-body mb-6 flex items-start gap-3 border-red-200 text-red-700 dark:border-red-900 dark:text-red-300"
+              className="panel panel-body mb-6 flex items-start gap-3 border-console-danger-border text-console-danger"
             >
               <Unplug size={21} className="shrink-0" />
               <div>

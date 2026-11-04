@@ -510,7 +510,7 @@ function MapRows({
                 }
               />
               {duplicate && (
-                <span id={errorId} className="text-red-600">
+                <span id={errorId} className="text-console-danger">
                   名称已存在
                 </span>
               )}

@@ -235,7 +235,7 @@ export default function GroupsPage({
       {error && (
         <p
           role="alert"
-          className="panel panel-body border-red-200 text-sm text-red-700 dark:text-red-300"
+          className="panel panel-body border-console-danger-border text-sm text-console-danger"
         >
           {error}
         </p>
@@ -243,7 +243,7 @@ export default function GroupsPage({
       {info && (
         <p
           role="status"
-          className="panel panel-body border-emerald-200 text-sm text-emerald-700 dark:text-emerald-300"
+          className="panel panel-body border-console-success-border text-sm text-console-success"
         >
           {info}
         </p>
