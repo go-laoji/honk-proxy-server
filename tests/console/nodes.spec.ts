@@ -255,3 +255,75 @@ test("nodes MPA previews imports, restores filters, gates actual proxy traffic a
     await new Promise<void>((resolve) => upstream.close(() => resolve()));
   }
 });
+
+test("expired nodes only occupy pagination when explicitly requested", async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const workspace = await (
+    await request.get("/api/v1/config/workspace")
+  ).json();
+  const toml = `management_listen = "${new URL(baseURL!).host}"
+
+[health]
+enabled = false
+
+[[proxy.upstreams]]
+id = "expired-layout-proof"
+protocol = "http"
+host = "127.0.0.1"
+port = 9
+expires_at_unix = 1
+
+[[proxy.upstreams]]
+id = "current-layout-proof"
+protocol = "http"
+host = "127.0.0.1"
+port = 9
+`;
+  const saved = await request.post("/api/v1/config/revisions", {
+    data: { toml, expected_revision: workspace.desired_revision },
+  });
+  expect(saved.ok()).toBe(true);
+  const revision = await saved.json();
+  try {
+    const applied = await request.post("/api/v1/config/activate", {
+      data: {
+        revision: revision.id,
+        expected_revision: workspace.desired_revision,
+      },
+    });
+    expect(applied.ok()).toBe(true);
+    expect(await applied.json()).toMatchObject({ state: "applied" });
+    await page.goto("/console/nodes.html?limit=1&sort=expiry_asc");
+    const table = page.getByRole("table", { name: "节点列表" });
+    await expect(
+      table.getByRole("row", { name: "节点 current-layout-proof" }),
+    ).toBeVisible();
+    await expect(table.getByText("expired-layout-proof")).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "下一页", exact: true }),
+    ).toBeDisabled();
+    await page
+      .getByRole("combobox", { name: "状态", exact: true })
+      .selectOption("expired");
+    await page.getByRole("button", { name: "应用筛选", exact: true }).click();
+    await expect(
+      table.getByRole("row", { name: "节点 expired-layout-proof" }),
+    ).toBeVisible();
+    await expect(table.getByText("current-layout-proof")).toHaveCount(0);
+    await table.getByRole("link", { name: "expired-layout-proof" }).click();
+    await expect(
+      page.getByRole("region", { name: "节点详情", exact: true }),
+    ).toContainText("expired-layout-proof");
+  } finally {
+    const head = await (await request.get("/api/v1/config/workspace")).json();
+    await request.post("/api/v1/config/rollback", {
+      data: {
+        revision: workspace.running_revision,
+        expected_revision: head.desired_revision,
+      },
+    });
+  }
+});

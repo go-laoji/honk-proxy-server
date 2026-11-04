@@ -51,7 +51,9 @@ test("provider MPA CRUD, conflicts, owned extraction recovery, redaction and lea
     await page
       .getByRole("button", { name: "保存并激活来源", exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText("来源配置已激活");
+    await expect(page.getByRole("main").getByRole("status")).toContainText(
+      "来源配置已激活",
+    );
     await peer
       .getByRole("textbox", { name: "供应商 JSON 配置" })
       .fill(JSON.stringify({ ...config, id: "stale-vendor" }));
@@ -108,7 +110,9 @@ test("provider MPA CRUD, conflicts, owned extraction recovery, redaction and lea
     await page
       .getByRole("button", { name: "保存并激活来源", exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText("来源配置已激活");
+    await expect(page.getByRole("main").getByRole("status")).toContainText(
+      "来源配置已激活",
+    );
     await expect(
       page.getByRole("cell", { name: "http://192.0.2.1:8080", exact: true }),
     ).toBeVisible();
@@ -125,7 +129,9 @@ test("provider MPA CRUD, conflicts, owned extraction recovery, redaction and lea
     });
     await page.goto("/console/providers.html");
     await page.getByRole("button", { name: "停用", exact: true }).click();
-    await expect(page.getByRole("status")).toContainText("来源配置已激活");
+    await expect(page.getByRole("main").getByRole("status")).toContainText(
+      "来源配置已激活",
+    );
     const disabled = await (
       await request.get("/api/v1/providers/console-vendor")
     ).json();

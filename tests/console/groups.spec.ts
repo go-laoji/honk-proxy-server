@@ -52,7 +52,9 @@ test("groups MPA edits, explains strict pins and UDP exclusions, rejects stale w
     await page
       .getByRole("button", { name: "保存并应用分组", exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText("分组配置已保存");
+    await expect(page.getByRole("main").getByRole("status")).toContainText(
+      "分组配置已保存",
+    );
     await page.getByRole("button", { name: "选择此组", exact: true }).click();
     await page.getByRole("button", { name: "模拟选点", exact: true }).click();
     const result = page.getByLabel("选点结果", { exact: true });
@@ -81,7 +83,9 @@ test("groups MPA edits, explains strict pins and UDP exclusions, rejects stale w
     await expect(result).toContainText("选择 group-a");
     await expect(result).toContainText("显式回退");
     await page.getByRole("button", { name: "取消固定", exact: true }).click();
-    await expect(page.getByRole("status")).toContainText("固定已取消");
+    await expect(page.getByRole("main").getByRole("status")).toContainText(
+      "固定已取消",
+    );
     await page.getByRole("button", { name: "编辑", exact: true }).click();
     const snapshot = await (await request.get("/api/v1/groups")).json();
     snapshot.configuration.groups[0].strategy = "failover";
@@ -115,7 +119,9 @@ test("groups MPA edits, explains strict pins and UDP exclusions, rejects stale w
       animations: "disabled",
     });
     await page.getByRole("button", { name: "删除", exact: true }).click();
-    await expect(page.getByRole("status")).toContainText("分组已删除");
+    await expect(page.getByRole("main").getByRole("status")).toContainText(
+      "分组已删除",
+    );
     await expect(
       page.getByText("尚未配置分组，当前使用全池轮询。", { exact: true }),
     ).toBeVisible();

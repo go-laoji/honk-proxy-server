@@ -46,7 +46,9 @@ test("DNS MPA resolves through real UDP, shows TTL cache/context, clears and det
     await page
       .getByRole("button", { name: "保存并应用 DNS", exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText("DNS 策略已保存");
+    await expect(page.getByRole("main").getByRole("status")).toContainText(
+      "DNS 策略已保存",
+    );
     await page
       .getByRole("textbox", { name: "查询域名", exact: true })
       .fill("console.example");
@@ -72,7 +74,9 @@ test("DNS MPA resolves through real UDP, shows TTL cache/context, clears and det
       .getByRole("textbox", { name: "清理域名（留空清理全部）", exact: true })
       .fill("console.example");
     await page.getByRole("button", { name: "清理缓存", exact: true }).click();
-    await expect(page.getByRole("status")).toContainText("已清理 1 条缓存");
+    await expect(page.getByRole("main").getByRole("status")).toContainText(
+      "已清理 1 条缓存",
+    );
     await expect(page.getByText("当前页无缓存", { exact: true })).toBeVisible();
     await page
       .getByRole("button", { name: "编辑 DNS 策略", exact: true })
