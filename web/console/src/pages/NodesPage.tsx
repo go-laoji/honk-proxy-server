@@ -32,7 +32,10 @@ const message = (cause: unknown) =>
 const date = (value: number | null) =>
   value === null ? "未提供" : new Date(value * 1000).toLocaleString("zh-CN");
 const defaultSort = "expiry_desc";
-async function loadInventory(params: URLSearchParams, signal: AbortSignal) {
+async function loadInventory(
+  params: URLSearchParams,
+  signal: AbortSignal,
+): Promise<{ data: NodesOverview; legacy: boolean }> {
   try {
     return {
       data: await getJson<NodesOverview>(`api/v1/nodes?${params}`, signal),
@@ -40,7 +43,7 @@ async function loadInventory(params: URLSearchParams, signal: AbortSignal) {
     };
   } catch (cause) {
     if (
-      !params.has("hide_expired") ||
+      (!params.has("hide_expired") && !params.has("hide_deleted")) ||
       !(cause instanceof ApiRequestError) ||
       !(
         (cause.status === 400 &&
@@ -49,6 +52,14 @@ async function loadInventory(params: URLSearchParams, signal: AbortSignal) {
       )
     ) {
       throw cause;
+    }
+    if (params.has("hide_deleted")) {
+      params.delete("hide_deleted");
+      const result = await loadInventory(params, signal);
+      result.data.nodes = result.data.nodes.filter(
+        (node) => node.operation.state !== "deleted",
+      );
+      return result;
     }
     params.delete("hide_expired");
     return {
@@ -78,6 +89,12 @@ export default function NodesPage() {
   const [loadError, setLoadError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const [deletion, setDeletion] = useState<{
+    node: NodeView;
+    kind: "delete" | "remove";
+    revision: number;
+  } | null>(null);
+  const deleteDialog = useRef<HTMLDialogElement>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -110,8 +127,17 @@ export default function NodesPage() {
       requestParams.set("sort", defaultSort);
     }
     requestParams.delete("hide_expired");
-    if (!requestParams.has("id") && requestParams.get("state") !== "expired") {
+    requestParams.delete("hide_deleted");
+    const state = requestParams.get("state");
+    if (
+      !requestParams.has("id") &&
+      state !== "expired" &&
+      state !== "deleted"
+    ) {
       requestParams.set("hide_expired", "true");
+    }
+    if (!requestParams.has("id") && state !== "deleted") {
+      requestParams.set("hide_deleted", "true");
     }
     void loadInventory(requestParams, controller.signal)
       .then((result) => {
@@ -169,31 +195,54 @@ export default function NodesPage() {
     setPreview(null);
     setReviewed(null);
   }
-  async function action(node: NodeView, kind: NodeAction) {
-    if (!value) return;
+  function requestAction(node: NodeView, kind: NodeAction) {
+    if (!value || busy || loading) return;
+    if (kind === "delete" || kind === "remove") {
+      setDeletion({ node, kind, revision: value.running_revision });
+      deleteDialog.current?.showModal();
+    } else {
+      void action(node, kind, value.running_revision);
+    }
+  }
+  async function action(node: NodeView, kind: NodeAction, revision: number) {
     setBusy(true);
     setError("");
     setNotice("");
     try {
-      const result = await postJson<{ pool_refreshed: boolean }>(
-        "api/v1/nodes/action",
-        {
-          id: node.id,
-          action: kind,
-          expected_revision: value.running_revision,
-          expected_control_version: node.operation.version,
-          lease_id: node.lease_id,
-          batch_id: node.batch_id,
-          provider_id: node.provider_id,
-        },
-      );
-      setNotice(
-        `${node.id}：${kind === "enable" ? "已解除人工限制，仍需通过配置、健康与寿命准入" : kind === "drain" ? "已停止新连接，现有连接自然排空" : "已禁用新连接"}`,
-      );
+      const result = await postJson<{
+        pool_refreshed: boolean;
+        configuration_activation: { state: string } | null;
+      }>("api/v1/nodes/action", {
+        id: node.id,
+        action: kind,
+        expected_revision: revision,
+        expected_control_version: node.operation.version,
+        lease_id: node.lease_id,
+        batch_id: node.batch_id,
+        provider_id: node.provider_id,
+      });
+      if (result.configuration_activation?.state === "pending_restart") {
+        setNotice(`${node.id}：删除已保存，服务重启后生效。`);
+        return;
+      }
+      if (kind === "delete" || kind === "remove") {
+        setNotice(`${node.id}：已删除`);
+        if (!selectedId && value?.nodes.length === 1 && value.offset > 0) {
+          page(Math.max(0, value.offset - Number(params.get("limit") ?? 50)));
+        }
+      } else {
+        setNotice(
+          `${node.id}：${kind === "enable" ? "已解除人工限制，仍需通过配置、健康与寿命准入" : kind === "drain" ? "已停止新连接，现有连接自然排空" : "已禁用新连接"}`,
+        );
+      }
       if (!result.pool_refreshed)
         setError("节点操作已生效，当前池尚未完成重算；请刷新后重试此操作。");
     } catch (cause) {
-      setError(message(cause));
+      setError(
+        cause instanceof ApiRequestError && cause.code === "node_referenced"
+          ? `请先解除该节点的固定分组、指定路由或 DNS 出口引用，再删除。 ${cause.message}`
+          : message(cause),
+      );
     } finally {
       setBusy(false);
       setReload((n) => n + 1);
@@ -257,6 +306,41 @@ export default function NodesPage() {
   const selected = value?.nodes.find((n) => n.id === selectedId);
   return (
     <div className="space-y-3">
+      <dialog
+        ref={deleteDialog}
+        className="panel panel-body fixed inset-0 m-auto w-[calc(100%-2rem)] max-w-md space-y-3 backdrop:bg-black/65"
+        aria-labelledby="node-delete-title"
+        aria-describedby="node-delete-description"
+        onClose={() => setDeletion(null)}
+      >
+        <h2 id="node-delete-title">删除代理节点</h2>
+        <p id="node-delete-description" className="muted break-words text-sm">
+          {deletion?.kind === "remove"
+            ? `节点 ${deletion.node.id} 将从当前配置中移除，已有连接会自然结束。`
+            : `节点 ${deletion?.node.id ?? ""} 将从节点列表移除并停止接收新连接，已有连接会自然结束。`}
+        </p>
+        <div className="flex flex-wrap justify-end gap-2">
+          <button
+            type="button"
+            autoFocus
+            className="btn"
+            onClick={() => deleteDialog.current?.close()}
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            className="btn border-console-danger-border bg-console-danger-soft text-console-danger"
+            onClick={() => {
+              if (!deletion) return;
+              deleteDialog.current?.close();
+              void action(deletion.node, deletion.kind, deletion.revision);
+            }}
+          >
+            确认删除
+          </button>
+        </div>
+      </dialog>
       {!selectedId && (
         <section className="panel panel-body space-y-2.5">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -363,7 +447,7 @@ export default function NodesPage() {
                     expired: "已到期",
                     disabled: "已禁用",
                     draining: "排空中",
-                    deleted: "历史停用",
+                    deleted: "已删除",
                     retired: "已退休 / 来源不可用",
                     healthy: "健康通过",
                     unhealthy: "检测失败",
@@ -763,7 +847,7 @@ export default function NodesPage() {
                   <NodeActions
                     node={selected}
                     disabled={busy || loading}
-                    onAction={action}
+                    onAction={requestAction}
                   />
                   <a
                     href={`./health.html?node=${encodeURIComponent(selected.id)}`}
@@ -810,7 +894,7 @@ export default function NodesPage() {
             <NodeTable
               nodes={value.nodes}
               disabled={busy || loading}
-              onAction={action}
+              onAction={requestAction}
             />
           ) : (
             <p className="muted p-5 text-center text-sm">

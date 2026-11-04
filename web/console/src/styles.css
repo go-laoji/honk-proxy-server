@@ -429,7 +429,7 @@
     outline-offset: -2px;
   }
   .node-table {
-    @apply w-full min-w-[52rem] table-fixed text-left text-xs;
+    @apply w-full min-w-[56rem] table-fixed text-left text-xs;
   }
   .node-table th,
   .node-table td {

@@ -362,7 +362,9 @@ fn supported_nodes_get(path: &str) -> bool {
                         ]
                         .contains(&value.as_ref()),
                         "sort" => ["id", "expiry_asc", "expiry_desc"].contains(&value.as_ref()),
-                        "hide_expired" => matches!(value.as_ref(), "true" | "false"),
+                        "hide_expired" | "hide_deleted" => {
+                            matches!(value.as_ref(), "true" | "false")
+                        }
                         "remaining_max_secs" => value.parse::<u64>().is_ok(),
                         "offset" => value.parse::<u32>().is_ok_and(|v| v <= 300000),
                         "limit" => value.parse::<u32>().is_ok_and(|v| (1..=200).contains(&v)),
@@ -933,6 +935,7 @@ mod tests {
         assert!(!supported_api("api/v1/nodes?url=http://external"));
         assert!(!supported_api("api/v1/nodes?limit=201"));
         assert!(supported_api("api/v1/nodes?hide_expired=true&limit=50"));
+        assert!(supported_api("api/v1/nodes?hide_deleted=true&limit=50"));
         assert!(!supported_api("api/v1/nodes?hide_expired=1"));
         assert!(supported_action("api/v1/nodes/import/apply"));
         assert!(supported_api("api/v1/rules?revision=42"));

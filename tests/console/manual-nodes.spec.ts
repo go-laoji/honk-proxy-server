@@ -199,6 +199,29 @@ test("manual node form persists authenticated HTTP node, passes health and carri
           r.choice?.node_id === "manual-http-proof" && !r.error_code,
       ),
     ).toBe(true);
+    await row.getByRole("button", { name: "删除", exact: true }).click();
+    const deletion = page.getByRole("dialog", { name: "删除代理节点" });
+    await expect(deletion).toContainText("manual-http-proof");
+    await deletion.getByRole("button", { name: "取消", exact: true }).click();
+    await expect(row).toBeVisible();
+    await row
+      .getByRole("link", { name: "manual-http-proof", exact: true })
+      .click();
+    await page.getByRole("button", { name: "删除", exact: true }).click();
+    await deletion
+      .getByRole("button", { name: "确认删除", exact: true })
+      .click();
+    await expect(page.getByRole("main").getByRole("status")).toContainText(
+      "manual-http-proof：已删除",
+    );
+    await expect(
+      page.getByRole("button", { name: "删除", exact: true }),
+    ).toHaveCount(0);
+    expect(
+      (await request.get("/api/v1/nodes/manual-http-proof")).status(),
+    ).toBe(404);
+    await page.getByRole("link", { name: "返回列表", exact: true }).click();
+    await expect(row).toHaveCount(0);
   } finally {
     await reset(request);
     upstream.closeAllConnections();
