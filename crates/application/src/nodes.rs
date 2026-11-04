@@ -299,7 +299,8 @@ fn inventory(
                 usize::from(node.remaining_secs.is_some_and(|n| n > 0 && n <= 60));
             source.expired += usize::from(node.remaining_secs == Some(0));
         }
-        if q.id.as_ref().is_some_and(|id| *id != node.id)
+        if (q.hide_expired == Some(true) && node.remaining_secs == Some(0))
+            || q.id.as_ref().is_some_and(|id| *id != node.id)
             || needle.as_ref().is_some_and(|s| {
                 !node.id.to_lowercase().contains(s) && !node.host.to_lowercase().contains(s)
             })
@@ -716,6 +717,27 @@ mod tests {
         let expired = all.nodes.iter().find(|n| n.id == "expired").unwrap();
         assert_eq!(expired.lease_state, "expired");
         assert_eq!(expired.health_state, "checking_disabled");
+        let current = service
+            .nodes(NodeQuery {
+                hide_expired: Some(true),
+                limit: Some(1),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert_eq!(current.summary.expired, 1);
+        assert_eq!(current.filtered_total, 4);
+        assert_eq!(current.next_offset, Some(1));
+        assert_ne!(current.nodes[0].remaining_secs, Some(0));
+        let expired_only = service
+            .nodes(NodeQuery {
+                state: Some("expired".into()),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert_eq!(expired_only.filtered_total, 1);
+        assert_eq!(expired_only.nodes[0].id, "expired");
         let page = service
             .nodes(NodeQuery {
                 limit: Some(2),
