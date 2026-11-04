@@ -84,9 +84,10 @@ export default function GroupsPage({
     original: string | null;
     body: string;
   }>();
-  const [group, setGroup] = useState(
-    new URLSearchParams(window.location.search).get("group") ?? "",
-  );
+  const [group, setGroup] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("group") ?? params.get("id") ?? "";
+  });
   const [inbound, setInbound] = useState("");
   const [source, setSource] = useState("");
   const [host, setHost] = useState("");

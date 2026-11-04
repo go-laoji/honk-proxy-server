@@ -337,7 +337,7 @@ export default function App() {
               <Suspense fallback={<p className="muted">正在读取 DNS…</p>}>
                 <DnsPage refreshService={service.refresh} />
               </Suspense>
-            ) : current.id === "groups" ? (
+            ) : current.id === "groups" || current.id === "group-detail" ? (
               <Suspense fallback={<p className="muted">正在读取分组…</p>}>
                 <GroupsPage
                   key={service.data.endpoint}

@@ -735,7 +735,7 @@ export default function NodesPage() {
                           <a
                             className="mr-2 text-console-accent-ink"
                             key={id}
-                            href={`./groups.html?group=${encodeURIComponent(id)}`}
+                            href={`./group-detail.html?id=${encodeURIComponent(id)}`}
                           >
                             {id}
                           </a>

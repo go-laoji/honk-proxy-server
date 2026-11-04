@@ -55,6 +55,14 @@ test("groups MPA edits, explains strict pins and UDP exclusions, rejects stale w
     await expect(page.getByRole("main").getByRole("status")).toContainText(
       "分组配置已保存",
     );
+    await page.goto("/console/group-detail.html?id=browser");
+    await expect(
+      page.getByRole("heading", { name: "分组详情", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("combobox", { name: "分组", exact: true }),
+    ).toHaveValue("browser");
+    await page.goto("/console/groups.html");
     await page.getByRole("button", { name: "选择此组", exact: true }).click();
     await page.getByRole("button", { name: "模拟选点", exact: true }).click();
     const result = page.getByLabel("选点结果", { exact: true });
