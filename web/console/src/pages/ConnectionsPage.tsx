@@ -878,15 +878,15 @@ export default function ConnectionsPage() {
         </section>
       )}
       {loading && <p className="muted text-sm">正在读取连接快照…</p>}
-      <div className="grid gap-4 xl:grid-cols-2" aria-label="连接列表">
+      <div className="record-list" aria-label="连接列表">
         {value?.records.map((record) => (
           <article
-            className="panel min-w-0 space-y-3 p-5"
+            className="panel record-card"
             key={record.id}
             aria-label={`连接 ${record.id}`}
           >
-            <div className="flex items-start justify-between gap-2">
-              <label className="flex min-w-0 items-start gap-2">
+            <div className="flex items-start justify-between gap-3">
+              <label className="flex min-w-0 items-start gap-2.5">
                 <input
                   type="checkbox"
                   className="mt-1 shrink-0"
@@ -895,18 +895,22 @@ export default function ConnectionsPage() {
                   checked={selected.includes(record.id)}
                   onChange={(e) => select(record.id, e.target.checked)}
                 />
-                <span className="break-all font-mono text-xs">{record.id}</span>
+                <span className="min-w-0 [overflow-wrap:anywhere]">
+                  <span className="block text-sm font-semibold">
+                    {endpointLabel(
+                      record.context.destination_host,
+                      record.context.destination_port,
+                    )}
+                  </span>
+                  <span className="muted mt-1 block font-mono text-xs">
+                    {record.id}
+                  </span>
+                </span>
               </label>
               <Badge active={active(record) && record.state === "open"}>
                 {stateLabel(record)}
               </Badge>
             </div>
-            <p className="break-all text-sm font-medium">
-              {endpointLabel(
-                record.context.destination_host,
-                record.context.destination_port,
-              )}
-            </p>
             <p className="muted break-all text-xs">
               {record.context.source_ip ?? "未知来源"}:
               {record.context.source_port ?? "—"} →{" "}
@@ -914,7 +918,7 @@ export default function ConnectionsPage() {
               {record.context.inbound_protocol ?? record.context.transport} ·{" "}
               {origins[record.context.origin]}
             </p>
-            <div className="grid gap-2 text-xs sm:grid-cols-2">
+            <div className="record-details">
               <p className="break-all">
                 出口：{record.choice?.node_id ?? record.routing.action.kind}
               </p>
@@ -933,7 +937,7 @@ export default function ConnectionsPage() {
                 {connectionErrors[record.error_code] ?? record.error_code}
               </p>
             )}
-            <div className="flex flex-wrap gap-2">
+            <div className="record-actions">
               <button className="btn text-xs" onClick={() => show(record.id)}>
                 <Search size={14} />
                 路由详情

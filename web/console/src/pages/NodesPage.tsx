@@ -682,26 +682,30 @@ export default function NodesPage() {
       )}
       {selectedId && <HealthHistoryPanel key={selectedId} node={selectedId} />}
       {loading && <p className="muted text-sm">正在读取实际节点库存…</p>}
-      <div className="grid gap-4 lg:grid-cols-2" aria-label="节点列表">
+      <div className="record-list" aria-label="节点列表">
         {value?.nodes.map((node) => (
           <article
-            className="panel min-w-0 space-y-4 p-5"
+            className="panel record-card"
             key={node.id}
             aria-label={`节点 ${node.id}`}
           >
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <a
-                className="break-all text-left font-semibold text-blue-600"
-                href={`./node-detail.html?id=${encodeURIComponent(node.id)}`}
-              >
-                {node.id}
-              </a>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <a
+                  className="record-title"
+                  href={`./node-detail.html?id=${encodeURIComponent(node.id)}`}
+                >
+                  {node.id}
+                </a>
+                <p className="muted mt-1 font-mono text-xs [overflow-wrap:anywhere]">
+                  {nodeAddress(node)}
+                </p>
+              </div>
               <Badge active={node.eligible}>
                 {node.eligible ? "可准入" : "不可准入"}
               </Badge>
             </div>
-            <p className="break-all font-mono text-xs">{nodeAddress(node)}</p>
-            <div className="grid gap-2 text-xs sm:grid-cols-2">
+            <div className="record-details">
               <p>租约：{nodeStates[node.lease_state] ?? node.lease_state}</p>
               <p>健康：{nodeStates[node.health_state] ?? node.health_state}</p>
               <p>人工状态：{nodeStates[node.operation.state]}</p>
@@ -726,7 +730,7 @@ export default function NodesPage() {
                 ))}
               </ul>
             )}
-            <div className="flex flex-wrap gap-2">
+            <div className="record-actions">
               {[
                 ["enable", "解除限制"],
                 ["disable", "禁用"],

@@ -40,6 +40,7 @@
 
 :root {
   color-scheme: light;
+  scroll-padding-top: 4rem;
   --page: #fbfaf7;
   --surface: #ffffff;
   --surface-soft: #f6f3ee;
@@ -97,6 +98,7 @@
   }
   button,
   a,
+  summary,
   input,
   select,
   textarea {
@@ -285,6 +287,34 @@
   .runtime-notice {
     background: var(--notice-soft);
     color: var(--notice-ink);
+  }
+  .record-list {
+    @apply grid gap-3 xl:grid-cols-2;
+  }
+  .record-card {
+    @apply flex min-w-0 flex-col gap-3 p-4;
+  }
+  .record-card .status-badge {
+    @apply shrink-0;
+  }
+  .record-title {
+    @apply text-sm font-semibold;
+    color: var(--accent-ink);
+    overflow-wrap: anywhere;
+  }
+  .record-title:hover {
+    @apply underline;
+  }
+  .record-details {
+    @apply grid gap-x-4 gap-y-1.5 rounded-lg p-3 text-xs leading-5 tabular-nums sm:grid-cols-2;
+    background: var(--surface-soft);
+    overflow-wrap: anywhere;
+  }
+  .record-actions {
+    @apply mt-auto flex flex-wrap gap-2;
+  }
+  .record-actions .btn {
+    @apply px-2.5 py-1.5;
   }
   .status-badge {
     @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium;
