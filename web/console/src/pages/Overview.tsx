@@ -18,7 +18,10 @@ export default function Overview({ data }: { data: ServiceData }) {
           : `${Math.floor(seconds / 86400)} 天 ${Math.floor((seconds % 86400) / 3600)} 小时`;
   return (
     <div className="space-y-5">
-      <ConnectionSummary key={data.endpoint} endpoint={data.endpoint} />
+      <ConnectionSummary
+        key={`connections:${data.endpoint}`}
+        endpoint={data.endpoint}
+      />
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(16rem,1fr)]">
         <ObservationPanel key={data.endpoint} />
         <section className="panel p-4 sm:p-5" aria-labelledby="runtime-heading">
@@ -79,7 +82,7 @@ export default function Overview({ data }: { data: ServiceData }) {
           </a>
         </section>
       </div>
-      <NodeSummary key={data.endpoint} endpoint={data.endpoint} />
+      <NodeSummary key={`nodes:${data.endpoint}`} endpoint={data.endpoint} />
       <div className="grid gap-4 xl:grid-cols-5">
         <section className="panel xl:col-span-3">
           <div className="flex items-center justify-between border-b border-slate-100 p-5 dark:border-slate-800">
