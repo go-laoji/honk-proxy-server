@@ -166,7 +166,7 @@ function FieldInput({
   const description = useId();
   const value = record[field.key];
   const help = field.help && (
-    <span id={description} className="muted font-normal">
+    <span id={description} className="muted text-xs leading-5 font-normal">
       {field.help}
     </span>
   );
@@ -464,24 +464,29 @@ function MapRows({
   update: (value: RecordValue) => void;
 }) {
   type Row = [string, unknown];
-  const [rows, setRows] = useState<Row[]>(() => Object.entries(initial ?? {}));
+  const [draft, setDraft] = useState<{ record: RecordValue; rows: Row[] }>();
+  const rows =
+    draft && draft.record === initial
+      ? draft.rows
+      : Object.entries(initial ?? {});
   const ids = useId();
   const seen = new Set<string>();
   const duplicates = new Set<string>();
   for (const [key] of rows) {
-    if (seen.has(key.trim())) duplicates.add(key.trim());
-    seen.add(key.trim());
+    if (seen.has(key)) duplicates.add(key);
+    seen.add(key);
   }
   function change(next: Row[]) {
-    setRows(next);
-    update(Object.fromEntries(next.map(([key, value]) => [key.trim(), value])));
+    const record = Object.fromEntries(next);
+    setDraft({ record, rows: next });
+    update(record);
   }
   return (
     <fieldset className="min-w-0 space-y-2 rounded-lg border border-console-border p-3 sm:col-span-2">
       <legend className="px-1 text-sm font-medium">{field.label}</legend>
       {field.help && <p className="muted text-xs">{field.help}</p>}
       {rows.map(([key, value], index) => {
-        const duplicate = duplicates.has(key.trim());
+        const duplicate = duplicates.has(key);
         const errorId = ids + index;
         const replace = (row: Row) =>
           change(rows.map((item, i) => (i === index ? row : item)));
@@ -501,9 +506,7 @@ function MapRows({
                 aria-invalid={duplicate}
                 aria-describedby={duplicate ? errorId : undefined}
                 ref={(input) =>
-                  input?.setCustomValidity(
-                    !key.trim() ? "请填写名称" : duplicate ? "名称已存在" : "",
-                  )
+                  input?.setCustomValidity(duplicate ? "名称已存在" : "")
                 }
               />
               {duplicate && (
@@ -549,7 +552,7 @@ function MapRows({
             )}
             <button
               type="button"
-              className="btn mt-5 text-xs"
+              className="btn text-xs sm:mt-5"
               onClick={() => change(rows.filter((_, i) => i !== index))}
               aria-label={`移除${field.label} ${index + 1}`}
             >
@@ -631,15 +634,27 @@ export function ConfigForm({
       }}
       onInvalidCapture={(event) => {
         if (!(event.target instanceof HTMLElement)) return;
-        // Closed advanced sections must reveal invalid inputs before the
-        // browser tries to focus them.
+        // WebKit can skip a control that was hidden when validation began.
+        const form = event.currentTarget;
+        let revealed = false;
         for (
           let parent = event.target.parentElement;
-          parent && parent !== event.currentTarget;
+          parent && parent !== form;
           parent = parent.parentElement
         ) {
-          if (parent instanceof HTMLDetailsElement) parent.open = true;
+          if (parent instanceof HTMLDetailsElement && !parent.open) {
+            parent.open = true;
+            revealed = true;
+          }
         }
+        if (revealed)
+          requestAnimationFrame(() => {
+            form
+              .querySelector<HTMLElement>(
+                "input:invalid, select:invalid, textarea:invalid",
+              )
+              ?.focus();
+          });
       }}
     >
       {children}

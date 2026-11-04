@@ -1,3 +1,9 @@
+import { ConfigFields, ConfigForm } from "../components/config/ConfigFields";
+import {
+  providerDraft,
+  providerFields,
+  providerPayload,
+} from "../components/config/sourceFields";
 import SubscriptionsPanel from "../components/SubscriptionsPanel";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -49,8 +55,8 @@ const templates: Record<string, Partial<ProviderConfig>> = {
     query_valid_time: true,
     auth: {
       type: "hmac_sha1",
-      secret_id: "填写订单 SecretId",
-      secret_key: "填写订单 SecretKey",
+      secret_id: "",
+      secret_key: "",
     },
     min_interval_secs: 60,
     params: {},
@@ -111,7 +117,8 @@ export default function ProvidersPage({
   const taskRef = useRef<ExtractionTask | null>(null);
 
   const [loaded, setLoaded] = useState(false);
-  const [editor, setEditor] = useState("");
+  const [editor, setEditor] = useState(() => providerDraft());
+  const [editorRevision, setEditorRevision] = useState<number>();
   const [editingId, setEditingId] = useState("");
   const [task, setTask] = useState<ExtractionTask | null>(null);
   useEffect(() => {
@@ -154,7 +161,8 @@ export default function ProvidersPage({
       setHasMore(item.leases.length === 50);
       setTask(item.tasks[0] ?? null);
       if (replaceEditor) {
-        setEditor(JSON.stringify(item.provider.configuration, null, 2));
+        setEditor(providerDraft(item.provider.configuration));
+        setEditorRevision(workspace.desired_revision);
         setEditingId(id);
       }
     }
@@ -267,38 +275,15 @@ export default function ProvidersPage({
             : "补池评估已完成，请查看实际决策和任务。",
     );
   }
-  function refillTemplate() {
-    try {
-      const config = JSON.parse(editor) as ProviderConfig;
-      if (!config || typeof config.id !== "string") throw new Error();
-      config.refill = {
-        enabled: false,
-        mode: "on_demand",
-        min_nodes: 5,
-        target_nodes: 10,
-        max_nodes: 20,
-        batch_size: Math.min(5, config.count || 10),
-        retire_before_secs: 60,
-        forecast_secs: 30,
-        idle_timeout_secs: 300,
-        daily_request_budget: 10,
-        daily_node_budget: 100,
-        backoff_initial_secs: 5,
-        backoff_max_secs: 900,
-        failure_limit: 5,
-        ...(typeof config.refill === "object" && config.refill
-          ? config.refill
-          : {}),
-      };
-      if (["json", "text"].includes(config.kind) && !config.count_parameter)
-        config.count_parameter = "num";
-      setEditor(JSON.stringify(config, null, 2));
-      setInfo(
-        "补池模板已加入编辑器，尚未保存。请确认数量参数 count_parameter 与供应商文档一致，再设置 refill.enabled 并保存。",
-      );
-    } catch {
-      setError("请先选择来源模板或填写有效的供应商 JSON");
-    }
+  function openRefillSettings() {
+    document
+      .querySelector<HTMLDetailsElement>(
+        '#provider-editor details[data-config-key="refill"]',
+      )
+      ?.setAttribute("open", "");
+    document
+      .getElementById("provider-editor")
+      ?.scrollIntoView({ block: "start" });
   }
   async function act(key: string, action: () => Promise<void>) {
     setBusy(key);
@@ -312,10 +297,10 @@ export default function ProvidersPage({
       if (mounted.current) setBusy("");
     }
   }
-  async function save(configuration: ProviderConfig) {
+  async function save(configuration: ProviderConfig, revision = head) {
     const result = await postJson<{ state: string }>(
       `api/v1/providers/${encodeURIComponent(configuration.id)}/save`,
-      { configuration, expected_revision: head },
+      { configuration, expected_revision: revision },
     );
     if (!mounted.current) return;
     setInfo(
@@ -326,8 +311,14 @@ export default function ProvidersPage({
     await load(undefined, detailPage);
     await refreshService();
   }
+  function resetEditor() {
+    setEditor(providerDraft());
+    setEditingId("");
+    setEditorRevision(undefined);
+  }
   function template(kind: string) {
-    setEditor(JSON.stringify(templates[kind], null, 2));
+    setEditor(providerDraft(templates[kind]));
+    setEditorRevision(head);
     setEditingId("");
     setInfo("");
   }
@@ -547,7 +538,7 @@ export default function ProvidersPage({
               value={refill}
               busy={!!busy}
               onAction={(action) => void act(action, () => control(action))}
-              onTemplate={refillTemplate}
+              onConfigure={openRefillSettings}
             />
           )}
           <div className="panel overflow-hidden">
@@ -742,9 +733,12 @@ export default function ProvidersPage({
                     className="btn"
                     disabled={!!busy}
                     onClick={() => {
-                      setEditor(JSON.stringify(view.configuration, null, 2));
+                      setEditor(providerDraft(view.configuration));
+                      setEditorRevision(head);
                       setEditingId(view.configuration.id);
-                      document.getElementById("provider-editor")?.focus();
+                      document
+                        .getElementById("provider-editor")
+                        ?.scrollIntoView({ block: "start" });
                     }}
                   >
                     编辑
@@ -755,7 +749,7 @@ export default function ProvidersPage({
           </div>
         </div>
       )}
-      <div className="panel panel-body">
+      <div id="provider-editor" className="panel panel-body">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-semibold">
             {editingId ? `编辑来源 ${editingId}` : "新增来源"}
@@ -778,87 +772,73 @@ export default function ProvidersPage({
             ))}
           </div>
         </div>
-        <p className="muted mt-3 text-sm leading-6">
-          配置字段由服务验证；参数放在 params，鉴权放在 auth 或 headers，URL
-          不携带查询密钥。[REDACTED] 保留同 ID 既有凭据。快代理支持
-          HMAC-SHA1/token；不支持时长查询的订单必须配置保守
-          ttl_secs。修改来源会保存并激活配置版本。管理配置等待重启时请先到配置工作台处理。
+        <p className="muted mt-3 text-xs leading-6">
+          API 地址填写不带查询参数的完整
+          URL，鉴权和请求参数在下方配置。保留脱敏值可复用同 ID 的既有凭据。
         </p>
-        <label className="form-field mt-4">
-          供应商 JSON 配置
-          <textarea
-            id="provider-editor"
-            spellCheck={false}
+        <ConfigForm
+          label="供应商配置"
+          className="mt-3 space-y-3"
+          onSave={() => {
+            if (busy || !head) return;
+            void act("save", async () => {
+              await save(providerPayload(editor), editorRevision ?? head);
+              if (!detailPage) resetEditor();
+            });
+          }}
+        >
+          <ConfigFields
+            fields={providerFields(Boolean(editingId), editor)}
             value={editor}
-            onChange={(event) => setEditor(event.target.value)}
-            className="field editor-field min-h-80"
+            onChange={(value) => {
+              const auth = value.auth?.type;
+              setEditor(
+                auth && auth !== editor.auth?.type
+                  ? { ...value, auth: { type: auth } }
+                  : value,
+              );
+              setEditorRevision((revision) => revision ?? head);
+            }}
           />
-        </label>
-        <div className="mt-4 flex flex-wrap gap-3">
-          <button
-            className="btn"
-            disabled={!!busy || !editor.trim()}
-            onClick={() =>
-              void act("save", async () => {
-                let parsed: ProviderConfig;
-                try {
-                  parsed = JSON.parse(editor) as ProviderConfig;
-                } catch {
-                  throw new Error("JSON 配置格式错误，请检查语法");
-                }
-                if (
-                  !parsed ||
-                  typeof parsed.id !== "string" ||
-                  !/^[A-Za-z0-9_-]{1,64}$/.test(parsed.id)
-                )
-                  throw new Error(
-                    "来源 ID 仅支持 1–64 个字母、数字、下划线或连字符",
-                  );
-                if (editingId && parsed.id !== editingId)
-                  throw new Error(
-                    "编辑已有来源时请保留 ID；新增来源可使用模板",
-                  );
-                await save(parsed);
-                if (!detailPage) {
-                  setEditor("");
-                  setEditingId("");
-                }
-              })
-            }
-          >
-            <Save size={15} />
-            保存并激活来源
-          </button>
-          {editingId && (
+          <div className="flex flex-wrap gap-2">
             <button
-              className="btn text-red-600"
-              disabled={!!busy}
-              onClick={() =>
-                void act("delete", async () => {
-                  await postJson(
-                    `api/v1/providers/${encodeURIComponent(editingId)}/delete`,
-                    { expected_revision: head },
-                  );
-                  if (detailPage) window.location.assign("./providers.html");
-                  else {
-                    setEditor("");
-                    setEditingId("");
-                    await load();
-                    await refreshService();
-                  }
-                })
-              }
+              className="btn-primary"
+              type="submit"
+              disabled={!!busy || !head}
             >
-              删除来源并停止新准入
+              <Save size={15} />
+              保存并激活来源
             </button>
-          )}
-          <a href="./config.html" className="btn">
-            打开配置工作台
-          </a>
-        </div>
+            {editingId && (
+              <button
+                className="btn text-red-600"
+                type="button"
+                disabled={!!busy}
+                onClick={() =>
+                  void act("delete", async () => {
+                    await postJson(
+                      `api/v1/providers/${encodeURIComponent(editingId)}/delete`,
+                      { expected_revision: head },
+                    );
+                    if (detailPage) window.location.assign("./providers.html");
+                    else {
+                      resetEditor();
+                      await load();
+                      await refreshService();
+                    }
+                  })
+                }
+              >
+                删除来源并停止新准入
+              </button>
+            )}
+            <a href="./config.html" className="btn">
+              打开配置工作台
+            </a>
+          </div>
+        </ConfigForm>
         <p className="muted mt-3 text-xs">
-          删除会保留租约和批次历史，停止该来源的新选点；已有连接继续排空。自动补池需显式配置
-          refill.enabled；健康检测在对应模块启用。
+          删除会保留租约和批次历史，并停止该来源的新选点。已有连接继续排空。
         </p>
       </div>
     </div>

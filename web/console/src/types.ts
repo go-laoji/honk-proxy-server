@@ -177,6 +177,12 @@ export interface ProviderConfig {
   ttl_secs: number | null;
   min_interval_secs: number;
   query_valid_time: boolean;
+  auth?: {
+    type: "none" | "token" | "hmac_sha1";
+    secret_id?: string;
+    token?: string;
+    secret_key?: string;
+  };
   [field: string]: unknown;
 }
 export interface ProviderView {

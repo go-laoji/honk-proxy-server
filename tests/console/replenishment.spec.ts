@@ -36,35 +36,36 @@ test("controller MPA shows reservations, pauses in-flight refill and resumes to 
     await expect(
       page.getByRole("heading", { name: "供应商来源", exact: true }),
     ).toBeVisible();
-    const config = {
-      id: "refill-vendor",
-      name: "预算控制测试",
-      enabled: true,
-      kind: "json",
-      endpoint: `http://127.0.0.1:${port}/extract`,
-      count: 2,
-      count_parameter: "num",
-      min_interval_secs: 1,
-      refill: {
-        enabled: true,
-        mode: "maintain",
-        min_nodes: 1,
-        target_nodes: 3,
-        max_nodes: 4,
-        batch_size: 2,
-        retire_before_secs: 0,
-        forecast_secs: 0,
-        idle_timeout_secs: 2,
-        daily_request_budget: 2,
-        daily_node_budget: 3,
-        backoff_initial_secs: 1,
-        backoff_max_secs: 1,
-        failure_limit: 2,
-      },
-    };
-    await page
-      .getByRole("textbox", { name: "供应商 JSON 配置" })
-      .fill(JSON.stringify(config));
+    const form = page.getByRole("form", { name: "供应商配置" });
+    await form.getByLabel("来源 ID", { exact: true }).fill("refill-vendor");
+    await form.getByLabel("显示名称", { exact: true }).fill("预算控制测试");
+    await form
+      .getByLabel("提取 API 地址")
+      .fill(`http://127.0.0.1:${port}/extract`);
+    await form.getByLabel("启用供应商").check();
+    await form.getByLabel("单次提取数量").fill("2");
+    await form.getByText("请求参数与鉴权", { exact: true }).click();
+    await form.getByLabel("数量参数名").fill("num");
+    await form.getByText("租约与请求限制", { exact: true }).click();
+    await form.getByLabel("最短提取间隔（秒）").fill("1");
+    await form.getByText("自动补池", { exact: true }).click();
+    await form.getByLabel("启用自动补池").check();
+    await form.getByLabel("补池模式").selectOption("maintain");
+    for (const [label, value] of Object.entries({
+      最低节点数: "1",
+      目标节点数: "3",
+      最大节点数: "4",
+      每批补充节点数: "2",
+      "提前退出补池水位（秒）": "0",
+      "预估使用窗口（秒）": "0",
+      "空闲超时（秒）": "2",
+      每日请求上限: "2",
+      每日节点上限: "3",
+      "首次退避间隔（秒）": "1",
+      "最长退避间隔（秒）": "1",
+      暂停前失败次数: "2",
+    }))
+      await form.getByLabel(label, { exact: true }).fill(value);
     await page
       .getByRole("button", { name: "保存并激活来源", exact: true })
       .click();

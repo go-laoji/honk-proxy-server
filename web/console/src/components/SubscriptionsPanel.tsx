@@ -1,3 +1,5 @@
+import { ConfigFields, ConfigForm } from "./config/ConfigFields";
+import { subscriptionFields } from "./config/sourceFields";
 import { useEffect, useRef, useState } from "react";
 import {
   subscriptionApi,
@@ -5,10 +7,10 @@ import {
   type SubscriptionsOverview,
 } from "../subscriptions";
 const blank: SubscriptionConfig = {
-  id: "standard",
-  name: "标准订阅",
+  id: "",
+  name: "",
   enabled: true,
-  url: "https://example.com/subscription",
+  url: "",
   format: "uri",
   timeout_ms: 10000,
   max_nodes: 1000,
@@ -26,7 +28,8 @@ export default function SubscriptionsPanel({
   const [info, setInfo] = useState("");
   const [busy, setBusy] = useState(false);
   const [editor, setEditor] = useState<{
-    body: string;
+    value: SubscriptionConfig;
+    existing?: boolean;
     revision: number;
   } | null>(null);
   const [importing, setImporting] = useState<{
@@ -95,7 +98,7 @@ export default function SubscriptionsPanel({
             disabled={busy || !data}
             onClick={() =>
               setEditor({
-                body: JSON.stringify(blank, null, 2),
+                value: blank,
                 revision: data!.running_revision,
               })
             }
@@ -178,11 +181,8 @@ export default function SubscriptionsPanel({
                 disabled={busy}
                 onClick={() =>
                   setEditor({
-                    body: JSON.stringify(
-                      { ...source, snapshot: null },
-                      null,
-                      2,
-                    ),
+                    value: { ...source, snapshot: null },
+                    existing: true,
                     revision: data.running_revision,
                   })
                 }
@@ -225,44 +225,40 @@ export default function SubscriptionsPanel({
         ))}
       </div>
       {editor && (
-        <div className="space-y-3" aria-label="订阅编辑器">
-          <label className="form-field">
-            订阅定义 JSON · r{editor.revision}
-            <textarea
-              className="field editor-field min-h-64"
-              spellCheck={false}
-              value={editor.body}
-              onChange={(event) =>
-                setEditor({ ...editor, body: event.target.value })
-              }
-            />
-          </label>
-          <p className="muted text-xs">
-            保留 [REDACTED] 可复用已有 URL；新 URL 不会明文回显到视图。快照由
-            GET/导入管理。
-          </p>
-          <button
-            className="btn-primary"
-            disabled={busy}
-            onClick={() =>
+        <ConfigForm
+          label="订阅编辑器"
+          onSave={() => {
+            if (!busy)
               void action(() =>
-                subscriptionApi.save(
-                  JSON.parse(editor.body) as SubscriptionConfig,
-                  editor.revision,
-                ),
-              )
-            }
-          >
-            保存并应用订阅
-          </button>
-          <button
-            className="btn ml-2"
-            disabled={busy}
-            onClick={() => setEditor(null)}
-          >
-            取消订阅编辑
-          </button>
-        </div>
+                subscriptionApi.save(editor.value, editor.revision),
+              );
+          }}
+        >
+          <h3 className="text-sm font-semibold">
+            订阅定义 · 基于 r{editor.revision}
+          </h3>
+          <ConfigFields
+            fields={subscriptionFields(Boolean(editor.existing))}
+            value={editor.value}
+            onChange={(value) => setEditor({ ...editor, value })}
+          />
+          <p className="muted text-xs">
+            保留脱敏值可复用已有 URL。快照由远程刷新或文档导入管理。
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button className="btn-primary" type="submit" disabled={busy}>
+              保存并应用订阅
+            </button>
+            <button
+              className="btn"
+              type="button"
+              disabled={busy}
+              onClick={() => setEditor(null)}
+            >
+              取消订阅编辑
+            </button>
+          </div>
+        </ConfigForm>
       )}
       {importing && (
         <div className="space-y-3" aria-label="导入订阅文档">
