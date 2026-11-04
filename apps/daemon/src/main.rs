@@ -1,8 +1,8 @@
 use clap::Parser;
 use hps_application::{StartupOverrides, Supervisor};
 use hps_config::DaemonConfig;
-use std::{net::SocketAddr, path::PathBuf, sync::Arc};
-mod management;
+use hps_daemon::{ManagementServer, ServerError};
+use std::{net::SocketAddr, path::PathBuf};
 
 #[derive(Parser)]
 #[command(name = "hpsd", version, about = "Headless honk proxy service")]
@@ -25,7 +25,7 @@ struct Args {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), ServerError> {
     let args = Args::parse();
     if args.build_info {
         println!(
@@ -69,6 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         StartupOverrides {
             listen: args.listen,
             instance_name: args.instance_name,
+            ..Default::default()
         },
     )
     .await?;
@@ -80,39 +81,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .json()
         .with_writer(std::io::stderr)
         .init();
-    let listener = match management::ManagementListener::bind(
-        current.config.management_listen,
-        current.management_tls.clone(),
-    )
-    .await
-    {
-        Ok(listener) => listener,
-        Err(error) => {
-            let _ = application.shutdown().await;
-            return Err(error.into());
-        }
-    };
-    let address = listener.address()?;
-    application.confirm_startup().await?;
+    let server = ManagementServer::bind(application).await?;
+    let address = server.address();
     tracing::info!(%address,proxy_ready=current.engine.ready(),configuration_revision=current.revision,management_tls=current.management_tls.is_some(),"management API listening; persisted runtime initialized");
-    let stopping = application.clone();
-    let result = axum::serve(
-        axum::serve::ListenerExt::tap_io(listener, |_| {}),
-        hps_api::router(Arc::new(hps_api::AppState::with_application(
-            application.clone(),
-        )))
-        .into_make_service_with_connect_info::<std::net::SocketAddr>(),
-    )
-    .with_graceful_shutdown(async move {
-        shutdown().await;
-        if let Err(error) = stopping.shutdown().await {
-            tracing::error!(%error,"shutdown storage/runtime failed");
-        }
-    })
-    .await;
-    application.shutdown().await?;
-    result?;
-    Ok(())
+    server.serve(shutdown()).await
 }
 
 async fn shutdown() {
