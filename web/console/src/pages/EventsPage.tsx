@@ -46,7 +46,7 @@ const descriptions: Record<string, string> = {
   node_enabled: "节点解除限制",
   node_disabled: "节点禁用新准入",
   node_draining: "节点停止接收新业务",
-  node_deleted: "节点软删除",
+  node_deleted: "节点历史停用",
   configuration_revision_saved: "配置候选已保存",
   configuration_draft_saved: "共享草稿已保存",
 };

@@ -297,14 +297,6 @@
   .record-card .status-badge {
     @apply shrink-0;
   }
-  .record-title {
-    @apply text-sm font-semibold;
-    color: var(--accent-ink);
-    overflow-wrap: anywhere;
-  }
-  .record-title:hover {
-    @apply underline;
-  }
   .record-details {
     @apply grid gap-x-4 gap-y-1.5 rounded-lg p-3 text-xs leading-5 tabular-nums sm:grid-cols-2;
     background: var(--surface-soft);
@@ -315,6 +307,37 @@
   }
   .record-actions .btn {
     @apply px-2.5 py-1.5;
+  }
+  .node-table-scroll:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+  .node-table {
+    @apply w-full min-w-[52rem] table-fixed text-left text-xs;
+  }
+  .node-table th,
+  .node-table td {
+    @apply px-2.5 py-1.5 align-middle;
+  }
+  .node-table thead {
+    background: var(--surface-soft);
+    color: var(--muted);
+  }
+  .node-table tbody tr {
+    border-block-start: 1px solid var(--border);
+  }
+  .node-table tbody tr:hover,
+  .node-table tbody tr:focus-within {
+    background: var(--surface-soft);
+  }
+  .node-table-link {
+    color: var(--accent-ink);
+  }
+  .node-table-link:hover {
+    @apply underline;
+  }
+  .node-table .status-badge {
+    @apply px-1.5 py-0 whitespace-nowrap;
   }
   .status-badge {
     @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium;
