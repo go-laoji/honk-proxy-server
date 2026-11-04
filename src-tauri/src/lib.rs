@@ -6,6 +6,7 @@ mod backup;
 mod desktop;
 mod events;
 mod local;
+mod managed;
 
 #[derive(Clone, PartialEq, Eq)]
 struct Target {
@@ -13,6 +14,7 @@ struct Target {
     ca_certificate: Option<Vec<u8>>,
     profile_id: Option<String>,
     local: bool,
+    managed: bool,
 }
 impl Target {
     fn client(&self, timeout: Duration) -> Result<HpsClient, hps_client::ClientError> {
@@ -24,6 +26,7 @@ impl Target {
             ca_certificate: None,
             profile_id: None,
             local: false,
+            managed: false,
         }
     }
     fn profile(profile: &hps_system::profiles::Profile) -> Result<Self, String> {
@@ -40,10 +43,30 @@ impl Target {
             ca_certificate,
             profile_id: Some(profile.id),
             local: profile.kind == hps_system::profiles::Kind::Local,
+            managed: false,
         })
     }
 }
 struct Connection(Mutex<Target>);
+
+fn saved_target(app: &tauri::AppHandle) -> Result<Target, String> {
+    let profiles = hps_system::profiles::Store::new(&hps_system::state_dir()?).load()?;
+    if let Some(profile) = profiles.active() {
+        return Target::profile(profile);
+    }
+    let saved = app
+        .path()
+        .app_config_dir()
+        .ok()
+        .and_then(|path| std::fs::read(path.join("connection.json")).ok())
+        .and_then(|bytes| serde_json::from_slice::<String>(&bytes).ok())
+        .filter(|endpoint| HpsClient::new(endpoint, Duration::from_secs(10)).is_ok());
+    Ok(saved.map(Target::address).unwrap_or_else(default_target))
+}
+
+fn default_target() -> Target {
+    Target::address("http://127.0.0.1:17900/".into())
+}
 #[derive(Debug, serde::Serialize)]
 struct NativeApiError {
     message: String,
@@ -104,6 +127,9 @@ fn set_endpoint(
     subscriptions
         .validate_context(window.label(), context)
         .map_err(|e| e.message)?;
+    if current.managed && current.endpoint == endpoint {
+        return Ok(());
+    }
     subscriptions
         .ensure_target_generation()
         .map_err(|e| e.message)?;
@@ -751,21 +777,16 @@ pub fn run() {
             if hps_system::service::desktop_is_root() {
                 return Err("Desktop must run as an ordinary user; use the administrator CLI for system services".into());
             }
-            let saved = app
-                .path()
-                .app_config_dir()
-                .ok()
-                .and_then(|p| std::fs::read(p.join("connection.json")).ok())
-                .and_then(|bytes| serde_json::from_slice::<String>(&bytes).ok())
-                .filter(|endpoint| HpsClient::new(endpoint, Duration::from_secs(10)).is_ok());
-            let store=hps_system::profiles::Store::new(&hps_system::state_dir()?);
-            let profiles=store.load()?;
-            let target=match profiles.active() {
-                Some(profile) => Target::profile(profile)?,
-                None => Target::address(saved.unwrap_or_else(|| "http://127.0.0.1:17900/".into())),
-            };
+            let target = saved_target(app.handle())?;
             app.manage(Connection(Mutex::new(target)));
             app.manage(events::NativeEvents::default());
+            app.manage(managed::ManagedService::new(
+                hps_system::state_dir()?.join(if cfg!(debug_assertions) {
+                    "desktop-service-dev"
+                } else {
+                    "desktop-service"
+                })
+            ));
             desktop::setup(app)?;
             Ok(())
         })
@@ -806,13 +827,28 @@ pub fn run() {
             local::local_service_control,
             local::local_proxy_apply,
             local::local_proxy_restore,
+            managed::managed_service_status,
+            managed::managed_service_start,
+            managed::managed_service_stop,
             events::events_context,
             events::events_subscribe,
             events::events_cancel,
             events::events_ack,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                let managed = app.state::<managed::ManagedService>();
+                tauri::async_runtime::block_on(async {
+                    match tokio::time::timeout(Duration::from_secs(10), managed.shutdown()).await {
+                        Ok(Ok(())) => {}
+                        Ok(Err(error)) => eprintln!("Desktop local service shutdown failed: {error}"),
+                        Err(_) => eprintln!("Desktop local service shutdown timed out"),
+                    }
+                });
+            }
+        });
 }
 
 #[cfg(test)]

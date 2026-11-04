@@ -65,7 +65,11 @@ pub(super) async fn profiles_change(
             .ensure_target_generation()
             .map_err(|e| e.message)?;
         let store = Store::new(&hps_system::state_dir()?);
+        let selects_target = matches!(&change, Change::Select { .. });
         let profiles = store.change(expected_revision, change)?;
+        if current.managed && !selects_target {
+            return Ok(profiles);
+        }
         // Changing the active profile cancels every stream before another document can observe the target.
         if let Some(profile) = profiles.active() {
             let target = Target::profile(profile)?;

@@ -1,0 +1,14 @@
+instance_name = "Honk Proxy Desktop"
+
+[proxy.routing]
+default_action = { kind = "default" }
+
+[[proxy.inbounds]]
+id = "desktop-http"
+protocol = "http"
+listen = "127.0.0.1:0"
+
+[[proxy.inbounds]]
+id = "desktop-socks5"
+protocol = "socks5"
+listen = "127.0.0.1:0"
