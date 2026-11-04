@@ -258,7 +258,7 @@ export default function NodesPage() {
   return (
     <div className="space-y-3">
       {!selectedId && (
-        <section className="panel space-y-2.5 p-3">
+        <section className="panel panel-body space-y-2.5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="flex items-center gap-2 text-sm font-semibold">
               <Globe2 size={16} aria-hidden="true" />
@@ -499,14 +499,17 @@ export default function NodesPage() {
         </section>
       )}
       {(error || loadError) && (
-        <p role="alert" className="panel break-words p-4 text-sm text-red-600">
+        <p
+          role="alert"
+          className="panel panel-body break-words text-sm text-red-600"
+        >
           {error || loadError}
         </p>
       )}
       {notice && (
         <p
           role="status"
-          className="panel break-words p-4 text-sm text-emerald-700"
+          className="panel panel-body break-words text-sm text-emerald-700"
         >
           {notice}
         </p>
@@ -528,7 +531,7 @@ export default function NodesPage() {
         />
       )}
       {editing && (
-        <section className="panel space-y-4 p-5" aria-label="节点导入">
+        <section className="panel panel-body space-y-4" aria-label="节点导入">
           <h2 className="font-semibold">批量导入节点</h2>
           <p className="muted text-xs leading-6">
             每行一个 HTTP / HTTPS / SOCKS5 地址或 host:port；支持 URL
@@ -617,11 +620,11 @@ export default function NodesPage() {
                   ? "所选行可提交；激活时仍校验引用、资源和版本。"
                   : "请修正无效行，或明确填写有效行号后重新预览。"}
               </p>
-              <div className="max-h-80 overflow-auto rounded-lg border border-slate-200 dark:border-slate-700">
+              <div className="max-h-80 overflow-auto rounded-lg border border-console-border">
                 {preview.rows.map((row) => (
                   <div
                     key={row.row}
-                    className="break-all border-b border-slate-100 p-3 text-xs dark:border-slate-800"
+                    className="break-all border-b border-console-border p-3 text-xs"
                   >
                     第 {row.row} 行 ·{" "}
                     {row.valid
@@ -644,7 +647,7 @@ export default function NodesPage() {
       )}
       {selectedId && (
         <section className="panel" aria-label="节点详情">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 p-3 dark:border-slate-800">
+          <div className="panel-header panel-toolbar">
             <h2 className="break-all font-semibold">节点详情 · {selectedId}</h2>
             <div className="flex flex-wrap gap-2">
               <button
@@ -691,7 +694,7 @@ export default function NodesPage() {
                     "来源",
                     selected.provider_id ? (
                       <a
-                        className="text-blue-600"
+                        className="text-console-accent-ink"
                         href={
                           selected.kind === "subscription"
                             ? "./providers.html"
@@ -730,7 +733,7 @@ export default function NodesPage() {
                     selected.groups.length
                       ? selected.groups.map((id) => (
                           <a
-                            className="mr-2 text-blue-600"
+                            className="mr-2 text-console-accent-ink"
                             key={id}
                             href={`./groups.html?group=${encodeURIComponent(id)}`}
                           >
@@ -743,7 +746,7 @@ export default function NodesPage() {
                   [
                     "业务拨号与连接",
                     <a
-                      className="text-blue-600"
+                      className="text-console-accent-ink"
                       href={`./connections.html?node=${encodeURIComponent(selected.id)}`}
                     >
                       {selected.active_connections}，查看业务交换 / 隧道 →
@@ -755,7 +758,7 @@ export default function NodesPage() {
                   ],
                 ]}
               />
-              <div className="space-y-2 border-t border-slate-100 p-3 dark:border-slate-800">
+              <div className="space-y-2 border-t border-console-border p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <NodeActions
                     node={selected}
@@ -764,7 +767,7 @@ export default function NodesPage() {
                   />
                   <a
                     href={`./health.html?node=${encodeURIComponent(selected.id)}`}
-                    className="text-sm text-blue-600"
+                    className="text-sm text-console-accent-ink"
                   >
                     健康检测与任务 →
                   </a>
@@ -819,7 +822,7 @@ export default function NodesPage() {
             </p>
           )}
           {value && (
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-3 py-2 dark:border-slate-800">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-console-border px-3 py-2">
               <p className="muted text-xs tabular-nums">
                 {value.nodes.length > 0 &&
                   `第 ${value.offset + 1}–${value.offset + value.nodes.length} 个 · `}
@@ -856,7 +859,7 @@ export default function NodesPage() {
         </section>
       )}
       {!selectedId && value && value.sources.length > 0 && (
-        <details className="panel group p-3">
+        <details className="panel panel-body group">
           <summary className="flex w-fit list-none items-center gap-1 rounded-sm text-sm font-medium">
             <ChevronDown
               size={15}

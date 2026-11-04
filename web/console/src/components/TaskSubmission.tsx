@@ -105,7 +105,7 @@ export default function TaskSubmission({
     }
   }
   return (
-    <section className="panel space-y-3 p-3" aria-label="后台配置提交">
+    <section className="panel panel-body space-y-3" aria-label="后台配置提交">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-2 font-semibold">
@@ -188,7 +188,10 @@ export default function TaskSubmission({
             >
               生成新的请求 ID
             </button>
-            <a className="py-2 text-xs text-blue-600" href="./config.html">
+            <a
+              className="py-2 text-xs text-console-accent-ink"
+              href="./config.html"
+            >
               配置工作台 →
             </a>
           </div>

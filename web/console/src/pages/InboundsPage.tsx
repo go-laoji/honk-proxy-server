@@ -41,7 +41,7 @@ export default function InboundsPage({
   }
   return (
     <>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="metric-grid">
         <Stat
           title="运行入口"
           value={`${running} / ${proxy.inbounds.length}`}
@@ -67,8 +67,11 @@ export default function InboundsPage({
           icon={Gauge}
         />
       </div>
-      <div className="panel mt-6 flex items-start gap-3 p-5 text-sm leading-7">
-        <CircleHelp size={19} className="mt-1 shrink-0 text-blue-600" />
+      <div className="panel panel-body mt-3 flex items-start gap-3 text-sm leading-7">
+        <CircleHelp
+          size={19}
+          className="mt-1 shrink-0 text-console-accent-ink"
+        />
         <p className="muted">
           入口、上游与资源限制可通过配置工作台校验并激活版本。此页启停立即生效，停止会断开该入口的现有连接。
           SOCKS5 支持 TCP CONNECT 与 UDP ASSOCIATE；UDP 控制 TCP
@@ -97,14 +100,14 @@ export default function InboundsPage({
           {message}
         </p>
       )}
-      <div className="mt-6 grid gap-6 xl:grid-cols-2">
+      <div className="mt-3 grid gap-3 xl:grid-cols-2">
         {proxy.inbounds.map((entry) => (
           <section
             key={entry.id}
             className="panel min-w-0"
             aria-label={`入口 ${entry.id}`}
           >
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-5 dark:border-slate-800">
+            <div className="panel-header panel-toolbar">
               <div>
                 <h2 className="font-semibold">{entry.id}</h2>
                 <p className="muted mt-1 text-xs">
@@ -175,9 +178,9 @@ export default function InboundsPage({
               ]}
             />
             {entry.listen && (
-              <div className="border-t border-slate-100 p-5 dark:border-slate-800">
+              <div className="border-t border-console-border p-5">
                 <p className="muted mb-2 text-xs">curl 接入示例</p>
-                <pre className="overflow-x-auto rounded-lg bg-slate-950 p-3 text-xs leading-6 text-slate-100">
+                <pre className="code-block">
                   <code>{`curl --proxy ${entry.protocol === "socks5" ? "socks5h" : entry.protocol}://${entry.listen} https://example.com/`}</code>
                 </pre>
               </div>
@@ -186,13 +189,13 @@ export default function InboundsPage({
         ))}
       </div>
       {!proxy.inbounds.length && (
-        <section className="panel mt-6 p-6">
+        <section className="panel panel-body mt-3">
           <h2 className="font-semibold">尚未配置代理入口</h2>
           <p className="muted mt-3 text-sm leading-7">
             在启动 TOML
             添加下面的入口配置，并配置实际供应商上游。只有入口运行且存在可准入上游时，代理才报告就绪。
           </p>
-          <pre className="mt-4 overflow-x-auto rounded-lg bg-slate-950 p-4 text-xs leading-6 text-slate-100">
+          <pre className="code-block mt-4">
             <code>
               {
                 '[[proxy.inbounds]]\nid = "browser-http"\nprotocol = "http"\nlisten = "127.0.0.1:17901"\nenabled = true'
@@ -201,11 +204,9 @@ export default function InboundsPage({
           </pre>
         </section>
       )}
-      <div className="mt-6 grid gap-6 xl:grid-cols-2">
+      <div className="mt-3 grid gap-3 xl:grid-cols-2">
         <section className="panel min-w-0">
-          <h2 className="border-b border-slate-100 p-5 font-semibold dark:border-slate-800">
-            有效资源限制
-          </h2>
+          <h2 className="panel-header">有效资源限制</h2>
           <Details
             rows={[
               [
@@ -232,29 +233,23 @@ export default function InboundsPage({
             字节速率表示不限；限速等待不算空闲。停止会取消活动转发并回收额度。
           </p>
         </section>
-        <section className="panel min-w-0 p-5">
+        <section className="panel panel-body min-w-0">
           <h2 className="font-semibold">浏览器与系统接入</h2>
           <div className="muted mt-4 space-y-4 text-sm leading-7">
             <p>
-              <strong className="text-slate-700 dark:text-slate-200">
-                HTTP / CONNECT：
-              </strong>
+              <strong>HTTP / CONNECT：</strong>
               在浏览器或系统填写代理主机和端口，HTTPS 目标使用同一 HTTP 入口，经
               CONNECT 保留端到端 TLS。
             </p>
             <p>
-              <strong className="text-slate-700 dark:text-slate-200">
-                HTTPS 代理：
-              </strong>
+              <strong>HTTPS 代理：</strong>
               客户端到代理之间先建立 TLS，需客户端支持 https:// 代理、信任签发
               CA，访问名称必须匹配证书。系统界面的“HTTPS
               代理”有时指目标类型，请区分。curl 可使用 --proxy-cacert 提供代理
               CA。
             </p>
             <p>
-              <strong className="text-slate-700 dark:text-slate-200">
-                SOCKS5 TCP / UDP：
-              </strong>
+              <strong>SOCKS5 TCP / UDP：</strong>
               选择无认证 SOCKS5；支持域名、IPv4、IPv6 CONNECT 与 UDP
               ASSOCIATE。BIND 和 UDP 分片不支持。UDP
               必须由客户端显式建立关联；控制 TCP 关闭即释放。HTTP/HTTPS

@@ -74,7 +74,7 @@ export default function ObservationPanel({
       active: sample.active,
     })) ?? [];
   return (
-    <section className="panel min-w-0 space-y-4 p-4 sm:p-5" aria-label={name}>
+    <section className="panel panel-body min-w-0 space-y-4" aria-label={name}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-semibold">{name}</h2>
         <div className="flex flex-wrap gap-2">
@@ -249,7 +249,7 @@ export default function ObservationPanel({
                     {data.correlations.groups.map((row, index) => (
                       <tr
                         key={index}
-                        className="border-t border-slate-100 dark:border-slate-800"
+                        className="border-t border-console-border"
                       >
                         <td className="p-2">
                           {row.source_ip ?? "未知"}
@@ -304,7 +304,7 @@ export default function ObservationPanel({
                       .map((row) => (
                         <tr
                           key={`${row.configuration_revision}:${row.rule_id}`}
-                          className="border-t border-slate-100 dark:border-slate-800"
+                          className="border-t border-console-border"
                         >
                           <td className="p-2">r{row.configuration_revision}</td>
                           <td className="break-all">

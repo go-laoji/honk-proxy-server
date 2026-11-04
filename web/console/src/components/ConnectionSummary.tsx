@@ -175,7 +175,10 @@ export default function ConnectionSummary({ endpoint }: { endpoint: string }) {
             </p>
           </details>
           {value.attention.length > 0 && (
-            <div className="panel space-y-3 p-4" aria-label="异常与运行事项">
+            <div
+              className="panel panel-body space-y-3"
+              aria-label="异常与运行事项"
+            >
               <h3 className="text-sm font-semibold">运行事项</h3>
               {value.attention.map((item, index) => (
                 <div
@@ -187,7 +190,10 @@ export default function ConnectionSummary({ endpoint }: { endpoint: string }) {
                       `${item.kind === "provider" ? "最近提取异常" : "运行记录"}：${item.code}`}
                     {item.resource_id ? ` · ${item.resource_id}` : ""}
                   </span>
-                  <a className="text-blue-600" href={safeHref(item.href)}>
+                  <a
+                    className="text-console-accent-ink"
+                    href={safeHref(item.href)}
+                  >
                     查看详情 →
                   </a>
                 </div>
@@ -199,7 +205,7 @@ export default function ConnectionSummary({ endpoint }: { endpoint: string }) {
       {error && (
         <p
           role="alert"
-          className="panel break-words p-4 text-sm text-amber-700"
+          className="panel panel-body break-words text-sm text-amber-700"
         >
           连接摘要暂不可用：{error}。{value ? "保留上次成功快照。" : ""}
         </p>

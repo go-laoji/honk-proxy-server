@@ -118,7 +118,7 @@ export default function AlertPanel() {
     }
   }
   return (
-    <section className="panel space-y-4 p-5" aria-label="状态告警">
+    <section className="panel panel-body space-y-4" aria-label="状态告警">
       <h2 className="font-semibold">状态告警</h2>
       <p className="muted text-xs leading-6">
         每 5 秒读取实际状态，变化时通知并按条件冷却；保留最近 128
@@ -232,7 +232,7 @@ export default function AlertPanel() {
               .map((n) => (
                 <li
                   key={`${feed.epoch}:${n.sequence}`}
-                  className="rounded-xl bg-slate-50 p-3 text-xs dark:bg-slate-800"
+                  className="rounded-xl bg-console-soft p-3 text-xs"
                 >
                   <p className="font-medium">
                     {n.state === "recovered" ? "已恢复" : "异常"} · {n.key} ·{" "}

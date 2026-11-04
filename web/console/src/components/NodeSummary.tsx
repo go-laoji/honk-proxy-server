@@ -42,9 +42,12 @@ export function SourceStats({ sources }: { sources: ProviderNodeSummary[] }) {
   return (
     <div className="grid gap-3 lg:grid-cols-2" aria-label="来源水位与异常">
       {sources.map((source) => (
-        <div key={source.id} className="panel min-w-0 space-y-2 p-4 text-xs">
+        <div
+          key={source.id}
+          className="panel panel-body min-w-0 space-y-2 text-xs"
+        >
           <a
-            className="break-all text-sm font-medium text-blue-600"
+            className="break-all text-sm font-medium text-console-accent-ink"
             href={`./provider-detail.html?id=${encodeURIComponent(source.id)}`}
           >
             {source.id} →

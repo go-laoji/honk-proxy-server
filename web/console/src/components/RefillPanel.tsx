@@ -31,7 +31,7 @@ export default function RefillPanel({
 }) {
   return (
     <section className="panel overflow-hidden" aria-label="补池控制器">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-5 dark:border-slate-800">
+      <div className="panel-header panel-toolbar">
         <h2 className="font-semibold">水位与预算控制器</h2>
         <Badge active={value.enabled}>
           {value.enabled
@@ -41,7 +41,7 @@ export default function RefillPanel({
             : "自动补池停用"}
         </Badge>
       </div>
-      <div className="grid grid-cols-2 gap-y-4 divide-x sm:grid-cols-4 divide-slate-100 py-5 text-center dark:divide-slate-800">
+      <div className="grid grid-cols-2 gap-y-4 divide-x sm:grid-cols-4 divide-console-border py-5 text-center">
         {[
           ["当前准入库存", value.current_inventory],
           ["预测窗口后库存", value.projected_inventory],
@@ -87,7 +87,7 @@ export default function RefillPanel({
           ["暂停原因", value.paused_reason ?? "无"],
         ]}
       />
-      <div className="space-y-3 border-t border-slate-100 p-5 dark:border-slate-800">
+      <div className="space-y-3 border-t border-console-border p-5">
         <div className="flex flex-wrap gap-2">
           <button
             className="btn"

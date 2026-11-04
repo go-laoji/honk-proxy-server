@@ -233,7 +233,7 @@ export default function GroupsPage({
       {error && (
         <p
           role="alert"
-          className="panel border-red-200 p-4 text-sm text-red-700 dark:text-red-300"
+          className="panel panel-body border-red-200 text-sm text-red-700 dark:text-red-300"
         >
           {error}
         </p>
@@ -241,12 +241,12 @@ export default function GroupsPage({
       {info && (
         <p
           role="status"
-          className="panel border-emerald-200 p-4 text-sm text-emerald-700 dark:text-emerald-300"
+          className="panel panel-body border-emerald-200 text-sm text-emerald-700 dark:text-emerald-300"
         >
           {info}
         </p>
       )}
-      <section className="panel space-y-2 p-3">
+      <section className="panel panel-body space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h2 className="flex items-center gap-2 font-semibold">
@@ -318,7 +318,7 @@ export default function GroupsPage({
         )}
       </section>
       {editor && (
-        <section className="panel space-y-4 p-5" aria-label="分组编辑器">
+        <section className="panel panel-body space-y-4" aria-label="分组编辑器">
           <h2 className="font-semibold">
             {editor.mode === "policy"
               ? "选择策略与引用"
@@ -363,7 +363,7 @@ export default function GroupsPage({
       )}
       <section className="grid gap-2 md:grid-cols-2" aria-label="分组列表">
         {data?.configuration.groups.map((item) => (
-          <article key={item.id} className="panel min-w-0 p-3">
+          <article key={item.id} className="panel panel-body min-w-0">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="break-all font-semibold">{item.id}</h3>
               <Badge active>{strategies[item.strategy] ?? item.strategy}</Badge>
@@ -445,14 +445,14 @@ export default function GroupsPage({
           </article>
         ))}
         {data && data.configuration.groups.length === 0 && (
-          <p className="panel p-6 text-sm text-slate-500">
+          <p className="panel panel-body text-sm muted">
             尚未配置分组，当前使用全池轮询。
           </p>
         )}
       </section>
       <section
         id="selection-simulation"
-        className="panel space-y-3 p-3"
+        className="panel panel-body space-y-3"
         aria-label="选点模拟"
       >
         <h2 className="flex items-center gap-2 font-semibold">
@@ -553,7 +553,7 @@ export default function GroupsPage({
             <div className="overflow-x-auto">
               <table className="w-full min-w-[640px] text-left text-xs">
                 <thead>
-                  <tr className="border-b border-slate-200 text-slate-500 dark:border-slate-700">
+                  <tr className="border-b border-console-border muted">
                     <th className="p-3">节点 / 来源</th>
                     <th className="p-3">协议 / 标签</th>
                     <th className="p-3">剩余寿命 / 延迟 / 权重</th>
@@ -564,7 +564,7 @@ export default function GroupsPage({
                   {decision.candidates.map((node) => (
                     <tr
                       key={node.node_id}
-                      className="border-b border-slate-100 dark:border-slate-800"
+                      className="border-b border-console-border"
                     >
                       <td className="p-3">
                         <p>{node.node_id}</p>
@@ -648,7 +648,7 @@ export default function GroupsPage({
         )}
       </section>
       {selectedGroup && data && (
-        <section className="panel space-y-4 p-5" aria-label="手动固定">
+        <section className="panel panel-body space-y-4" aria-label="手动固定">
           <h2 className="font-semibold">手动固定 · {selectedGroup.id}</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="form-field">

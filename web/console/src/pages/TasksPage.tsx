@@ -193,7 +193,7 @@ export default function TasksPage() {
   const source = detail && epoch ? sourceLink(detail, epoch) : null;
   return (
     <div className="space-y-3">
-      <section className="panel space-y-2.5 p-3">
+      <section className="panel panel-body space-y-2.5">
         <div>
           <h2 className="flex items-center gap-2 font-semibold">
             <ListChecks size={19} />
@@ -347,13 +347,16 @@ export default function TasksPage() {
       {notice && (
         <p
           role="status"
-          className="panel break-words p-4 text-sm text-amber-700"
+          className="panel panel-body break-words text-sm text-amber-700"
         >
           {notice}
         </p>
       )}
       {error && (
-        <p role="alert" className="panel break-words p-4 text-sm text-red-600">
+        <p
+          role="alert"
+          className="panel panel-body break-words text-sm text-red-600"
+        >
           任务读取失败：{error}
         </p>
       )}
@@ -434,19 +437,22 @@ export default function TasksPage() {
                 />
                 <div className="flex flex-wrap gap-4">
                   {source && (
-                    <a className="text-sm text-blue-600" href={source.href}>
+                    <a
+                      className="text-sm text-console-accent-ink"
+                      href={source.href}
+                    >
                       {source.label} →
                     </a>
                   )}
                   <a
-                    className="text-sm text-blue-600"
+                    className="text-sm text-console-accent-ink"
                     href={`./events.html?task_id=${detail.id}&epoch=${expected ?? epoch}`}
                   >
                     该任务的结构化事件 →
                   </a>
                 </div>
                 {detail.result !== null && (
-                  <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-all rounded-xl bg-slate-50 p-4 text-xs dark:bg-slate-800">
+                  <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-all rounded-xl bg-console-soft p-4 text-xs">
                     {JSON.stringify(detail.result, null, 2)}
                   </pre>
                 )}

@@ -346,7 +346,7 @@ export default function RulesPage({
       {error && (
         <p
           role="alert"
-          className="panel border-red-200 p-4 text-sm text-red-700 dark:text-red-300"
+          className="panel panel-body border-red-200 text-sm text-red-700 dark:text-red-300"
         >
           {error}
         </p>
@@ -354,12 +354,12 @@ export default function RulesPage({
       {info && (
         <p
           role="status"
-          className="panel border-emerald-200 p-4 text-sm text-emerald-700 dark:text-emerald-300"
+          className="panel panel-body border-emerald-200 text-sm text-emerald-700 dark:text-emerald-300"
         >
           {info}
         </p>
       )}
-      <section className="panel space-y-2.5 p-3">
+      <section className="panel panel-body space-y-2.5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h2 className="flex items-center gap-2 font-semibold">
@@ -528,7 +528,7 @@ export default function RulesPage({
         )}
       </section>
       {editor && (
-        <section className="panel space-y-4 p-5" aria-label="规则编辑器">
+        <section className="panel panel-body space-y-4" aria-label="规则编辑器">
           <h2 className="font-semibold">
             {editor.mode === "policy"
               ? "编辑规则策略"
@@ -584,7 +584,7 @@ export default function RulesPage({
             return (
               <article
                 key={rule.id}
-                className="panel min-w-0 p-3"
+                className="panel panel-body min-w-0"
                 tabIndex={0}
                 onKeyDown={(event) => {
                   if (
@@ -684,7 +684,7 @@ export default function RulesPage({
             );
           })}
         {data && data.configuration.rules.length === 0 && (
-          <p className="panel p-6 text-sm text-slate-500">
+          <p className="panel panel-body text-sm muted">
             当前查看版本没有规则，使用默认动作。
           </p>
         )}
@@ -716,7 +716,7 @@ export default function RulesPage({
       </section>
       <section
         id="rule-simulation"
-        className="panel space-y-3 p-3"
+        className="panel panel-body space-y-3"
         aria-label="规则模拟"
       >
         <h2 className="flex items-center gap-2 font-semibold">
@@ -780,7 +780,7 @@ export default function RulesPage({
                     <tbody>
                       {simulation.selection.candidates.map((node) => (
                         <tr
-                          className="border-t border-slate-100 dark:border-slate-800"
+                          className="border-t border-console-border"
                           key={node.node_id}
                         >
                           <td className="p-2">{node.node_id}</td>
@@ -800,7 +800,7 @@ export default function RulesPage({
                 <p className="muted text-xs">
                   显示候选前 50 条，完整分页与固定范围见
                   <a
-                    className="ml-1 text-blue-600 underline"
+                    className="ml-1 text-console-accent-ink underline"
                     href="./groups.html"
                   >
                     节点分组
@@ -813,7 +813,7 @@ export default function RulesPage({
               {simulation.decision.trace.map((item) => (
                 <li
                   key={item.id}
-                  className="rounded-lg bg-slate-50 p-3 text-xs leading-6 dark:bg-slate-950"
+                  className="rounded-lg bg-console-soft p-3 text-xs leading-6"
                 >
                   <strong>{item.id}</strong> ·{" "}
                   {item.matched

@@ -52,7 +52,7 @@ export default function ProfilesPanel() {
     }
   }
   return (
-    <section className="panel mt-6 p-6">
+    <section className="panel panel-body mt-6">
       <h2 className="font-semibold">连接档案</h2>
       <button
         className="btn mt-3"
@@ -76,7 +76,7 @@ export default function ProfilesPanel() {
         档案保存在本机，CLI 和 Desktop 共用。远端档案仅管理目标服务；即使地址是
         localhost，也不会启用本机系统操作。
       </p>
-      <ul className="my-5 divide-y divide-slate-100 dark:divide-slate-800">
+      <ul className="my-5 divide-y divide-console-border">
         {profiles?.profiles.map((p) => (
           <li
             key={p.id}

@@ -67,7 +67,10 @@ export default function HealthHistoryPanel({ node }: { node?: string }) {
     curves.set(key, points);
   }
   return (
-    <section className="panel space-y-4 p-5" aria-label="健康历史与出口画像">
+    <section
+      className="panel panel-body space-y-4"
+      aria-label="健康历史与出口画像"
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-semibold">
           健康历史与出口画像{node ? ` · ${node}` : ""}
@@ -120,7 +123,7 @@ export default function HealthHistoryPanel({ node }: { node?: string }) {
               return (
                 <figure
                   key={key}
-                  className="min-w-0 rounded-lg bg-slate-50 p-3 dark:bg-slate-900"
+                  className="min-w-0 rounded-lg bg-console-soft p-3"
                 >
                   <figcaption className="break-all text-xs">
                     {key} · 探测总耗时 ms（上界 {max}）
@@ -129,7 +132,7 @@ export default function HealthHistoryPanel({ node }: { node?: string }) {
                     viewBox="0 0 300 70"
                     role="img"
                     aria-label={`${key} 探测耗时曲线`}
-                    className="mt-2 h-20 w-full text-blue-500"
+                    className="mt-2 h-20 w-full text-console-accent"
                   >
                     <polyline
                       fill="none"
@@ -180,10 +183,7 @@ export default function HealthHistoryPanel({ node }: { node?: string }) {
               </thead>
               <tbody>
                 {data.records.map((run) => (
-                  <tr
-                    key={run.id}
-                    className="border-t border-slate-100 dark:border-slate-800"
-                  >
+                  <tr key={run.id} className="border-t border-console-border">
                     <td className="p-2">
                       {date(run.result?.checked_at ?? run.created_at)}
                       <br />

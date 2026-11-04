@@ -104,7 +104,7 @@ export default function ManualNodePanel({
     }
   }
   return (
-    <section className="panel space-y-5 p-5" aria-label="手动添加节点">
+    <section className="panel panel-body space-y-5" aria-label="手动添加节点">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="font-semibold">手动添加代理节点</h2>
@@ -122,7 +122,7 @@ export default function ManualNodePanel({
           <X size={16} />
         </button>
       </div>
-      <div className="form-field rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+      <div className="form-field rounded-xl border border-console-border p-4">
         <label htmlFor="manual-proxy-url">代理链接（可选，用于快速填写）</label>
         <div className="flex flex-col gap-2 sm:flex-row">
           <input

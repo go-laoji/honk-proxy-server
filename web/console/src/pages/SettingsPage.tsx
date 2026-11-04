@@ -25,9 +25,9 @@ export default function SettingsPage({
     return () => controller.abort();
   }, []);
   return (
-    <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-2">
+    <div className="grid min-w-0 grid-cols-1 items-start gap-3 lg:grid-cols-2">
       {isDesktop && (
-        <div className="space-y-4 lg:col-span-2">
+        <div className="space-y-3 lg:col-span-2">
           <ManagedServicePanel />
           <LocalSystemPanel data={data} refreshService={refreshService} />
         </div>
@@ -35,9 +35,7 @@ export default function SettingsPage({
       {isDesktop && <DesktopPreferencesPanel />}
       <BackupPanel />
       <section className="panel">
-        <h2 className="border-b border-slate-100 p-5 font-semibold dark:border-slate-800">
-          当前运行配置
-        </h2>
+        <h2 className="panel-header">当前运行配置</h2>
         <Details
           rows={[
             ["实例名称", data.config.instance_name],
@@ -84,9 +82,7 @@ export default function SettingsPage({
         </a>
       </section>
       <section className="panel">
-        <h2 className="border-b border-slate-100 p-5 font-semibold dark:border-slate-800">
-          版本与构建
-        </h2>
+        <h2 className="panel-header">版本与构建</h2>
         <Details
           rows={[
             ["服务", data.status.version.service],

@@ -24,7 +24,7 @@ export default function Overview({ data }: { data: ServiceData }) {
       />
       <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,2fr)_minmax(16rem,1fr)]">
         <ObservationPanel key={data.endpoint} />
-        <section className="panel p-3 sm:p-4" aria-labelledby="runtime-heading">
+        <section className="panel panel-body" aria-labelledby="runtime-heading">
           <h2 id="runtime-heading" className="font-semibold">
             运行状态
           </h2>
@@ -85,7 +85,7 @@ export default function Overview({ data }: { data: ServiceData }) {
       <NodeSummary key={`nodes:${data.endpoint}`} endpoint={data.endpoint} />
       <div className="grid gap-3 xl:grid-cols-5">
         <section className="panel xl:col-span-3">
-          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 dark:border-slate-800">
+          <div className="panel-header panel-toolbar">
             <h2 className="font-semibold">当前服务</h2>
             <Badge active={status.management_ready}>
               {status.management_ready ? "连接正常" : "未就绪"}
@@ -113,7 +113,7 @@ export default function Overview({ data }: { data: ServiceData }) {
           />
         </section>
         <section className="panel xl:col-span-2">
-          <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
+          <div className="panel-header">
             <h2 className="font-semibold">代理协议能力</h2>
             <p className="muted mt-1 text-xs">读取服务实际返回的可用状态</p>
           </div>

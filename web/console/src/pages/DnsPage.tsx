@@ -251,7 +251,7 @@ export default function DnsPage({
       {info && (
         <p
           role="status"
-          className="rounded-xl bg-blue-50 p-4 text-sm text-blue-700 dark:bg-blue-950 dark:text-blue-200"
+          className="rounded-xl bg-console-accent-soft p-4 text-sm text-console-accent-ink"
         >
           {info}
         </p>
@@ -308,7 +308,7 @@ export default function DnsPage({
           </div>
           <section
             id="dns-routing"
-            className="panel p-3"
+            className="panel panel-body"
             aria-label="DNS 上游与路由"
           >
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -336,7 +336,7 @@ export default function DnsPage({
               {data.configuration.upstreams.map((up) => (
                 <div
                   key={up.id}
-                  className="rounded-xl bg-slate-50 p-4 text-sm dark:bg-slate-800"
+                  className="rounded-xl bg-console-soft p-4 text-sm"
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <strong>{up.id}</strong>
@@ -369,7 +369,7 @@ export default function DnsPage({
                 data.configuration.routes.map((route) => (
                   <p
                     key={route.id}
-                    className="break-all rounded-lg border border-slate-200 p-3 dark:border-slate-700"
+                    className="break-all rounded-lg border border-console-border p-3"
                   >
                     <strong>{route.id}</strong> ·{" "}
                     {route.domain
@@ -433,7 +433,7 @@ export default function DnsPage({
           </section>
           <section
             id="dns-query"
-            className="panel p-3"
+            className="panel panel-body"
             aria-label="DNS 查询诊断"
           >
             <h2 className="font-semibold">查询诊断</h2>
@@ -518,7 +518,7 @@ export default function DnsPage({
                 {[...lookup.answers, ...lookup.authorities].map((record, i) => (
                   <p
                     key={i}
-                    className="break-all rounded-lg bg-slate-50 p-3 font-mono leading-6 dark:bg-slate-800"
+                    className="break-all rounded-lg bg-console-soft p-3 font-mono leading-6"
                   >
                     {record.name} {record.ttl} IN {record.query_type}{" "}
                     {record.value}
@@ -532,7 +532,11 @@ export default function DnsPage({
               </div>
             )}
           </section>
-          <section id="dns-cache" className="panel p-3" aria-label="DNS 缓存">
+          <section
+            id="dns-cache"
+            className="panel panel-body"
+            aria-label="DNS 缓存"
+          >
             <h2 className="font-semibold">缓存与清理</h2>
             <form
               className="mt-4 flex flex-wrap gap-3"
@@ -567,7 +571,7 @@ export default function DnsPage({
                 清理缓存
               </button>
             </form>
-            <div className="mt-4 divide-y divide-slate-100 dark:divide-slate-800">
+            <div className="mt-4 divide-y divide-console-border">
               {data.cache.entries.map((entry) => (
                 <div
                   key={entry.id}
@@ -609,7 +613,7 @@ export default function DnsPage({
           </section>
           <section
             id="dns-context"
-            className="panel p-3"
+            className="panel panel-body"
             aria-label="DNS 域名上下文"
           >
             <h2 className="font-semibold">域名上下文</h2>
@@ -656,7 +660,7 @@ export default function DnsPage({
                   {(context.mappings ?? []).map((mapping, index) => (
                     <li
                       key={index}
-                      className="break-all rounded-lg bg-slate-50 p-3 dark:bg-slate-900"
+                      className="break-all rounded-lg bg-console-soft p-3"
                     >
                       {mapping.domain} · 上游 {mapping.upstream} · 剩余 TTL{" "}
                       {mapping.remaining_ttl}s · 观察年龄{" "}
@@ -678,7 +682,7 @@ export default function DnsPage({
               {data.linux_capture_active ? "已启用" : "未启用"}。
             </p>
             {data.linux_capture && (
-              <details className="mt-4 rounded-xl bg-slate-50 p-4 text-xs leading-6 dark:bg-slate-800">
+              <details className="mt-4 rounded-xl bg-console-soft p-4 text-xs leading-6">
                 <summary className="cursor-pointer font-medium">
                   Linux DNS 内核证据
                 </summary>

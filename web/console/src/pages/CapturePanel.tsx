@@ -97,7 +97,7 @@ export default function CapturePanel({
     editorRevision === view.desired_revision;
   return (
     <section className="panel overflow-hidden" aria-label="透明代理运行控制">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-5 dark:border-slate-800">
+      <div className="panel-header panel-toolbar">
         <div>
           <h2 className="font-semibold">透明代理运行控制</h2>
           <p className="muted mt-2 text-xs">
@@ -220,7 +220,7 @@ export default function CapturePanel({
               查看操作任务
             </a>
           </div>
-          <details className="border-t border-slate-100 p-5 dark:border-slate-800">
+          <details className="border-t border-console-border p-5">
             <summary className="cursor-pointer text-sm">
               内核对象与资源证据
             </summary>
@@ -246,7 +246,7 @@ export default function CapturePanel({
       )}
       {editor && (
         <form
-          className="space-y-4 border-t border-slate-100 p-5 dark:border-slate-800"
+          className="space-y-4 border-t border-console-border p-5"
           onSubmit={(event) => {
             event.preventDefault();
             void run("save", async () => {
@@ -430,7 +430,7 @@ export default function CapturePanel({
             <p role="status" className="text-sm">
               已保存候选 r{saved.id}，
               <a
-                className="text-blue-600 hover:underline"
+                className="text-console-accent-ink hover:underline"
                 href={`./config.html?revision=${saved.id}&epoch=${encodeURIComponent(view!.epoch)}`}
               >
                 审阅并激活配置
@@ -439,7 +439,7 @@ export default function CapturePanel({
             </p>
           )}
           <a
-            className="text-sm text-blue-600 hover:underline"
+            className="text-sm text-console-accent-ink hover:underline"
             href="./config.html"
           >
             打开配置工作区

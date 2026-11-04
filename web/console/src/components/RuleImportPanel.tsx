@@ -54,7 +54,10 @@ export default function RuleImportPanel({
     }
   }
   return (
-    <section className="panel space-y-4 p-5" aria-label="规则批量导入导出">
+    <section
+      className="panel panel-body space-y-4"
+      aria-label="规则批量导入导出"
+    >
       <h2 className="font-semibold">规则批量导入导出</h2>
       <p className="muted text-xs leading-6">
         JSON 格式版本 1，仅包含规则与引用，不导出上游凭据。预览最多 1
@@ -172,7 +175,7 @@ export default function RuleImportPanel({
         </button>
       </div>
       {preview && (
-        <div className="rounded-lg bg-slate-50 p-4 text-xs dark:bg-slate-900">
+        <div className="rounded-lg bg-console-soft p-4 text-xs">
           <p>
             {preview.value.validation.valid ? "预览有效" : "预览未通过"} ·{" "}
             {preview.value.rule_count} 条规则 ·{" "}
@@ -196,7 +199,7 @@ export default function RuleImportPanel({
         </p>
       )}
       {info && (
-        <p role="status" className="text-sm text-blue-600">
+        <p role="status" className="text-sm text-console-accent-ink">
           {info}
         </p>
       )}

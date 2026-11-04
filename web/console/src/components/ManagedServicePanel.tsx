@@ -45,7 +45,7 @@ export default function ManagedServicePanel() {
   const running = Boolean(status?.endpoint);
   return (
     <section
-      className="panel space-y-3 p-5"
+      className="panel panel-body space-y-3"
       aria-labelledby="managed-service-heading"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">

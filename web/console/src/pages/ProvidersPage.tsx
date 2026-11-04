@@ -363,14 +363,10 @@ export default function ProvidersPage({
     }
   }
   if (!loaded && !error)
-    return (
-      <div className="panel p-8 text-sm text-slate-500">
-        正在读取供应商配置…
-      </div>
-    );
+    return <div className="panel p-8 text-sm muted">正在读取供应商配置…</div>;
   if (!loaded)
     return (
-      <div role="alert" className="panel p-5 text-sm text-red-700">
+      <div role="alert" className="panel panel-body text-sm text-red-700">
         {error}
         <button
           className="btn ml-3"
@@ -386,7 +382,7 @@ export default function ProvidersPage({
       {error && (
         <div
           role="alert"
-          className="panel break-words border-red-200 p-4 text-sm text-red-700 dark:text-red-300"
+          className="panel panel-body break-words border-red-200 text-sm text-red-700 dark:text-red-300"
         >
           {error}
           <button
@@ -398,7 +394,7 @@ export default function ProvidersPage({
         </div>
       )}
       {info && (
-        <p role="status" className="text-sm text-blue-600 dark:text-blue-300">
+        <p role="status" className="text-sm text-console-accent-ink">
           {info}
         </p>
       )}
@@ -408,7 +404,7 @@ export default function ProvidersPage({
           onRevision={() => load()}
         />
       )}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="metric-grid">
         <Stat
           title="来源数量"
           value={String(providers.length)}
@@ -436,8 +432,11 @@ export default function ProvidersPage({
       </div>
       {detailPage ? (
         <>
-          <div className="panel p-5">
-            <a className="text-sm text-blue-600" href="./providers.html">
+          <div className="panel panel-body">
+            <a
+              className="text-sm text-console-accent-ink"
+              href="./providers.html"
+            >
               ← 全部来源
             </a>
             <h2 className="mt-4 text-lg font-semibold">
@@ -511,7 +510,7 @@ export default function ProvidersPage({
             )}
             {task && (
               <div
-                className="mt-4 rounded-lg bg-slate-50 p-4 text-sm dark:bg-slate-800"
+                className="mt-4 rounded-lg bg-console-soft p-4 text-sm"
                 data-testid="extraction-result"
               >
                 <strong>
@@ -521,7 +520,7 @@ export default function ProvidersPage({
                   request_id: {task.request_id}
                 </p>
                 <a
-                  className="mt-2 inline-flex text-xs text-blue-600"
+                  className="mt-2 inline-flex text-xs text-console-accent-ink"
                   href={`./tasks.html?source_ref=provider:${task.id}&epoch=${encodeURIComponent(serviceEpoch)}`}
                 >
                   查看统一任务与关联事件 →
@@ -538,7 +537,7 @@ export default function ProvidersPage({
               </div>
             )}
             {diagnostic !== null && (
-              <pre className="mt-4 overflow-auto rounded-lg bg-slate-950 p-4 text-xs text-slate-100">
+              <pre className="code-block mt-4">
                 {JSON.stringify(diagnostic, null, 2)}
               </pre>
             )}
@@ -552,10 +551,10 @@ export default function ProvidersPage({
             />
           )}
           <div className="panel overflow-hidden">
-            <h2 className="border-b border-slate-100 p-5 font-semibold dark:border-slate-800">
+            <h2 className="panel-header">
               批次与租约{" "}
               <a
-                className="ml-3 text-xs font-normal text-blue-600"
+                className="ml-3 text-xs font-normal text-console-accent-ink"
                 href={`./nodes.html?provider=${encodeURIComponent(id)}`}
               >
                 查看来源节点 →
@@ -563,7 +562,7 @@ export default function ProvidersPage({
             </h2>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[850px] text-left text-sm">
-                <thead className="muted bg-slate-50 text-xs dark:bg-slate-800">
+                <thead className="muted bg-console-soft text-xs">
                   <tr>
                     {[
                       "租约 / 批次",
@@ -582,11 +581,11 @@ export default function ProvidersPage({
                   {leases.map((lease) => (
                     <tr
                       key={lease.id}
-                      className="border-t border-slate-100 dark:border-slate-800"
+                      className="border-t border-console-border"
                     >
                       <td className="p-4">
                         <a
-                          className="text-blue-600"
+                          className="text-console-accent-ink"
                           href={`./node-detail.html?id=${encodeURIComponent(lease.upstream_id)}`}
                         >
                           #{lease.id} / #{lease.batch_id}
@@ -647,13 +646,13 @@ export default function ProvidersPage({
             )}
           </div>
           {detail && (
-            <div className="panel p-5">
+            <div className="panel panel-body">
               <h2 className="font-semibold">最近 50 个提取任务</h2>
               <ul className="mt-4 space-y-3 text-sm">
                 {detail.tasks.map((item) => (
                   <li
                     key={item.id}
-                    className="flex flex-wrap justify-between gap-2 border-b border-slate-100 pb-3 dark:border-slate-800"
+                    className="flex flex-wrap justify-between gap-2 border-b border-console-border pb-3"
                   >
                     <span>
                       #{item.id} · {states[item.state] ?? item.state} · 新增{" "}
@@ -664,7 +663,7 @@ export default function ProvidersPage({
                       {item.error_code ? ` · ${item.error_code}` : ""}
                     </span>
                     <a
-                      className="text-xs text-blue-600"
+                      className="text-xs text-console-accent-ink"
                       href={`./tasks.html?source_ref=provider:${item.id}&epoch=${encodeURIComponent(serviceEpoch)}`}
                     >
                       统一任务 →
@@ -677,7 +676,7 @@ export default function ProvidersPage({
         </>
       ) : (
         <div className="panel overflow-hidden">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 dark:border-slate-800">
+          <div className="panel-header panel-toolbar">
             <h2 className="font-semibold">供应商来源</h2>
             <button
               className="btn"
@@ -698,7 +697,7 @@ export default function ProvidersPage({
               <div key={view.configuration.id} className="management-record">
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <a
-                    className="min-w-0 break-all text-sm font-semibold text-blue-600"
+                    className="min-w-0 break-all text-sm font-semibold text-console-accent-ink"
                     href={`./provider-detail.html?id=${encodeURIComponent(view.configuration.id)}`}
                   >
                     {view.configuration.name || view.configuration.id}
@@ -756,7 +755,7 @@ export default function ProvidersPage({
           </div>
         </div>
       )}
-      <div className="panel p-5">
+      <div className="panel panel-body">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-semibold">
             {editingId ? `编辑来源 ${editingId}` : "新增来源"}

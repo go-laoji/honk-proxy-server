@@ -280,7 +280,7 @@ export default function App() {
           {service.error && current.id !== "index" && (
             <div
               role="alert"
-              className="panel mb-6 flex items-start gap-3 border-red-200 p-5 text-red-700 dark:border-red-900 dark:text-red-300"
+              className="panel panel-body mb-6 flex items-start gap-3 border-red-200 text-red-700 dark:border-red-900 dark:text-red-300"
             >
               <Unplug size={21} className="shrink-0" />
               <div>
@@ -298,7 +298,7 @@ export default function App() {
           {current.id === "index" ? (
             <ConnectPage data={service.data} refreshService={service.refresh} />
           ) : service.loading && !service.data ? (
-            <div className="panel flex items-center justify-center gap-3 p-16 text-sm text-slate-500">
+            <div className="panel flex items-center justify-center gap-3 p-16 text-sm muted">
               <span
                 className="action-icon inline-flex"
                 data-spinning="true"
@@ -378,7 +378,7 @@ export default function App() {
               <InboundsPage data={service.data} refresh={service.refresh} />
             ) : (
               <section className="panel px-6 py-16 text-center">
-                <div className="mx-auto mb-5 flex size-14 items-center justify-center rounded-2xl bg-slate-50 text-slate-400 dark:bg-slate-800">
+                <div className="mx-auto mb-5 flex size-14 items-center justify-center rounded-2xl bg-console-soft muted">
                   <CircleDashed size={30} />
                 </div>
                 <h2 className="font-semibold">{current.title}当前不可用</h2>
@@ -391,7 +391,7 @@ export default function App() {
               </section>
             )
           ) : null}
-          <footer className="muted mt-6 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/70 pt-3 text-[11px] dark:border-slate-800">
+          <footer className="muted mt-6 flex flex-wrap items-center justify-between gap-2 border-t border-console-border pt-3 text-[11px]">
             <span>Honk Proxy · 统一代理控制台</span>
             <span className="flex items-center gap-1.5">
               <Shield size={12} />

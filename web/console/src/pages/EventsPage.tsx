@@ -142,7 +142,7 @@ export default function EventsPage() {
   }
   return (
     <div className="space-y-3">
-      <section id="service-events" className="panel space-y-2.5 p-3">
+      <section id="service-events" className="panel panel-body space-y-2.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="flex items-center gap-2 text-sm font-semibold">
             <FileCode2 size={19} />
@@ -317,7 +317,7 @@ export default function EventsPage() {
       {notice && (
         <p
           role="status"
-          className="panel break-words p-4 text-sm text-amber-700"
+          className="panel panel-body break-words text-sm text-amber-700"
         >
           {notice}
         </p>
@@ -365,7 +365,7 @@ export default function EventsPage() {
                 "统一任务",
                 selected.task_id ? (
                   <a
-                    className="text-blue-600"
+                    className="text-console-accent-ink"
                     href={`./tasks.html?detail=${selected.task_id}&epoch=${value.page.epoch}`}
                   >
                     #{selected.task_id} · 版本{" "}
@@ -379,7 +379,7 @@ export default function EventsPage() {
                 "节点",
                 selected.node_id ? (
                   <a
-                    className="text-blue-600"
+                    className="text-console-accent-ink"
                     href={`./node-detail.html?id=${encodeURIComponent(selected.node_id)}`}
                   >
                     {selected.node_id} →
@@ -392,7 +392,7 @@ export default function EventsPage() {
                 "供应商",
                 selected.provider_id ? (
                   <a
-                    className="text-blue-600"
+                    className="text-console-accent-ink"
                     href={`./provider-detail.html?id=${encodeURIComponent(selected.provider_id)}`}
                   >
                     {selected.provider_id} →

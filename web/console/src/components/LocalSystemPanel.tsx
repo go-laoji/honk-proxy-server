@@ -66,7 +66,7 @@ export default function LocalSystemPanel({
         )
       : [];
   return (
-    <section className="panel mt-6 p-6">
+    <section className="panel panel-body mt-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-semibold">本机服务与系统代理</h2>
         <button className="btn" disabled={busy} onClick={() => void refresh()}>
@@ -172,7 +172,7 @@ export default function LocalSystemPanel({
               ))}
             </div>
           )}
-          <div className="mt-6 border-t border-slate-100 pt-5 dark:border-slate-800">
+          <div className="mt-6 border-t border-console-border pt-5">
             <h3 className="text-sm font-medium">系统代理原值恢复</h3>
             {context?.network_changes_disabled && (
               <p role="status" className="mt-2 text-sm text-amber-700">

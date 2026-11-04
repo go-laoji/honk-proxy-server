@@ -3,39 +3,14 @@
 
 @theme {
   --font-sans: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
-  --color-brand-50: #eff6ff;
-  --color-brand-100: #dbeafe;
-  --color-brand-200: #bfdbfe;
-  --color-brand-300: #93c5fd;
-  --color-brand-400: #60a5fa;
-  --color-brand-500: #3b82f6;
-  --color-brand-600: #2563eb;
-  --color-brand-700: #1d4ed8;
-  --color-brand-800: #1e40af;
-  --color-brand-900: #1e3a8a;
-  --color-brand-950: #172554;
-  --color-blue-50: #eff6ff;
-  --color-blue-100: #dbeafe;
-  --color-blue-200: #bfdbfe;
-  --color-blue-300: #93c5fd;
-  --color-blue-400: #60a5fa;
-  --color-blue-500: #3b82f6;
-  --color-blue-600: #2563eb;
-  --color-blue-700: #1d4ed8;
-  --color-blue-800: #1e40af;
-  --color-blue-900: #1e3a8a;
-  --color-blue-950: #172554;
-  --color-slate-50: #f4f7fc;
-  --color-slate-100: #edf2fa;
-  --color-slate-200: #dce5f2;
-  --color-slate-300: #c2d0e5;
-  --color-slate-400: #8ba0be;
-  --color-slate-500: #5b7192;
-  --color-slate-600: #425978;
-  --color-slate-700: #314765;
-  --color-slate-800: #233451;
-  --color-slate-900: #111c30;
-  --color-slate-950: #0b1220;
+}
+
+@theme inline {
+  --color-console-border: var(--border);
+  --color-console-soft: var(--surface-soft);
+  --color-console-accent: var(--accent);
+  --color-console-accent-soft: var(--accent-soft);
+  --color-console-accent-ink: var(--accent-ink);
 }
 
 :root {
@@ -133,7 +108,25 @@
   .panel {
     border: 1px solid var(--border);
     background: var(--surface);
-    @apply rounded-xl;
+    @apply min-w-0 rounded-xl;
+  }
+  .panel :where(h2) {
+    @apply text-sm font-semibold;
+  }
+  .panel-body {
+    @apply p-3 sm:p-4;
+  }
+  .panel-header {
+    border-block-end: 1px solid var(--border);
+    @apply px-3 py-2.5 sm:px-4;
+  }
+  .panel-toolbar {
+    @apply flex flex-wrap items-center justify-between gap-2;
+  }
+  .code-block {
+    border: 1px solid var(--border);
+    background: var(--surface-soft);
+    @apply overflow-auto rounded-md p-3 text-xs leading-6;
   }
   .btn,
   .btn-primary {
@@ -324,6 +317,9 @@
   .text-link:hover {
     @apply underline;
   }
+  a.text-console-accent-ink:hover {
+    @apply underline;
+  }
   .stat-card {
     --stat-accent: var(--accent-ink);
   }
@@ -442,9 +438,6 @@
 }
 
 @layer utilities {
-  .dark .text-blue-600 {
-    color: var(--color-blue-300);
-  }
   .dark .text-red-600 {
     color: var(--color-red-300);
   }
