@@ -154,11 +154,11 @@ export default function AlertPanel() {
                 ["failure_percent", "失败率阈值 %", 1, 100],
               ] as const
             ).map(([key, name, min, max]) => (
-              <label key={key} className="text-xs">
+              <label key={key} className="form-field">
                 {name}
                 <input
                   aria-label={name}
-                  className="field mt-1"
+                  className="field"
                   type="number"
                   min={min}
                   max={max}

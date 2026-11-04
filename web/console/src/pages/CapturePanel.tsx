@@ -277,20 +277,20 @@ export default function CapturePanel({
               持久启用透明捕获
             </label>
             <div className="grid gap-4 sm:grid-cols-2">
-              <label className="text-sm">
+              <label className="form-field">
                 eBPF 对象路径
                 <input
-                  className="input mt-2 w-full"
+                  className="field"
                   value={editor.object}
                   onChange={(e) =>
                     setEditor({ ...editor, object: e.target.value })
                   }
                 />
               </label>
-              <label className="text-sm">
+              <label className="form-field">
                 本机 cgroup 路径
                 <input
-                  className="input mt-2 w-full"
+                  className="field"
                   value={editor.local_cgroup ?? ""}
                   onChange={(e) =>
                     setEditor({
@@ -300,10 +300,10 @@ export default function CapturePanel({
                   }
                 />
               </label>
-              <label className="text-sm">
+              <label className="form-field">
                 LAN 网卡（逗号分隔）
                 <input
-                  className="input mt-2 w-full"
+                  className="field"
                   value={editor.lan_interfaces.join(",")}
                   onChange={(e) =>
                     setEditor({
@@ -319,10 +319,10 @@ export default function CapturePanel({
                   }
                 />
               </label>
-              <label className="text-sm">
+              <label className="form-field">
                 旁路 CIDR（逗号分隔）
                 <input
-                  className="input mt-2 w-full"
+                  className="field"
                   value={editor.bypass_cidrs.join(",")}
                   onChange={(e) =>
                     setEditor({
@@ -375,10 +375,10 @@ export default function CapturePanel({
                     "max_queued_bytes",
                   ] as const
                 ).map((key) => (
-                  <label className="break-all text-xs" key={key}>
+                  <label className="form-field break-all" key={key}>
                     {key}
                     <input
-                      className="input mt-1 w-full"
+                      className="field"
                       type="number"
                       min="0"
                       value={editor[key]}

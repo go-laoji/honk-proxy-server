@@ -111,11 +111,11 @@ export default function RuleImportPanel({
           />
         </label>
       </div>
-      <label className="block text-xs">
+      <label className="form-field">
         规则导入 JSON
         <textarea
           aria-label="规则导入 JSON"
-          className="input mt-2 min-h-48 w-full font-mono text-xs"
+          className="field editor-field min-h-48"
           value={body}
           disabled={disabled}
           onChange={(event) => edit(event.target.value)}

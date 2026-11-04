@@ -226,10 +226,10 @@ export default function SubscriptionsPanel({
       </div>
       {editor && (
         <div className="space-y-3" aria-label="订阅编辑器">
-          <label className="block text-xs">
+          <label className="form-field">
             订阅定义 JSON · r{editor.revision}
             <textarea
-              className="input mt-2 min-h-64 w-full font-mono text-xs"
+              className="field editor-field min-h-64"
               spellCheck={false}
               value={editor.body}
               onChange={(event) =>
@@ -266,10 +266,10 @@ export default function SubscriptionsPanel({
       )}
       {importing && (
         <div className="space-y-3" aria-label="导入订阅文档">
-          <label className="block text-xs">
+          <label className="form-field">
             {importing.id} · 文档内容 · r{importing.revision}
             <textarea
-              className="input mt-2 min-h-48 w-full font-mono text-xs"
+              className="field editor-field min-h-48"
               spellCheck={false}
               value={importing.document}
               onChange={(event) =>

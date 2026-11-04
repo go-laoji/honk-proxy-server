@@ -115,19 +115,19 @@ export default function LocalSystemPanel({
                 void act("local_service_install", { binary, config });
               }}
             >
-              <label className="text-xs">
+              <label className="form-field">
                 hpsd 程序绝对路径
                 <input
-                  className="field mt-1"
+                  className="field"
                   required
                   value={binary}
                   onChange={(e) => setBinary(e.target.value)}
                 />
               </label>
-              <label className="text-xs">
+              <label className="form-field">
                 Daemon 配置绝对路径
                 <input
-                  className="field mt-1"
+                  className="field"
                   required
                   value={config}
                   onChange={(e) => setConfig(e.target.value)}
@@ -198,10 +198,10 @@ export default function LocalSystemPanel({
                   });
                 }}
               >
-                <label className="text-xs">
+                <label className="form-field">
                   网络服务
                   <select
-                    className="field mt-1"
+                    className="field"
                     required
                     value={network}
                     onChange={(e) => setNetwork(e.target.value)}
@@ -214,10 +214,10 @@ export default function LocalSystemPanel({
                     ))}
                   </select>
                 </label>
-                <label className="text-xs">
+                <label className="form-field">
                   HTTP / HTTPS 目标代理入口
                   <select
-                    className="field mt-1"
+                    className="field"
                     value={http}
                     onChange={(e) => setHttp(e.target.value)}
                   >
@@ -231,10 +231,10 @@ export default function LocalSystemPanel({
                       ))}
                   </select>
                 </label>
-                <label className="text-xs">
+                <label className="form-field">
                   SOCKS5 入口
                   <select
-                    className="field mt-1"
+                    className="field"
                     value={socks}
                     onChange={(e) => setSocks(e.target.value)}
                   >

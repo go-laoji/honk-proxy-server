@@ -75,7 +75,7 @@ export default function HealthHistoryPanel({ node }: { node?: string }) {
         <div className="flex flex-wrap gap-2">
           <select
             aria-label="健康历史窗口"
-            className="field"
+            className="field w-auto"
             value={windowSecs}
             onChange={(event) => move("", Number(event.target.value))}
           >

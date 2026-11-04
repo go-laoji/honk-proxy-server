@@ -412,10 +412,10 @@ export default function RulesPage({
         {data && (
           <>
             <div className="flex flex-wrap items-end gap-3">
-              <label className="min-w-48 flex-1 text-xs">
+              <label className="form-field min-w-48 flex-1">
                 查看版本
                 <select
-                  className="field mt-2"
+                  className="field"
                   value={String(data.viewed_revision)}
                   disabled={busy || Boolean(editor)}
                   onChange={(event) => {
@@ -543,10 +543,10 @@ export default function RulesPage({
             AND。空条件匹配全部。新规则默认停用，action.kind 可选
             default/node/group/direct/reject。
           </p>
-          <label className="block text-xs">
+          <label className="form-field">
             {editor.mode === "policy" ? "规则策略 JSON" : "规则 JSON"}
             <textarea
-              className="field mt-2 min-h-80 font-mono text-xs"
+              className="field editor-field min-h-80"
               spellCheck={false}
               value={editor.body}
               onChange={(event) =>
@@ -727,10 +727,10 @@ export default function RulesPage({
           不连接目标、不解析新的域名、不购买节点，不推进轮询或创建会话。候选使用当前非规则设置与实时健康/租约。显式域名优先，CIDR
           需要字面目标 IP；未提供进程不能推断。
         </p>
-        <label className="block text-xs">
+        <label className="form-field">
           连接上下文 JSON
           <textarea
-            className="field mt-2 min-h-72 font-mono text-xs"
+            className="field editor-field min-h-72"
             spellCheck={false}
             value={context}
             onChange={(event) => setContext(event.target.value)}

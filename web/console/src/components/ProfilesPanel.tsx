@@ -133,10 +133,10 @@ export default function ProfilesPanel() {
           void change({ action: "upsert", profile: editing }, false);
         }}
       >
-        <label className="text-xs">
+        <label className="form-field">
           档案标识
           <input
-            className="field mt-1"
+            className="field"
             required
             pattern="[a-z0-9][a-z0-9-]{0,47}"
             value={editing.id}
@@ -144,20 +144,20 @@ export default function ProfilesPanel() {
             placeholder="例如 local"
           />
         </label>
-        <label className="text-xs">
+        <label className="form-field">
           档案名称
           <input
-            className="field mt-1"
+            className="field"
             required
             value={editing.name}
             maxLength={80}
             onChange={(e) => setEditing({ ...editing, name: e.target.value })}
           />
         </label>
-        <label className="text-xs">
+        <label className="form-field">
           档案类型
           <select
-            className="field mt-1"
+            className="field"
             value={editing.kind}
             onChange={(e) =>
               setEditing({
@@ -170,10 +170,10 @@ export default function ProfilesPanel() {
             <option value="local">本机服务 · 允许明确的本机 OS 操作</option>
           </select>
         </label>
-        <label className="text-xs">
+        <label className="form-field">
           档案服务地址
           <input
-            className="field mt-1"
+            className="field"
             required
             type="url"
             value={editing.endpoint}
@@ -182,10 +182,10 @@ export default function ProfilesPanel() {
             }
           />
         </label>
-        <label className="text-xs sm:col-span-2">
+        <label className="form-field sm:col-span-2">
           可选 CA 证书绝对路径
           <input
-            className="field mt-1"
+            className="field"
             value={editing.ca_certificate ?? ""}
             onChange={(e) =>
               setEditing({ ...editing, ca_certificate: e.target.value || null })

@@ -389,19 +389,16 @@ export default function DnsPage({
             </div>
             {editor !== null && (
               <div className="mt-5 space-y-3">
-                <label
-                  htmlFor="dns-policy"
-                  className="block text-sm font-medium"
-                >
+                <label className="form-field">
                   DNS 策略 JSON · 基于配置 r{revision}
+                  <textarea
+                    id="dns-policy"
+                    className="field editor-field min-h-96"
+                    value={editor}
+                    onChange={(e) => setEditor(e.target.value)}
+                    spellCheck={false}
+                  />
                 </label>
-                <textarea
-                  id="dns-policy"
-                  className="input min-h-96 w-full font-mono text-xs"
-                  value={editor}
-                  onChange={(e) => setEditor(e.target.value)}
-                  spellCheck={false}
-                />
                 <p className="muted text-xs leading-6">
                   监听模式需使用显式 IP 地址的 UDP、TCP、TLS 或 HTTPS
                   上游。TLS/HTTPS 验证
@@ -455,20 +452,20 @@ export default function DnsPage({
                 });
               }}
             >
-              <label className="min-w-0 flex-1 basis-52 text-xs">
+              <label className="form-field flex-1 basis-52">
                 查询域名
                 <input
-                  className="input mt-2 w-full"
+                  className="field"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   maxLength={253}
                   required
                 />
               </label>
-              <label className="text-xs">
+              <label className="form-field">
                 记录类型
                 <select
-                  className="input mt-2 block"
+                  className="field"
                   value={kind}
                   onChange={(e) => setKind(e.target.value)}
                 >
@@ -477,10 +474,10 @@ export default function DnsPage({
                   ))}
                 </select>
               </label>
-              <label className="text-xs">
+              <label className="form-field">
                 解析用途
                 <select
-                  className="input mt-2 block"
+                  className="field"
                   value={purpose}
                   onChange={(e) => setPurpose(e.target.value as Purpose)}
                 >
@@ -556,10 +553,10 @@ export default function DnsPage({
                 });
               }}
             >
-              <label className="min-w-0 flex-1 basis-56 text-xs">
+              <label className="form-field flex-1 basis-56">
                 清理域名（留空清理全部）
                 <input
-                  className="input mt-2 w-full"
+                  className="field"
                   value={domain}
                   onChange={(e) => setDomain(e.target.value)}
                   maxLength={253}
@@ -628,10 +625,10 @@ export default function DnsPage({
                 });
               }}
             >
-              <label className="min-w-0 flex-1 basis-56 text-xs">
+              <label className="form-field flex-1 basis-56">
                 IPv4 / IPv6
                 <input
-                  className="input mt-2 w-full"
+                  className="field"
                   value={ip}
                   onChange={(e) => setIp(e.target.value)}
                   maxLength={45}

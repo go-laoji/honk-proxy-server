@@ -49,11 +49,14 @@
   --nav-active-ink: #1a585a;
   --nav-hover: #ece8e0;
   --border: #e4dfd7;
+  --control-border: #938d83;
+  --control-height: 2.125rem;
   --ink: #272c38;
   --muted: #5f636d;
   --accent: #246e73;
   --accent-soft: #e3f0ee;
   --accent-ink: #1a585a;
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%235f636d' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E");
   --chart-up: #a05c20;
   --chart-down: #246e73;
   --chart-failed: #a04455;
@@ -74,11 +77,13 @@
   --nav-active-ink: #b5e5df;
   --nav-hover: #2a303c;
   --border: #343b48;
+  --control-border: #717b8c;
   --ink: #e8ebf2;
   --muted: #abb3c2;
   --accent: #84c9c6;
   --accent-soft: #283d44;
   --accent-ink: #b5e5df;
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23abb3c2' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E");
   --chart-up: #eeb278;
   --chart-down: #84c9c6;
   --chart-failed: #f29aae;
@@ -102,7 +107,10 @@
   input,
   select,
   textarea {
-    @apply outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 dark:focus-visible:ring-brand-300 dark:focus-visible:ring-offset-slate-950;
+    &:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
   }
   button:not(:disabled),
   a {
@@ -127,10 +135,15 @@
     background: var(--surface);
     @apply rounded-xl;
   }
+  .btn,
+  .btn-primary {
+    min-height: var(--control-height);
+    border: 1px solid transparent;
+    @apply inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm leading-5 font-medium transition-colors;
+  }
   .btn {
-    border: 1px solid var(--border);
+    border-color: var(--border);
     background: var(--surface);
-    @apply inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors;
   }
   .btn:not(:disabled):hover {
     background: var(--accent-soft);
@@ -138,7 +151,6 @@
     color: var(--accent-ink);
   }
   .btn-primary {
-    @apply inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors;
     background: var(--accent);
     color: var(--page);
   }
@@ -148,15 +160,54 @@
   .muted {
     color: var(--muted);
   }
-  .field,
-  .input {
-    border: 1px solid var(--border);
-    background: var(--surface);
-    @apply min-h-8 w-full rounded-md px-2.5 py-1.5 text-sm transition-colors;
+  .form-field {
+    @apply flex min-w-0 flex-col gap-1 text-xs leading-4 font-medium;
   }
-  .field:hover,
-  .input:hover {
-    border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  .field {
+    border: 1px solid var(--control-border);
+    background: var(--surface);
+    @apply block min-w-0 w-full rounded-md px-2.5 text-sm leading-5 font-normal transition-colors;
+  }
+  input.field,
+  select.field:not([multiple], [size]) {
+    height: var(--control-height);
+  }
+  input.field[type="date"]::-webkit-date-and-time-value,
+  input.field[type="datetime-local"]::-webkit-date-and-time-value {
+    text-align: start;
+  }
+  select.field:not([multiple], [size]) {
+    appearance: none;
+    background-image: var(--select-chevron);
+    background-position: right 0.5rem center;
+    background-repeat: no-repeat;
+    background-size: 1rem;
+    padding-inline-end: 1.875rem;
+  }
+  @media (forced-colors: active) {
+    select.field:not([multiple], [size]) {
+      appearance: auto;
+      background-image: none;
+      padding-inline-end: 0.625rem;
+    }
+  }
+  textarea.field {
+    @apply resize-y py-2;
+  }
+  .editor-field {
+    @apply px-3 font-mono text-xs leading-6;
+  }
+  .field::placeholder {
+    color: var(--muted);
+  }
+  .field:disabled {
+    background: var(--surface-soft);
+    color: var(--muted);
+    @apply cursor-not-allowed;
+  }
+  .field:not(:disabled):hover,
+  .field:focus-visible {
+    border-color: var(--accent);
   }
   .filter-grid {
     @apply grid grid-cols-2 items-end gap-2 xl:grid-cols-4;

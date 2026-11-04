@@ -216,10 +216,10 @@ export default function TasksPage() {
           aria-label="任务筛选"
         >
           <div className="filter-grid">
-            <label className="text-xs">
+            <label className="form-field">
               任务类型
               <select
-                className="field mt-1"
+                className="field"
                 name="kind"
                 defaultValue={params.get("kind") ?? ""}
               >
@@ -231,10 +231,10 @@ export default function TasksPage() {
                 ))}
               </select>
             </label>
-            <label className="text-xs">
+            <label className="form-field">
               任务状态
               <select
-                className="field mt-1"
+                className="field"
                 name="state"
                 defaultValue={params.get("state") ?? ""}
               >
@@ -246,10 +246,10 @@ export default function TasksPage() {
                 ))}
               </select>
             </label>
-            <label className="text-xs">
+            <label className="form-field">
               请求 / 幂等键
               <input
-                className="field mt-1"
+                className="field"
                 name="request_id"
                 defaultValue={params.get("request_id") ?? ""}
               />
@@ -280,27 +280,27 @@ export default function TasksPage() {
               (params.get("limit") ?? "50") !== "50"
             }
           >
-            <label className="text-xs">
+            <label className="form-field">
               来源记录引用
               <input
-                className="field mt-1"
+                className="field"
                 name="source_ref"
                 placeholder="provider:1 / health:1 / activation:1"
                 defaultValue={params.get("source_ref") ?? ""}
               />
             </label>
-            <label className="text-xs">
+            <label className="form-field">
               资源类型
               <input
-                className="field mt-1"
+                className="field"
                 name="resource_kind"
                 defaultValue={params.get("resource_kind") ?? ""}
               />
             </label>
-            <label className="text-xs">
+            <label className="form-field">
               资源 ID
               <input
-                className="field mt-1"
+                className="field"
                 name="resource_id"
                 defaultValue={params.get("resource_id") ?? ""}
               />
@@ -309,10 +309,10 @@ export default function TasksPage() {
               name="created_after_unix_ms"
               value={params.get("created_after_unix_ms") ?? ""}
             />
-            <label className="text-xs">
+            <label className="form-field">
               每页
               <input
-                className="field mt-1"
+                className="field"
                 name="limit"
                 type="number"
                 min="1"

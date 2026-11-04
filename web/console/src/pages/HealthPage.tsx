@@ -336,11 +336,11 @@ export default function HealthPage({
               className="flex flex-wrap items-end gap-2 border-b border-slate-100 p-3 dark:border-slate-800"
               aria-label="健康记录筛选"
             >
-              <label className="min-w-0 flex-1 text-xs sm:max-w-80">
+              <label className="form-field flex-1 sm:max-w-80">
                 节点 ID
                 <input
                   name="node"
-                  className="field mt-1"
+                  className="field"
                   placeholder="输入完整节点 ID"
                   defaultValue={nodeFilter}
                 />
@@ -519,19 +519,16 @@ export default function HealthPage({
             </p>
             {editor !== null && (
               <div className="mt-5 space-y-3">
-                <label
-                  htmlFor="health-policy"
-                  className="block text-sm font-medium"
-                >
+                <label className="form-field">
                   检测策略 JSON · 基于配置 r{revision}
+                  <textarea
+                    id="health-policy"
+                    className="field editor-field min-h-80"
+                    value={editor}
+                    onChange={(event) => setEditor(event.target.value)}
+                    spellCheck={false}
+                  />
                 </label>
-                <textarea
-                  id="health-policy"
-                  className="input min-h-80 w-full font-mono text-xs"
-                  value={editor}
-                  onChange={(event) => setEditor(event.target.value)}
-                  spellCheck={false}
-                />
                 <p className="muted text-xs">
                   服务端验证策略和 TLS
                   信任后应用。其他页面已修改配置时会提示冲突，请重新打开编辑器。

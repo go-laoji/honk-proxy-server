@@ -338,20 +338,17 @@ export default function ConfigPage({
           </div>
         </div>
         <div className="p-5">
-          <label
-            htmlFor="config-toml"
-            className="mb-2 block text-sm font-medium"
-          >
+          <label className="form-field">
             配置 TOML
+            <textarea
+              id="config-toml"
+              spellCheck={false}
+              value={editor}
+              disabled={Boolean(pending)}
+              onChange={(event) => setEditor(event.target.value)}
+              className="field editor-field min-h-[25rem]"
+            />
           </label>
-          <textarea
-            id="config-toml"
-            spellCheck={false}
-            value={editor}
-            disabled={Boolean(pending)}
-            onChange={(event) => setEditor(event.target.value)}
-            className="min-h-[25rem] w-full resize-y rounded-xl border border-slate-200 bg-slate-950 p-4 font-mono text-xs leading-6 text-slate-100 outline-none focus:border-blue-500 dark:border-slate-700"
-          />
           <p className="muted mt-3 text-xs leading-6">
             [REDACTED] 仅保留同 ID
             已有上游凭据；新节点需填写实际凭据或不配置认证。导入的相对证书路径基于服务数据目录，文件须位于
@@ -367,7 +364,7 @@ export default function ConfigPage({
               onChange={(event) => setNote(event.target.value)}
               maxLength={64}
               placeholder="版本说明（最多 64 字）"
-              className="min-w-0 rounded-lg border border-slate-200 bg-transparent px-3 py-2 text-sm dark:border-slate-700"
+              className="field sm:w-auto"
             />
             <button
               className="btn"

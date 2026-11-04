@@ -49,13 +49,8 @@ export default function ConnectPage({
             }
           }}
         >
-          <div>
-            <label
-              className="mb-2 block text-sm font-medium"
-              htmlFor="endpoint"
-            >
-              服务地址
-            </label>
+          <div className="form-field">
+            <label htmlFor="endpoint">服务地址</label>
             <input
               className="field"
               id="endpoint"
@@ -65,7 +60,7 @@ export default function ConnectPage({
               onChange={(event) => setAddress(event.target.value)}
               placeholder="http://127.0.0.1:17900"
             />
-            <p className="muted mt-2 text-xs">
+            <p className="muted font-normal">
               使用服务的根地址，包含 HTTP 或 HTTPS 协议。
             </p>
           </div>

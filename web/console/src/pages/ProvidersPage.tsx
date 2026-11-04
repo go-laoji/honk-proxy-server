@@ -785,16 +785,16 @@ export default function ProvidersPage({
           HMAC-SHA1/token；不支持时长查询的订单必须配置保守
           ttl_secs。修改来源会保存并激活配置版本。管理配置等待重启时请先到配置工作台处理。
         </p>
-        <label className="mt-4 block text-sm" htmlFor="provider-editor">
+        <label className="form-field mt-4">
           供应商 JSON 配置
+          <textarea
+            id="provider-editor"
+            spellCheck={false}
+            value={editor}
+            onChange={(event) => setEditor(event.target.value)}
+            className="field editor-field min-h-80"
+          />
         </label>
-        <textarea
-          id="provider-editor"
-          spellCheck={false}
-          value={editor}
-          onChange={(event) => setEditor(event.target.value)}
-          className="mt-2 min-h-80 w-full rounded-xl border border-slate-300 bg-slate-950 p-4 font-mono text-xs leading-6 text-slate-100"
-        />
         <div className="mt-4 flex flex-wrap gap-3">
           <button
             className="btn"

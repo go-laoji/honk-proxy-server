@@ -208,7 +208,7 @@ export default function DiagnosticPanel() {
         分钟，历史有界；不导出代理地址、供应商凭据、配置正文或业务内容。此文件不是数据库一致性备份。离开页面不会终止已接受任务。
       </p>
       <div className="flex flex-wrap items-center gap-3">
-        <label className="text-xs">
+        <label className="form-field">
           诊断窗口{" "}
           <select
             aria-label="诊断窗口"

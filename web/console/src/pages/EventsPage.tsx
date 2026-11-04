@@ -170,10 +170,10 @@ export default function EventsPage() {
           className="space-y-2"
         >
           <div className="filter-grid">
-            <label className="text-xs">
+            <label className="form-field">
               级别
               <select
-                className="field mt-1"
+                className="field"
                 name="level"
                 defaultValue={params.get("level") ?? ""}
               >
@@ -185,10 +185,10 @@ export default function EventsPage() {
                 ))}
               </select>
             </label>
-            <label className="text-xs">
+            <label className="form-field">
               模块
               <select
-                className="field mt-1"
+                className="field"
                 name="module"
                 defaultValue={params.get("module") ?? ""}
               >
@@ -200,10 +200,10 @@ export default function EventsPage() {
                 ))}
               </select>
             </label>
-            <label className="text-xs">
+            <label className="form-field">
               统一任务 ID
               <input
-                className="field mt-1"
+                className="field"
                 name="task_id"
                 type="number"
                 min="1"
@@ -239,26 +239,26 @@ export default function EventsPage() {
               params.has("cursor")
             }
           >
-            <label className="text-xs">
+            <label className="form-field">
               请求 ID
               <input
-                className="field mt-1"
+                className="field"
                 name="request_id"
                 defaultValue={params.get("request_id") ?? ""}
               />
             </label>
-            <label className="text-xs">
+            <label className="form-field">
               节点 ID
               <input
-                className="field mt-1"
+                className="field"
                 name="node_id"
                 defaultValue={params.get("node_id") ?? ""}
               />
             </label>
-            <label className="text-xs">
+            <label className="form-field">
               供应商 ID
               <input
-                className="field mt-1"
+                className="field"
                 name="provider_id"
                 defaultValue={params.get("provider_id") ?? ""}
               />
@@ -267,10 +267,10 @@ export default function EventsPage() {
               name="after_unix_ms"
               value={params.get("after_unix_ms") ?? ""}
             />
-            <label className="text-xs">
+            <label className="form-field">
               每批最多
               <input
-                className="field mt-1"
+                className="field"
                 name="limit"
                 type="number"
                 min="1"
@@ -278,10 +278,10 @@ export default function EventsPage() {
                 defaultValue={params.get("limit") ?? "100"}
               />
             </label>
-            <label className="text-xs sm:col-span-2">
+            <label className="form-field sm:col-span-2">
               从游标恢复（可选）
               <input
-                className="field mt-1"
+                className="field"
                 name="cursor"
                 defaultValue={params.get("cursor") ?? ""}
               />

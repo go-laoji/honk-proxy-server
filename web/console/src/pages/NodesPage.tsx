@@ -326,18 +326,18 @@ export default function NodesPage() {
             aria-label="节点筛选"
           >
             <div className="grid grid-cols-2 items-end gap-2 xl:grid-cols-[minmax(10rem,1.5fr)_minmax(8rem,1fr)_minmax(8rem,1fr)_auto]">
-              <label className="col-span-2 text-xs sm:col-span-1">
+              <label className="form-field col-span-2 sm:col-span-1">
                 名称或端点
                 <input
-                  className="field mt-1"
+                  className="field"
                   name="search"
                   defaultValue={params.get("search") ?? ""}
                 />
               </label>
-              <label className="text-xs">
+              <label className="form-field">
                 来源
                 <select
-                  className="field mt-1"
+                  className="field"
                   name="provider"
                   defaultValue={params.get("provider") ?? ""}
                 >
@@ -348,10 +348,10 @@ export default function NodesPage() {
                   ))}
                 </select>
               </label>
-              <label className="text-xs">
+              <label className="form-field">
                 状态
                 <select
-                  className="field mt-1"
+                  className="field"
                   name="state"
                   defaultValue={params.get("state") ?? ""}
                 >
@@ -375,7 +375,7 @@ export default function NodesPage() {
                   ))}
                 </select>
               </label>
-              <div className="col-span-2 flex items-end gap-2 sm:col-span-1">
+              <div className="col-span-2 flex flex-wrap items-end gap-2 sm:col-span-1">
                 <button className="btn" disabled={busy}>
                   <Filter size={15} />
                   应用筛选
@@ -409,10 +409,10 @@ export default function NodesPage() {
                 高级筛选
               </summary>
               <div className="mt-2 grid gap-2 sm:grid-cols-3 xl:grid-cols-6">
-                <label className="text-xs">
+                <label className="form-field">
                   分组
                   <select
-                    className="field mt-1"
+                    className="field"
                     name="group"
                     defaultValue={params.get("group") ?? ""}
                   >
@@ -422,10 +422,10 @@ export default function NodesPage() {
                     ))}
                   </select>
                 </label>
-                <label className="text-xs">
+                <label className="form-field">
                   协议
                   <select
-                    className="field mt-1"
+                    className="field"
                     name="protocol"
                     defaultValue={params.get("protocol") ?? ""}
                   >
@@ -435,10 +435,10 @@ export default function NodesPage() {
                     ))}
                   </select>
                 </label>
-                <label className="text-xs">
+                <label className="form-field">
                   能力
                   <select
-                    className="field mt-1"
+                    className="field"
                     name="capability"
                     defaultValue={params.get("capability") ?? ""}
                   >
@@ -449,20 +449,20 @@ export default function NodesPage() {
                     <option value="ipv6">IPv6 健康已证实</option>
                   </select>
                 </label>
-                <label className="text-xs">
+                <label className="form-field">
                   剩余寿命不超过（秒）
                   <input
-                    className="field mt-1"
+                    className="field"
                     name="remaining_max_secs"
                     type="number"
                     min="0"
                     defaultValue={params.get("remaining_max_secs") ?? ""}
                   />
                 </label>
-                <label className="text-xs">
+                <label className="form-field">
                   排序
                   <select
-                    className="field mt-1"
+                    className="field"
                     name="sort"
                     defaultValue={params.get("sort") ?? defaultSort}
                   >
@@ -471,10 +471,10 @@ export default function NodesPage() {
                     <option value="expiry_desc">最晚到期</option>
                   </select>
                 </label>
-                <label className="text-xs">
+                <label className="form-field">
                   每页
                   <select
-                    className="field mt-1"
+                    className="field"
                     name="limit"
                     defaultValue={params.get("limit") ?? "50"}
                   >
@@ -536,10 +536,10 @@ export default function NodesPage() {
             MiB；预览不发起连接或购买。输入可能包含凭据，离开页面前请完成或清空。
           </p>
           <div className="grid gap-3 sm:grid-cols-3">
-            <label className="text-xs">
+            <label className="form-field">
               导入格式
               <select
-                className="field mt-1"
+                className="field"
                 value={format}
                 onChange={(e) => {
                   setFormat(e.target.value);
@@ -550,10 +550,10 @@ export default function NodesPage() {
                 <option value="json">JSON 数组</option>
               </select>
             </label>
-            <label className="text-xs">
+            <label className="form-field">
               无协议地址默认使用
               <select
-                className="field mt-1"
+                className="field"
                 value={protocol}
                 onChange={(e) => {
                   setProtocol(e.target.value);
@@ -565,10 +565,10 @@ export default function NodesPage() {
                 ))}
               </select>
             </label>
-            <label className="text-xs">
+            <label className="form-field">
               仅应用行号（可选，逗号分隔）
               <input
-                className="field mt-1"
+                className="field"
                 value={selectedRows}
                 onChange={(e) => {
                   setSelectedRows(e.target.value);
@@ -577,10 +577,10 @@ export default function NodesPage() {
               />
             </label>
           </div>
-          <label className="block text-xs">
+          <label className="form-field">
             节点导入内容
             <textarea
-              className="field mt-2 min-h-40 font-mono text-xs"
+              className="field editor-field min-h-40"
               value={document}
               onChange={(e) => {
                 setDocument(e.target.value);

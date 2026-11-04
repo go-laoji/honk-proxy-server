@@ -332,10 +332,10 @@ export default function GroupsPage({
               ? "配置默认组、入口绑定、节点和来源标签，以及会话表上限。删除被引用的分组前先移除引用。"
               : "members、providers 与 groups 子组取并集，再按 tags/protocols 过滤。订阅来源写 subscription:来源ID；子组保留过滤与固定范围，最多 8 层且拒绝循环。strategy=score 使用 score 权重与显式 weights 运营优先级；缺失证据逐项扣分，不推断成本或地域。"}
           </p>
-          <label className="block text-xs font-medium">
+          <label className="form-field">
             {editor.mode === "policy" ? "选择策略 JSON" : "分组 JSON"}
             <textarea
-              className="input mt-2 min-h-80 w-full font-mono text-xs"
+              className="field editor-field min-h-80"
               spellCheck={false}
               value={editor.body}
               onChange={(event) =>
@@ -460,10 +460,10 @@ export default function GroupsPage({
           候选与只读模拟
         </h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <label className="text-xs">
+          <label className="form-field">
             分组
             <select
-              className="input mt-2 w-full"
+              className="field"
               value={group}
               onChange={(event) => {
                 chooseGroup(event.target.value);
@@ -475,37 +475,37 @@ export default function GroupsPage({
               ))}
             </select>
           </label>
-          <label className="text-xs">
+          <label className="form-field">
             入口 ID
             <input
-              className="input mt-2 w-full"
+              className="field"
               value={inbound}
               onChange={(event) => setInbound(event.target.value)}
               placeholder="可选"
             />
           </label>
-          <label className="text-xs">
+          <label className="form-field">
             源 IP
             <input
-              className="input mt-2 w-full"
+              className="field"
               value={source}
               onChange={(event) => setSource(event.target.value)}
               placeholder="可选；只查询已有会话"
             />
           </label>
-          <label className="text-xs">
+          <label className="form-field">
             目的主机
             <input
-              className="input mt-2 w-full"
+              className="field"
               value={host}
               onChange={(event) => setHost(event.target.value)}
               placeholder="example.com / IPv4 / IPv6"
             />
           </label>
-          <label className="text-xs">
+          <label className="form-field">
             目的端口
             <input
-              className="input mt-2 w-full"
+              className="field"
               type="number"
               min={1}
               max={65535}
@@ -513,10 +513,10 @@ export default function GroupsPage({
               onChange={(event) => setPort(event.target.value)}
             />
           </label>
-          <label className="text-xs">
+          <label className="form-field">
             传输
             <select
-              className="input mt-2 w-full"
+              className="field"
               value={transport}
               onChange={(event) => setTransport(event.target.value)}
             >
@@ -651,18 +651,18 @@ export default function GroupsPage({
         <section className="panel space-y-4 p-5" aria-label="手动固定">
           <h2 className="font-semibold">手动固定 · {selectedGroup.id}</h2>
           <div className="grid gap-4 sm:grid-cols-2">
-            <label className="text-xs">
+            <label className="form-field">
               固定节点 ID
               <input
-                className="input mt-2 w-full"
+                className="field"
                 value={pin}
                 onChange={(event) => setPin(event.target.value)}
               />
             </label>
-            <label className="text-xs">
+            <label className="form-field">
               允许回退节点（逗号分隔）
               <input
-                className="input mt-2 w-full"
+                className="field"
                 value={fallback}
                 onChange={(event) => setFallback(event.target.value)}
               />
