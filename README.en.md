@@ -201,7 +201,7 @@ Get-FileHash .\hps-headless-0.1.1-x86_64-pc-windows-msvc-ci.zip -Algorithm SHA25
 .\bin\hps.exe status
 ```
 
-Running CLI/Daemon requires no Node.js, Python, Tauri, or graphical session. Desktop needs the system WebView/graphical dependencies and connects to an independent daemon; installing Desktop does not mean the service is running. General CI archives run directly from `bin` and do not include the full release package's `install.sh`.
+Running CLI/Daemon requires no Node.js, Python, Tauri, or graphical session. Desktop needs the system WebView and graphical dependencies. In Desktop, open the connection page and choose **Start local service**, or connect to an existing local or remote daemon. General CI archives run directly from `bin` and do not include the full release package's `install.sh`.
 
 ## Configure your first proxy egress
 
@@ -379,13 +379,15 @@ Open <http://127.0.0.1:17900/console/>. `pnpm build` creates `dist`, then Rust's
 
 ### Browser and Desktop development
 
-Start the daemon above first. In another terminal, choose one frontend development mode:
+Browser development requires the daemon above. In Desktop development, start the local service from the connection page.
 
 ```sh
 pnpm dev             # Browser: http://localhost:1420; /api proxies to 127.0.0.1:17900
 # Or
-pnpm tauri dev       # Desktop; starts Vite automatically, so do not also occupy port 1420
+HPS_FORBID_HOST_NETWORK_CHANGES=1 pnpm run tauri dev  # Builds Web and starts Vite on port 1420
 ```
+
+On the connection page, choose **Start local service**. The development instance stores configuration and data separately from the release app. See the [Desktop local service guide](docs/desktop-service-usage.md) for controls and storage paths.
 
 ### Build platform packages
 

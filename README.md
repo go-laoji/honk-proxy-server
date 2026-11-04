@@ -201,7 +201,7 @@ Get-FileHash .\hps-headless-0.1.1-x86_64-pc-windows-msvc-ci.zip -Algorithm SHA25
 .\bin\hps.exe status
 ```
 
-CLI/Daemon 运行不需要 Node.js、Python、Tauri 或图形会话。Desktop 需要系统 WebView/图形依赖，并连接独立运行的 Daemon；安装 Desktop 不代表服务已经启动。通用 CI 压缩包直接运行 `bin` 下的程序，不含完整发行包的 `install.sh`。
+CLI/Daemon 运行不需要 Node.js、Python、Tauri 或图形会话。Desktop 需要系统 WebView/图形依赖。打开 Desktop 后，在「连接服务」点击「启动本地服务」即可运行代理服务；也可以连接已有的本机或远端 Daemon。通用 CI 压缩包直接运行 `bin` 下的程序，不含完整发行包的 `install.sh`。
 
 ## 配置第一个代理出口
 
@@ -379,13 +379,15 @@ cargo build --locked --release -p hps-cli -p hps-daemon
 
 ### 浏览器与 Desktop 开发
 
-先启动上面的 Daemon。在另一个终端选择一种前端开发方式：
+浏览器开发需要先启动上面的 Daemon。Desktop 开发可直接从界面启动本地服务。
 
 ```sh
 pnpm dev             # 浏览器开发：http://localhost:1420，/api 转发到 127.0.0.1:17900
 # 或
-pnpm tauri dev       # Desktop 开发；会自动启动 Vite，不要同时重复占用 1420
+HPS_FORBID_HOST_NETWORK_CHANGES=1 pnpm run tauri dev  # 自动构建 Web 并启动 Vite，占用 1420
 ```
+
+进入「连接服务」后点击「启动本地服务」。开发实例的配置和数据库与发布版分开存放。操作及存储路径见 [Desktop 本机服务手册](docs/desktop-service-usage.md)。
 
 ### 生成平台包
 

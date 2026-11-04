@@ -119,6 +119,7 @@ pub enum ApplicationError {
 pub struct StartupOverrides {
     pub listen: Option<SocketAddr>,
     pub instance_name: Option<String>,
+    pub management_plaintext: bool,
 }
 impl StartupOverrides {
     fn apply(&self, config: &mut DaemonConfig) {
@@ -128,6 +129,9 @@ impl StartupOverrides {
         if let Some(name) = &self.instance_name {
             config.instance_name = name.clone();
         }
+        if self.management_plaintext {
+            config.management_tls = None;
+        }
     }
     fn fields(&self) -> Vec<String> {
         let mut fields = vec![];
@@ -136,6 +140,9 @@ impl StartupOverrides {
         }
         if self.instance_name.is_some() {
             fields.push("instance_name".into());
+        }
+        if self.management_plaintext {
+            fields.push("management_tls".into());
         }
         fields
     }
@@ -260,8 +267,15 @@ impl Supervisor {
             diagnostics: Default::default(),
             alerts: Default::default(),
         });
-        service.load_health().await?;
-        service.refresh_pool().await?;
+        if let Err(error) = async {
+            service.load_health().await?;
+            service.refresh_pool().await
+        }
+        .await
+        {
+            let _ = service.shutdown().await;
+            return Err(error);
+        }
         let current = service.current();
         if let Some(server) = &current.dns_server {
             server.start();

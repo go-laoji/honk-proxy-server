@@ -5,6 +5,7 @@ import { Badge } from "../components/ui";
 import { endpoint, connect, isDesktop } from "../platform";
 import ProfilesPanel from "../components/ProfilesPanel";
 import LocalSystemPanel from "../components/LocalSystemPanel";
+import ManagedServicePanel from "../components/ManagedServicePanel";
 
 export default function ConnectPage({
   data,
@@ -22,7 +23,8 @@ export default function ConnectPage({
       .catch((error) => setError(String(error)));
   }, []);
   return (
-    <div className="mx-auto max-w-2xl">
+    <div className="mx-auto max-w-2xl space-y-4">
+      {isDesktop && <ManagedServicePanel />}
       <section className="panel overflow-hidden">
         <div className="border-b border-slate-100 p-7 dark:border-slate-800">
           <div className="mb-5 inline-flex rounded-2xl bg-blue-50 p-4 text-blue-600 dark:bg-blue-950">
@@ -30,7 +32,7 @@ export default function ConnectPage({
           </div>
           <h2 className="text-xl font-semibold">连接你的代理服务</h2>
           <p className="muted mt-2 text-sm leading-7">
-            选择本机或远端 Daemon，管理所有可用功能。无需登录或账号。
+            输入已运行的本机或远端服务地址。
           </p>
         </div>
         <form
