@@ -66,7 +66,9 @@ test("rules MPA separates candidates and runtime, orders by keyboard/buttons and
     policy.default_action = { kind: "direct" };
     await policyEditor.fill(JSON.stringify(policy));
     await page.getByRole("button", { name: "保存为候选", exact: true }).click();
-    await expect(page.getByRole("status")).toContainText("需要显式激活");
+    await expect(page.getByRole("main").getByRole("status")).toContainText(
+      "需要显式激活",
+    );
     expect((await throughProxy(proxy, target)).status).toBe(503);
     await page
       .getByRole("textbox", { name: "连接上下文 JSON", exact: true })
@@ -88,7 +90,9 @@ test("rules MPA separates candidates and runtime, orders by keyboard/buttons and
     await page
       .getByRole("button", { name: "激活查看的候选", exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText("激活结果 applied");
+    await expect(page.getByRole("main").getByRole("status")).toContainText(
+      "激活结果 applied",
+    );
     expect(await throughProxy(proxy, target)).toEqual({
       status: 200,
       body: "rule-origin",
@@ -106,7 +110,9 @@ test("rules MPA separates candidates and runtime, orders by keyboard/buttons and
       await page
         .getByRole("button", { name: "保存为候选", exact: true })
         .click();
-      await expect(page.getByRole("status")).toContainText("需要显式激活");
+      await expect(page.getByRole("main").getByRole("status")).toContainText(
+        "需要显式激活",
+      );
     }
     await add("deny-local", "reject");
     expect((await throughProxy(proxy, target)).status).toBe(200);
@@ -117,7 +123,9 @@ test("rules MPA separates candidates and runtime, orders by keyboard/buttons and
     await page
       .getByRole("button", { name: "激活查看的候选", exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText("激活结果 applied");
+    await expect(page.getByRole("main").getByRole("status")).toContainText(
+      "激活结果 applied",
+    );
     expect((await throughProxy(proxy, target)).status).toBe(403);
     await add("allow-local", "direct");
     const allow = page
@@ -148,26 +156,36 @@ test("rules MPA separates candidates and runtime, orders by keyboard/buttons and
     await page
       .getByRole("button", { name: "激活查看的候选", exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText("激活结果 applied");
+    await expect(page.getByRole("main").getByRole("status")).toContainText(
+      "激活结果 applied",
+    );
     expect((await throughProxy(proxy, target)).status).toBe(200);
     await page
       .getByRole("button", { name: "停用 allow-local", exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText("需要显式激活");
+    await expect(page.getByRole("main").getByRole("status")).toContainText(
+      "需要显式激活",
+    );
     expect((await throughProxy(proxy, target)).status).toBe(200);
     await page
       .getByRole("button", { name: "激活查看的候选", exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText("激活结果 applied");
+    await expect(page.getByRole("main").getByRole("status")).toContainText(
+      "激活结果 applied",
+    );
     expect((await throughProxy(proxy, target)).status).toBe(403);
     await page
       .getByRole("button", { name: "删除 deny-local", exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText("需要显式激活");
+    await expect(page.getByRole("main").getByRole("status")).toContainText(
+      "需要显式激活",
+    );
     await page
       .getByRole("button", { name: "激活查看的候选", exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText("激活结果 applied");
+    await expect(page.getByRole("main").getByRole("status")).toContainText(
+      "激活结果 applied",
+    );
     expect((await throughProxy(proxy, target)).status).toBe(200);
 
     await page

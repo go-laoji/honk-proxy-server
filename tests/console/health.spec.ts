@@ -83,7 +83,9 @@ test("health MPA keeps probes across navigation, recovers lost acknowledgment an
     await page
       .getByRole("button", { name: "检测所选 1 个", exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText("已受理");
+    await expect(page.getByRole("main").getByRole("status")).toContainText(
+      "已受理",
+    );
     await expect(page.getByText("合并在途 1", { exact: false })).toBeVisible();
     await page.getByRole("link", { name: "运行概览", exact: true }).click();
     await expect(page).toHaveURL(/overview\.html$/);
@@ -147,7 +149,9 @@ test("health MPA keeps probes across navigation, recovers lost acknowledgment an
     await page
       .getByRole("button", { name: "保存并应用策略", exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText("检测策略已保存");
+    await expect(page.getByRole("main").getByRole("status")).toContainText(
+      "检测策略已保存",
+    );
     // The actual POST reaches the daemon; only its acknowledgment is lost.
     await page.route("**/api/v1/health/probe", async (route) => {
       await route.fetch();
@@ -164,7 +168,9 @@ test("health MPA keeps probes across navigation, recovers lost acknowledgment an
     await page.unroute("**/api/v1/health/probe");
     await page.reload();
     await page.getByRole("button", { name: "恢复上次检测" }).click();
-    await expect(page.getByRole("status")).toContainText("已受理");
+    await expect(page.getByRole("main").getByRole("status")).toContainText(
+      "已受理",
+    );
     const after = await (await request.get("/api/v1/health")).json();
     expect(after.used_probes).toBe(before.used_probes);
     const history = page.getByRole("region", { name: "健康历史与出口画像" });

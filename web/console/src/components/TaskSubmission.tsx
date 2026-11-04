@@ -105,16 +105,13 @@ export default function TaskSubmission({
     }
   }
   return (
-    <section className="panel space-y-4 p-5" aria-label="后台配置提交">
+    <section className="panel space-y-3 p-3" aria-label="后台配置提交">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-2 font-semibold">
             <FileCode2 size={18} />
             可恢复的配置任务
           </h2>
-          <p className="muted mt-2 text-xs leading-6">
-            离开页面后由服务继续执行。生成候选不会激活配置；配置工作台仍可提供逐字段校验与激活。
-          </p>
         </div>
         <button
           className="btn"
@@ -131,6 +128,9 @@ export default function TaskSubmission({
       </div>
       {open && (
         <form className="space-y-4" onSubmit={(event) => void submit(event)}>
+          <p className="muted text-xs">
+            提交后可在任务列表查看进度和结果。候选配置可在配置管理页激活。
+          </p>
           <p className="muted break-all text-xs">
             期望版本 r{revision} · 实例 {epoch}
             。服务实例或配置变化会返回冲突；相同请求 ID

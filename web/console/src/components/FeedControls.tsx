@@ -12,8 +12,8 @@ export default function FeedControls({
   reconnect: () => void;
 }) {
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <p
           className="muted flex items-center gap-2 text-xs"
           role="status"

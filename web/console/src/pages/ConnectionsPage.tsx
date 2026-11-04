@@ -9,6 +9,7 @@ import {
   Search,
   X,
 } from "lucide-react";
+import { AdvancedFilters, FilterStartTime } from "../components/FilterOptions";
 import { ApiRequestError, getJson, postJson } from "../platform";
 import { Badge, Details } from "../components/ui";
 import { ConnectionStats } from "../components/ConnectionSummary";
@@ -107,6 +108,10 @@ export default function ConnectionsPage() {
     .filter((n) => Number.isInteger(n) && n >= 1 && n <= 200)
     .sort((a, b) => a - b);
   const detailId = params.get("detail") ?? params.get("id");
+  const detailRegion = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (detailId) detailRegion.current?.focus();
+  }, [detailId]);
   const apiParams = new URLSearchParams();
   for (const key of filterKeys) {
     const v = params.get(key);
@@ -353,9 +358,11 @@ export default function ConnectionsPage() {
     }
   }
   return (
-    <div className="space-y-6">
-      {value && <ConnectionStats value={value.statistics} rates={rates} />}
-      <section className="panel space-y-4 p-5">
+    <div className="space-y-3">
+      {value && (
+        <ConnectionStats value={value.statistics} rates={rates} compact />
+      )}
+      <section className="panel space-y-2.5 p-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="flex items-center gap-2 font-semibold">
@@ -363,8 +370,7 @@ export default function ConnectionsPage() {
               业务连接与隧道
             </h2>
             <p className="muted mt-2 text-xs leading-6">
-              每个 HTTP 业务交换或隧道分别记录。入口 TCP 连接、探测与 DNS
-              诊断另行统计；不保存业务路径、首部或正文，不解密 HTTPS 目标内容。
+              按目标、客户端和状态查找 HTTP 业务交换或隧道。
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -395,234 +401,253 @@ export default function ConnectionsPage() {
         <form
           key={`${apiQuery}:${value?.inbounds.join(",") ?? ""}:${value?.groups.join(",") ?? ""}:${value?.providers.join(",") ?? ""}`}
           onSubmit={filters}
-          className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+          className="space-y-2"
           aria-label="连接筛选"
         >
-          <label className="text-xs">
-            客户端 IP / CIDR
-            <input
-              className="field mt-1"
-              name="source"
-              defaultValue={params.get("source") ?? ""}
-            />
-          </label>
-          <label className="text-xs">
-            客户端端口
-            <input
-              className="field mt-1"
-              name="source_port"
-              type="number"
-              min="1"
-              max="65535"
-              defaultValue={params.get("source_port") ?? ""}
-            />
-          </label>
-          <label className="text-xs">
-            目标地址或已使用域名
-            <input
-              className="field mt-1"
-              name="destination"
-              defaultValue={params.get("destination") ?? ""}
-            />
-          </label>
-          <label className="text-xs">
-            目标端口
-            <input
-              className="field mt-1"
-              name="destination_port"
-              type="number"
-              min="1"
-              max="65535"
-              defaultValue={params.get("destination_port") ?? ""}
-            />
-          </label>
-          <label className="text-xs">
-            入口
-            <input
-              className="field mt-1"
-              name="inbound"
-              list="connection-inbounds"
-              defaultValue={params.get("inbound") ?? ""}
-            />
-            <datalist id="connection-inbounds">
-              {value?.inbounds.map((id) => (
-                <option key={id}>{id}</option>
-              ))}
-            </datalist>
-          </label>
-          <label className="text-xs">
-            入口协议
-            <select
-              className="field mt-1"
-              name="protocol"
-              defaultValue={params.get("protocol") ?? ""}
-            >
-              <option value="">全部入口协议</option>
-              {["http", "https", "socks5", "transparent"].map((p) => (
-                <option key={p}>{p}</option>
-              ))}
-            </select>
-          </label>
-          <label className="text-xs">
-            传输
-            <select
-              className="field mt-1"
-              name="transport"
-              defaultValue={params.get("transport") ?? ""}
-            >
-              <option value="">全部传输</option>
-              <option value="tcp">TCP</option>
-              <option value="udp">UDP</option>
-            </select>
-          </label>
-          <label className="text-xs">
-            来源类型
-            <select
-              className="field mt-1"
-              name="origin"
-              defaultValue={params.get("origin") ?? ""}
-            >
-              <option value="">全部来源类型</option>
-              {Object.entries(origins).map(([key, label]) => (
-                <option value={key} key={key}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-xs">
-            节点 ID（直连填 @direct）
-            <input
-              className="field mt-1"
-              name="node"
-              defaultValue={params.get("node") ?? ""}
-            />
-          </label>
-          <label className="text-xs">
-            分组（未分组填 @none）
-            <input
-              className="field mt-1"
-              name="group"
-              list="connection-groups"
-              defaultValue={params.get("group") ?? ""}
-            />
-            <datalist id="connection-groups">
-              {value?.groups.map((id) => (
-                <option key={id}>{id}</option>
-              ))}
-            </datalist>
-          </label>
-          <label className="text-xs">
-            供应商（静态填 @static）
-            <input
-              className="field mt-1"
-              name="provider"
-              list="connection-providers"
-              defaultValue={params.get("provider") ?? ""}
-            />
-            <datalist id="connection-providers">
-              {value?.providers.map((id) => (
-                <option key={id}>{id}</option>
-              ))}
-            </datalist>
-          </label>
-          <label className="text-xs">
-            规则 ID（默认填 @default）
-            <input
-              className="field mt-1"
-              name="rule"
-              defaultValue={params.get("rule") ?? ""}
-            />
-          </label>
-          <label className="text-xs">
-            连接状态
-            <select
-              className="field mt-1"
-              name="state"
-              defaultValue={params.get("state") ?? "active"}
-            >
-              <option value="active">所有活动记录</option>
-              <option value="all">活动及最近终态</option>
-              <option value="ended">最近终态</option>
-              {Object.entries(connectionStates).map(([key, label]) => (
-                <option value={key} key={key}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-xs">
-            错误码
-            <input
-              className="field mt-1"
-              name="error"
-              defaultValue={params.get("error") ?? ""}
-            />
-          </label>
-          <label className="text-xs">
-            开始时间不早于（Unix ms）
-            <input
-              className="field mt-1"
-              name="created_after_unix_ms"
-              type="number"
-              min="0"
-              defaultValue={params.get("created_after_unix_ms") ?? ""}
-            />
-          </label>
-          <label className="text-xs">
-            排序
-            <select
-              className="field mt-1"
-              name="sort"
-              defaultValue={params.get("sort") ?? "newest"}
-            >
-              <option value="newest">最新开始</option>
-              <option value="oldest">最早开始</option>
-              <option value="bytes_up">上传量</option>
-              <option value="bytes_down">下载量</option>
-              <option value="elapsed">持续时间</option>
-            </select>
-          </label>
-          <label className="text-xs">
-            每页
-            <select
-              className="field mt-1"
-              name="limit"
-              defaultValue={params.get("limit") ?? "50"}
-            >
-              {pageSizes.map((n) => (
-                <option key={n}>{n}</option>
-              ))}
-            </select>
-          </label>
-          <div className="flex items-end gap-2">
-            <button className="btn" disabled={busy}>
-              <Filter size={15} />
-              应用筛选
-            </button>
-            <button
-              className="btn"
-              type="button"
-              disabled={busy}
-              onClick={() => {
-                snapshot.current = null;
-                setSelected([]);
-                navigate(new URLSearchParams());
-                setReload((n) => n + 1);
-              }}
-            >
-              重置筛选
-            </button>
+          <div className="filter-grid">
+            <label className="text-xs">
+              目标地址或已使用域名
+              <input
+                className="field mt-1"
+                name="destination"
+                defaultValue={params.get("destination") ?? ""}
+              />
+            </label>
+            <label className="text-xs">
+              客户端 IP / CIDR
+              <input
+                className="field mt-1"
+                name="source"
+                defaultValue={params.get("source") ?? ""}
+              />
+            </label>
+            <label className="text-xs">
+              连接状态
+              <select
+                className="field mt-1"
+                name="state"
+                defaultValue={params.get("state") ?? "active"}
+              >
+                <option value="active">所有活动记录</option>
+                <option value="all">活动及最近终态</option>
+                <option value="ended">最近终态</option>
+                {Object.entries(connectionStates).map(([key, label]) => (
+                  <option value={key} key={key}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="filter-actions">
+              <button className="btn" disabled={busy}>
+                <Filter size={15} />
+                应用筛选
+              </button>
+              <button
+                className="btn"
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  snapshot.current = null;
+                  setSelected([]);
+                  navigate(new URLSearchParams());
+                  setReload((n) => n + 1);
+                }}
+              >
+                重置筛选
+              </button>
+            </div>
           </div>
+          <AdvancedFilters
+            active={
+              params.has("source_port") ||
+              params.has("destination_port") ||
+              params.has("inbound") ||
+              params.has("protocol") ||
+              params.has("transport") ||
+              params.has("origin") ||
+              params.has("node") ||
+              params.has("group") ||
+              params.has("provider") ||
+              params.has("rule") ||
+              params.has("error") ||
+              params.has("created_after_unix_ms") ||
+              (params.get("sort") ?? "newest") !== "newest" ||
+              (params.get("limit") ?? "50") !== "50"
+            }
+          >
+            <label className="text-xs">
+              客户端端口
+              <input
+                className="field mt-1"
+                name="source_port"
+                type="number"
+                min="1"
+                max="65535"
+                defaultValue={params.get("source_port") ?? ""}
+              />
+            </label>
+            <label className="text-xs">
+              目标端口
+              <input
+                className="field mt-1"
+                name="destination_port"
+                type="number"
+                min="1"
+                max="65535"
+                defaultValue={params.get("destination_port") ?? ""}
+              />
+            </label>
+            <label className="text-xs">
+              入口
+              <input
+                className="field mt-1"
+                name="inbound"
+                list="connection-inbounds"
+                defaultValue={params.get("inbound") ?? ""}
+              />
+              <datalist id="connection-inbounds">
+                {value?.inbounds.map((id) => (
+                  <option key={id}>{id}</option>
+                ))}
+              </datalist>
+            </label>
+            <label className="text-xs">
+              入口协议
+              <select
+                className="field mt-1"
+                name="protocol"
+                defaultValue={params.get("protocol") ?? ""}
+              >
+                <option value="">全部入口协议</option>
+                {["http", "https", "socks5", "transparent"].map((p) => (
+                  <option key={p}>{p}</option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs">
+              传输
+              <select
+                className="field mt-1"
+                name="transport"
+                defaultValue={params.get("transport") ?? ""}
+              >
+                <option value="">全部传输</option>
+                <option value="tcp">TCP</option>
+                <option value="udp">UDP</option>
+              </select>
+            </label>
+            <label className="text-xs">
+              来源类型
+              <select
+                className="field mt-1"
+                name="origin"
+                defaultValue={params.get("origin") ?? ""}
+              >
+                <option value="">全部来源类型</option>
+                {Object.entries(origins).map(([key, label]) => (
+                  <option value={key} key={key}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs">
+              节点 ID（直连填 @direct）
+              <input
+                className="field mt-1"
+                name="node"
+                defaultValue={params.get("node") ?? ""}
+              />
+            </label>
+            <label className="text-xs">
+              分组（未分组填 @none）
+              <input
+                className="field mt-1"
+                name="group"
+                list="connection-groups"
+                defaultValue={params.get("group") ?? ""}
+              />
+              <datalist id="connection-groups">
+                {value?.groups.map((id) => (
+                  <option key={id}>{id}</option>
+                ))}
+              </datalist>
+            </label>
+            <label className="text-xs">
+              供应商（静态填 @static）
+              <input
+                className="field mt-1"
+                name="provider"
+                list="connection-providers"
+                defaultValue={params.get("provider") ?? ""}
+              />
+              <datalist id="connection-providers">
+                {value?.providers.map((id) => (
+                  <option key={id}>{id}</option>
+                ))}
+              </datalist>
+            </label>
+            <label className="text-xs">
+              规则 ID（默认填 @default）
+              <input
+                className="field mt-1"
+                name="rule"
+                defaultValue={params.get("rule") ?? ""}
+              />
+            </label>
+            <label className="text-xs">
+              错误码
+              <input
+                className="field mt-1"
+                name="error"
+                defaultValue={params.get("error") ?? ""}
+              />
+            </label>
+            <FilterStartTime
+              name="created_after_unix_ms"
+              value={params.get("created_after_unix_ms") ?? ""}
+            />
+            <label className="text-xs">
+              排序
+              <select
+                className="field mt-1"
+                name="sort"
+                defaultValue={params.get("sort") ?? "newest"}
+              >
+                <option value="newest">最新开始</option>
+                <option value="oldest">最早开始</option>
+                <option value="bytes_up">上传量</option>
+                <option value="bytes_down">下载量</option>
+                <option value="elapsed">持续时间</option>
+              </select>
+            </label>
+            <label className="text-xs">
+              每页
+              <select
+                className="field mt-1"
+                name="limit"
+                defaultValue={params.get("limit") ?? "50"}
+              >
+                {pageSizes.map((n) => (
+                  <option key={n}>{n}</option>
+                ))}
+              </select>
+            </label>
+          </AdvancedFilters>
         </form>
         {value && (
-          <p className="muted break-words text-xs leading-6">
-            {automatic ? "每 2 秒重新采样" : "自动刷新已暂停"} · 快照{" "}
-            {date(value.snapshot_created_at_unix_ms)} · 运行参考版本 r
-            {value.running_revision}。快照最多保留 30
-            秒；实例变化或快照失效后重新读取。最近终态最多{" "}
-            {value.statistics.recent_record_limit} 条、最长 5 分钟。
-          </p>
+          <details className="muted text-xs">
+            <summary className="cursor-pointer">
+              {automatic ? "每 2 秒刷新" : "自动刷新已暂停"} · 快照{" "}
+              {date(value.snapshot_created_at_unix_ms)} · r
+              {value.running_revision}
+            </summary>
+            <p className="mt-2 leading-5">
+              快照最多保留 30 秒，实例变化或快照失效后重新读取。最近终态最多保留
+              {value.statistics.recent_record_limit} 条、最长 5 分钟。
+            </p>
+          </details>
         )}
         {value && value.statistics.active_untracked > 0 && (
           <p role="alert" className="text-sm text-amber-700">
@@ -752,7 +777,12 @@ export default function ConnectionsPage() {
         </section>
       )}
       {detailId && (
-        <section className="panel" aria-label="连接路由详情">
+        <section
+          ref={detailRegion}
+          tabIndex={-1}
+          className="panel"
+          aria-label="连接路由详情"
+        >
           <div className="flex items-center justify-between gap-3 border-b border-slate-100 p-5 dark:border-slate-800">
             <h2 className="font-semibold">连接路由详情</h2>
             <button className="btn" onClick={() => show(null)}>
@@ -878,47 +908,52 @@ export default function ConnectionsPage() {
         </section>
       )}
       {loading && <p className="muted text-sm">正在读取连接快照…</p>}
-      <div className="record-list" aria-label="连接列表">
+      <div
+        className={value?.records.length ? "panel" : undefined}
+        aria-label="连接列表"
+      >
         {value?.records.map((record) => (
           <article
-            className="panel record-card"
+            className="management-record"
             key={record.id}
             aria-label={`连接 ${record.id}`}
           >
-            <div className="flex items-start justify-between gap-3">
-              <label className="flex min-w-0 items-start gap-2.5">
-                <input
-                  type="checkbox"
-                  className="mt-1 shrink-0"
-                  aria-label={`选择连接 ${record.id}`}
-                  disabled={!active(record) || busy || loading}
-                  checked={selected.includes(record.id)}
-                  onChange={(e) => select(record.id, e.target.checked)}
-                />
-                <span className="min-w-0 [overflow-wrap:anywhere]">
-                  <span className="block text-sm font-semibold">
-                    {endpointLabel(
-                      record.context.destination_host,
-                      record.context.destination_port,
-                    )}
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-start gap-2">
+                <label className="flex min-w-0 items-start gap-2.5">
+                  <input
+                    type="checkbox"
+                    className="mt-1 shrink-0"
+                    aria-label={`选择连接 ${record.id}`}
+                    disabled={!active(record) || busy || loading}
+                    checked={selected.includes(record.id)}
+                    onChange={(e) => select(record.id, e.target.checked)}
+                  />
+                  <span className="min-w-0 [overflow-wrap:anywhere]">
+                    <span className="block text-sm font-semibold">
+                      {endpointLabel(
+                        record.context.destination_host,
+                        record.context.destination_port,
+                      )}
+                    </span>
+                    <span className="muted block font-mono text-xs">
+                      {record.id}
+                    </span>
                   </span>
-                  <span className="muted mt-1 block font-mono text-xs">
-                    {record.id}
-                  </span>
-                </span>
-              </label>
-              <Badge active={active(record) && record.state === "open"}>
-                {stateLabel(record)}
-              </Badge>
+                </label>
+                <Badge active={active(record) && record.state === "open"}>
+                  {stateLabel(record)}
+                </Badge>
+              </div>
+              <p className="muted mt-1 break-words text-xs [overflow-wrap:anywhere]">
+                {record.context.source_ip ?? "未知来源"}:
+                {record.context.source_port ?? "—"} →{" "}
+                {record.context.inbound ?? "未知入口"} ·{" "}
+                {record.context.inbound_protocol ?? record.context.transport} ·{" "}
+                {origins[record.context.origin]}
+              </p>
             </div>
-            <p className="muted break-all text-xs">
-              {record.context.source_ip ?? "未知来源"}:
-              {record.context.source_port ?? "—"} →{" "}
-              {record.context.inbound ?? "未知入口"} ·{" "}
-              {record.context.inbound_protocol ?? record.context.transport} ·{" "}
-              {origins[record.context.origin]}
-            </p>
-            <div className="record-details">
+            <div className="grid min-w-0 grid-cols-2 gap-x-3 gap-y-0.5 text-xs tabular-nums [overflow-wrap:anywhere]">
               <p className="break-all">
                 出口：{record.choice?.node_id ?? record.routing.action.kind}
               </p>
@@ -931,13 +966,13 @@ export default function ConnectionsPage() {
                 {formatBytes(record.bytes_down)}
               </p>
               <p>快照时持续：{(record.elapsed_ms / 1000).toFixed(1)} s</p>
+              {record.error_code && (
+                <p className="col-span-2 break-words text-amber-700">
+                  {connectionErrors[record.error_code] ?? record.error_code}
+                </p>
+              )}
             </div>
-            {record.error_code && (
-              <p className="break-words text-xs text-amber-700">
-                {connectionErrors[record.error_code] ?? record.error_code}
-              </p>
-            )}
-            <div className="record-actions">
+            <div className="flex flex-wrap gap-2">
               <button className="btn text-xs" onClick={() => show(record.id)}>
                 <Search size={14} />
                 路由详情

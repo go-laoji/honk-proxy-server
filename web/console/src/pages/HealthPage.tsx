@@ -239,7 +239,7 @@ export default function HealthPage({
     await Promise.all([refresh(), refreshService()]);
   }
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       {(error || loadError) && (
         <div
           role="alert"
@@ -294,82 +294,13 @@ export default function HealthPage({
               icon={RefreshCw}
             />
           </div>
-          <section className="panel p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="font-semibold">检测策略</h2>
-              <button
-                className="btn"
-                disabled={!!busy}
-                onClick={() => void action("edit", openEditor)}
-              >
-                <Settings2 size={15} />
-                编辑检测策略
-              </button>
-            </div>
-            <div className="mt-4 space-y-2 text-sm">
-              {data.configuration.profiles.map((profile) => (
-                <p
-                  className="break-all"
-                  key={`${profile.transport}/${profile.family}`}
-                >
-                  <span className="mr-3 font-medium">
-                    {profile.transport.toUpperCase()} /{" "}
-                    {profile.family.toUpperCase()}
-                  </span>
-                  <span className="muted">
-                    {profile.enabled ? profile.url : "停用"}
-                  </span>
-                </p>
-              ))}
-            </div>
-            <p className="muted mt-4 text-xs leading-6">
-              HTTP、HTTPS、SOCKS5
-              入口共用这些状态。端口连通、认证、隧道和目标响应分别记录；403/429
-              保留可达证据。UDP 能力尚不支持时单独显示。
-            </p>
-            {editor !== null && (
-              <div className="mt-5 space-y-3">
-                <label
-                  htmlFor="health-policy"
-                  className="block text-sm font-medium"
-                >
-                  检测策略 JSON · 基于配置 r{revision}
-                </label>
-                <textarea
-                  id="health-policy"
-                  className="input min-h-80 w-full font-mono text-xs"
-                  value={editor}
-                  onChange={(event) => setEditor(event.target.value)}
-                  spellCheck={false}
-                />
-                <p className="muted text-xs">
-                  服务端验证策略和 TLS
-                  信任后应用。其他页面已修改配置时会提示冲突，请重新打开编辑器。
-                </p>
-                <div className="flex gap-2">
-                  <button
-                    className="btn-primary"
-                    disabled={!!busy}
-                    onClick={() => void action("save", save)}
-                  >
-                    <Save size={15} />
-                    保存并应用策略
-                  </button>
-                  <button
-                    className="btn"
-                    disabled={!!busy}
-                    onClick={() => setEditor(null)}
-                  >
-                    取消编辑
-                  </button>
-                </div>
-              </div>
-            )}
-          </section>
           <section className="panel overflow-hidden" aria-label="节点健康状态">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-5 dark:border-slate-800">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 p-3 dark:border-slate-800">
               <h2 className="font-semibold">节点准入与能力</h2>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <a className="text-link" href="#health-policy-settings">
+                  检测策略
+                </a>
                 <button
                   className="btn"
                   disabled={!!busy}
@@ -400,6 +331,24 @@ export default function HealthPage({
                 </button>
               </div>
             </div>
+            <form
+              action="./health.html"
+              className="flex flex-wrap items-end gap-2 border-b border-slate-100 p-3 dark:border-slate-800"
+              aria-label="健康记录筛选"
+            >
+              <label className="min-w-0 flex-1 text-xs sm:max-w-80">
+                节点 ID
+                <input
+                  name="node"
+                  className="field mt-1"
+                  placeholder="输入完整节点 ID"
+                  defaultValue={nodeFilter}
+                />
+              </label>
+              <button className="btn" type="submit">
+                查找节点
+              </button>
+            </form>
             {pending && (
               <div className="m-5 rounded-xl bg-amber-50 p-4 text-xs leading-6 text-amber-800 dark:bg-amber-950 dark:text-amber-200">
                 <p>上次检测受理结果尚未确认 · {pending.request_id}</p>
@@ -534,6 +483,78 @@ export default function HealthPage({
                 下一页
               </button>
             </div>
+          </section>
+          <section id="health-policy-settings" className="panel p-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="font-semibold">检测策略</h2>
+              <button
+                className="btn"
+                disabled={!!busy}
+                onClick={() => void action("edit", openEditor)}
+              >
+                <Settings2 size={15} />
+                编辑检测策略
+              </button>
+            </div>
+            <div className="mt-4 space-y-2 text-sm">
+              {data.configuration.profiles.map((profile) => (
+                <p
+                  className="break-all"
+                  key={`${profile.transport}/${profile.family}`}
+                >
+                  <span className="mr-3 font-medium">
+                    {profile.transport.toUpperCase()} /{" "}
+                    {profile.family.toUpperCase()}
+                  </span>
+                  <span className="muted">
+                    {profile.enabled ? profile.url : "停用"}
+                  </span>
+                </p>
+              ))}
+            </div>
+            <p className="muted mt-4 text-xs leading-6">
+              HTTP、HTTPS、SOCKS5
+              入口共用这些状态。端口连通、认证、隧道和目标响应分别记录；403/429
+              保留可达证据。UDP 能力尚不支持时单独显示。
+            </p>
+            {editor !== null && (
+              <div className="mt-5 space-y-3">
+                <label
+                  htmlFor="health-policy"
+                  className="block text-sm font-medium"
+                >
+                  检测策略 JSON · 基于配置 r{revision}
+                </label>
+                <textarea
+                  id="health-policy"
+                  className="input min-h-80 w-full font-mono text-xs"
+                  value={editor}
+                  onChange={(event) => setEditor(event.target.value)}
+                  spellCheck={false}
+                />
+                <p className="muted text-xs">
+                  服务端验证策略和 TLS
+                  信任后应用。其他页面已修改配置时会提示冲突，请重新打开编辑器。
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    className="btn-primary"
+                    disabled={!!busy}
+                    onClick={() => void action("save", save)}
+                  >
+                    <Save size={15} />
+                    保存并应用策略
+                  </button>
+                  <button
+                    className="btn"
+                    disabled={!!busy}
+                    onClick={() => setEditor(null)}
+                  >
+                    取消编辑
+                  </button>
+                </div>
+              </div>
+            )}
           </section>
           <section className="panel p-5" aria-label="健康检测任务">
             <h2 className="font-semibold">后台检测任务</h2>

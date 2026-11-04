@@ -994,6 +994,7 @@ async fn run(args: &Args) -> Result<serde_json::Value, (u8, String)> {
                         sort: sort.clone(),
                         offset: *offset,
                         limit: Some(*limit),
+                        ..Default::default()
                     })
                     .await
                     .map_err(client_error)?,

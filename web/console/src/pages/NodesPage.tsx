@@ -14,7 +14,7 @@ import NodeTable, {
   NodeActions,
   type NodeAction,
 } from "../components/NodeTable";
-import { getJson, postJson } from "../platform";
+import { ApiRequestError, getJson, postJson } from "../platform";
 import HealthHistoryPanel from "../components/HealthHistoryPanel";
 import ManualNodePanel from "../components/ManualNodePanel";
 import {
@@ -32,6 +32,31 @@ const message = (cause: unknown) =>
 const date = (value: number | null) =>
   value === null ? "未提供" : new Date(value * 1000).toLocaleString("zh-CN");
 const defaultSort = "expiry_desc";
+async function loadInventory(params: URLSearchParams, signal: AbortSignal) {
+  try {
+    return {
+      data: await getJson<NodesOverview>(`api/v1/nodes?${params}`, signal),
+      legacy: false,
+    };
+  } catch (cause) {
+    if (
+      !params.has("hide_expired") ||
+      !(cause instanceof ApiRequestError) ||
+      !(
+        (cause.status === 400 &&
+          (!cause.code || cause.code === "invalid_server_response")) ||
+        cause.message === "unsupported API path"
+      )
+    ) {
+      throw cause;
+    }
+    params.delete("hide_expired");
+    return {
+      data: await getJson<NodesOverview>(`api/v1/nodes?${params}`, signal),
+      legacy: true,
+    };
+  }
+}
 const filters = [
   "search",
   "provider",
@@ -48,6 +73,7 @@ export default function NodesPage() {
   const [query, setQuery] = useState(window.location.search);
   const [reload, setReload] = useState(0);
   const [value, setValue] = useState<NodesOverview | null>(null);
+  const [legacy, setLegacy] = useState(false);
   const [error, setError] = useState("");
   const [loadError, setLoadError] = useState("");
   const [notice, setNotice] = useState("");
@@ -83,13 +109,16 @@ export default function NodesPage() {
     if (!requestParams.has("sort") && !requestParams.has("id")) {
       requestParams.set("sort", defaultSort);
     }
-    void getJson<NodesOverview>(
-      `api/v1/nodes?${requestParams}`,
-      controller.signal,
-    )
+    requestParams.delete("hide_expired");
+    if (!requestParams.has("id") && requestParams.get("state") !== "expired") {
+      requestParams.set("hide_expired", "true");
+    }
+    void loadInventory(requestParams, controller.signal)
       .then((result) => {
-        if (!controller.signal.aborted && generation.current === request)
-          setValue(result);
+        if (!controller.signal.aborted && generation.current === request) {
+          setValue(result.data);
+          setLegacy(result.legacy);
+        }
       })
       .catch((cause: unknown) => {
         if (!controller.signal.aborted && generation.current === request) {
@@ -326,7 +355,7 @@ export default function NodesPage() {
                   name="state"
                   defaultValue={params.get("state") ?? ""}
                 >
-                  <option value="">全部状态</option>
+                  <option value="">未到期节点</option>
                   {Object.entries({
                     eligible: "可准入",
                     blocked: "不可准入",
@@ -460,6 +489,11 @@ export default function NodesPage() {
           {value?.inventory_truncated && (
             <p role="alert" className="mt-3 text-sm text-amber-700">
               库存查询达到 200000 条租约上限，当前摘要为受限样本。
+            </p>
+          )}
+          {value && legacy && (
+            <p className="text-xs text-amber-700">
+              当前服务版本仍返回到期记录。更新服务后可按有效期筛选并分页。
             </p>
           )}
         </section>

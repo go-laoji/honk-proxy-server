@@ -265,9 +265,13 @@ test("event MPA freezes while paused, resumes without a gap and resets after sam
     await service.stop();
     service = await start(request, endpoint.replace("http://", ""));
     expect(service.epoch).not.toBe(oldEpoch);
-    await expect(page.getByText("观测周期：", { exact: false })).toContainText(
-      service.epoch,
-    );
+    await page
+      .locator("summary")
+      .filter({ hasText: /显示 .* 条 · 最近读取/ })
+      .click();
+    await expect(
+      page.locator("#service-events").getByText("观测周期", { exact: false }),
+    ).toContainText(service.epoch);
     await expect(events.getByRole("article")).toHaveCount(0);
     await expect(page.getByLabel("事件详情", { exact: true })).toHaveCount(0);
     await expect(

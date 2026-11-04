@@ -5,7 +5,7 @@ import {
 } from "../selection";
 import { useEffect, useRef, useState } from "react";
 import { Layers3, Plus, RefreshCw, Search, Settings2 } from "lucide-react";
-import { Badge, Stat } from "../components/ui";
+import { Badge } from "../components/ui";
 import { getJson, postJson } from "../platform";
 
 type Group = {
@@ -229,7 +229,7 @@ export default function GroupsPage({
     setDecision(undefined);
   }
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       {error && (
         <p
           role="alert"
@@ -246,7 +246,7 @@ export default function GroupsPage({
           {info}
         </p>
       )}
-      <section className="panel p-5 sm:p-6">
+      <section className="panel space-y-2 p-3">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h2 className="flex items-center gap-2 font-semibold">
@@ -268,6 +268,9 @@ export default function GroupsPage({
               <Plus size={14} />
               新增分组
             </button>
+            <a className="btn" href="#selection-simulation">
+              选点模拟
+            </a>
             <button
               className="btn"
               disabled={busy || !data}
@@ -290,30 +293,28 @@ export default function GroupsPage({
             </button>
           </div>
         </div>
-        <p className="muted mt-4 text-xs leading-6">
-          固定失败只允许显式回退范围；候选仍受健康、协议和剩余寿命限制。策略用于新连接，已有连接不迁移。未配置分组时沿用全池轮询。
-        </p>
         {data && (
-          <div className="mt-5 grid gap-3 sm:grid-cols-3">
-            <Stat
-              title="已配置分组"
-              detail="成员、来源和标签统一过滤"
-              icon={Layers3}
-              value={String(data.configuration.groups.length)}
-            />
-            <Stat
-              title="默认选择可用候选"
-              detail="实际准入检查，尚未连接节点"
-              icon={Search}
-              value={String(data.default_selection.eligible)}
-            />
-            <Stat
-              title="会话表上限 / 当前"
-              detail="新代际重建，不延长租约"
-              icon={Settings2}
-              value={`${data.configuration.max_sessions} / ${data.default_selection.sessions}`}
-            />
-          </div>
+          <dl className="muted flex flex-wrap gap-x-4 gap-y-1 text-xs tabular-nums">
+            <div className="flex gap-1">
+              <dt>分组</dt>
+              <dd className="font-semibold">
+                {data.configuration.groups.length}
+              </dd>
+            </div>
+            <div className="flex gap-1">
+              <dt>默认可用候选</dt>
+              <dd className="font-semibold">
+                {data.default_selection.eligible}
+              </dd>
+            </div>
+            <div className="flex gap-1">
+              <dt>会话</dt>
+              <dd className="font-semibold">
+                {data.default_selection.sessions} /{" "}
+                {data.configuration.max_sessions}
+              </dd>
+            </div>
+          </dl>
         )}
       </section>
       {editor && (
@@ -360,14 +361,14 @@ export default function GroupsPage({
           </div>
         </section>
       )}
-      <section className="grid gap-4 md:grid-cols-2" aria-label="分组列表">
+      <section className="grid gap-2 md:grid-cols-2" aria-label="分组列表">
         {data?.configuration.groups.map((item) => (
-          <article key={item.id} className="panel min-w-0 p-5">
+          <article key={item.id} className="panel min-w-0 p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="break-all font-semibold">{item.id}</h3>
               <Badge active>{strategies[item.strategy] ?? item.strategy}</Badge>
             </div>
-            <dl className="mt-4 space-y-2 text-xs leading-6">
+            <dl className="mt-2 space-y-1 text-xs leading-5">
               <div>
                 <dt className="muted inline">成员：</dt>
                 <dd className="inline break-all">
@@ -405,7 +406,7 @@ export default function GroupsPage({
                 </dd>
               </div>
             </dl>
-            <div className="mt-4 flex flex-wrap gap-2">
+            <div className="mt-2 flex flex-wrap gap-2">
               <button
                 className="btn"
                 disabled={busy}
@@ -449,7 +450,11 @@ export default function GroupsPage({
           </p>
         )}
       </section>
-      <section className="panel space-y-4 p-5 sm:p-6" aria-label="选点模拟">
+      <section
+        id="selection-simulation"
+        className="panel space-y-3 p-3"
+        aria-label="选点模拟"
+      >
         <h2 className="flex items-center gap-2 font-semibold">
           <Search size={17} />
           候选与只读模拟

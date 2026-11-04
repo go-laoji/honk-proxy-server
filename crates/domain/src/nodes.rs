@@ -47,6 +47,8 @@ pub struct NodeQuery {
     pub protocol: Option<String>,
     pub capability: Option<String>,
     pub state: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hide_expired: Option<bool>,
     pub remaining_max_secs: Option<u64>,
     pub sort: Option<String>,
     pub offset: u32,

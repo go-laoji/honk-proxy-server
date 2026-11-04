@@ -213,15 +213,22 @@ test("connections MPA freezes pages and disconnect scopes while new real tunnels
     await page
       .getByRole("textbox", { name: "客户端 IP / CIDR", exact: true })
       .fill("127.0.0.0/8");
+    await expect(
+      page.getByRole("spinbutton", { name: "目标端口", exact: true }),
+    ).toBeVisible();
     await page
       .getByRole("spinbutton", { name: "目标端口", exact: true })
       .fill(String(targetPort));
+    await page.getByLabel("起始时间（本地）").fill("2000-01-01T00:00");
     await page.getByRole("button", { name: "应用筛选", exact: true }).click();
     await expect(page).toHaveURL(/source=127.0.0.0%2F8/);
     await page.reload();
     await expect(
       page.getByRole("textbox", { name: "客户端 IP / CIDR", exact: true }),
     ).toHaveValue("127.0.0.0/8");
+    await expect(page.getByLabel("起始时间（本地）")).toHaveValue(
+      "2000-01-01T00:00",
+    );
     await expect(list.getByRole("article")).toHaveCount(1);
     await page.setViewportSize({ width: 390, height: 844 });
     expect(
