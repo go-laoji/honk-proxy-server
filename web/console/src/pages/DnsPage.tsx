@@ -1,3 +1,5 @@
+import { ConfigFields, ConfigForm } from "../components/config/ConfigFields";
+import { dnsFields } from "../components/config/networkFields";
 import { useEffect, useRef, useState } from "react";
 import {
   Database,
@@ -165,7 +167,7 @@ export default function DnsPage({
   const [domain, setDomain] = useState("");
   const [ip, setIp] = useState("");
   const [context, setContext] = useState<Context>();
-  const [editor, setEditor] = useState<string | null>(null);
+  const [editor, setEditor] = useState<Policy | null>(null);
   const [revision, setRevision] = useState(0);
   const mounted = useRef(true);
   const sequence = useRef(0);
@@ -220,14 +222,15 @@ export default function DnsPage({
     const value = await getJson<Overview>("api/v1/dns?limit=1");
     if (mounted.current) {
       setRevision(value.running_revision);
-      setEditor(JSON.stringify(value.configuration, null, 2));
+      setEditor(value.configuration);
     }
   }
   async function save() {
+    if (!editor) return;
     const result = await postJson<{ state: string; running_revision: number }>(
       "api/v1/dns/save",
       {
-        configuration: JSON.parse(editor ?? ""),
+        configuration: editor,
         expected_revision: revision,
       },
     );
@@ -388,47 +391,43 @@ export default function DnsPage({
               )}
             </div>
             {editor !== null && (
-              <div className="mt-5 space-y-3">
-                <label className="form-field">
-                  DNS 策略 JSON · 基于配置 r{revision}
-                  <textarea
-                    id="dns-policy"
-                    className="field editor-field min-h-96"
-                    value={editor}
-                    onChange={(e) => setEditor(e.target.value)}
-                    spellCheck={false}
-                  />
-                </label>
+              <ConfigForm
+                className="mt-5 space-y-3"
+                label="DNS 策略表单"
+                onSave={() => {
+                  if (!busy) void action("save", save);
+                }}
+              >
+                <h3 className="text-sm font-semibold">
+                  DNS 策略 · 基于配置 r{revision}
+                </h3>
+                <ConfigFields
+                  fields={dnsFields(editor.upstreams, purposes)}
+                  value={editor}
+                  onChange={setEditor}
+                />
                 <p className="muted text-xs leading-6">
-                  监听模式需使用显式 IP 地址的 UDP、TCP、TLS 或 HTTPS
-                  上游。TLS/HTTPS 验证
-                  server_name；代理出口只可引用已启用的静态节点，域名节点需要
-                  proxy_bootstrap_ips。保存前检查配置、信任证书和监听端口，其他用户已改配置时会提示冲突。
-                </p>
-                <p className="muted text-xs leading-6">
-                  Linux DNS 捕获配置在 capture 字段填写 object（自有 eBPF
-                  对象绝对路径）、cgroup（已有 cgroup v2
-                  路径）、port（专用端口，默认
-                  1053）。启用前服务会验证内核并准备监听；运行中修改或关闭捕获需要重启
-                  Daemon，上游、路由和缓存策略可热更新。
+                  监听或捕获模式需要配置显式 IP 上游。加密解析需填写 TLS
+                  服务名称。Linux 捕获启用后，修改或关闭需重启 Daemon。
                 </p>
                 <div className="flex gap-2">
                   <button
                     className="btn-primary"
                     disabled={!!busy}
-                    onClick={() => void action("save", save)}
+                    type="submit"
                   >
                     保存并应用 DNS
                   </button>
                   <button
                     className="btn"
                     disabled={!!busy}
+                    type="button"
                     onClick={() => setEditor(null)}
                   >
                     取消编辑
                   </button>
                 </div>
-              </div>
+              </ConfigForm>
             )}
           </section>
           <section

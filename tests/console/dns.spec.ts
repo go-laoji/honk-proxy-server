@@ -31,18 +31,17 @@ test("DNS MPA resolves through real UDP, shows TTL cache/context, clears and det
     await page
       .getByRole("button", { name: "编辑 DNS 策略", exact: true })
       .click();
-    const editor = page.getByRole("textbox", { name: /DNS 策略 JSON/ });
-    const policy = JSON.parse(await editor.inputValue());
-    policy.upstreams = [
-      {
-        id: "udp-fixture",
-        protocol: "udp",
-        addresses: [`127.0.0.1:${(upstream.address() as AddressInfo).port}`],
-        proxy_bootstrap_ips: [],
-      },
-    ];
-    policy.default_upstream = "udp-fixture";
-    await editor.fill(JSON.stringify(policy));
+    const editor = page.getByRole("form", { name: "DNS 策略表单" });
+    await editor.getByRole("textbox", { name: "上游 ID" }).fill("udp-fixture");
+    await editor
+      .getByRole("combobox", { name: "解析协议" })
+      .selectOption("udp");
+    await editor
+      .getByRole("textbox", { name: /上游 IP 与端口/ })
+      .fill(`127.0.0.1:${(upstream.address() as AddressInfo).port}`);
+    await editor
+      .getByRole("combobox", { name: "默认上游" })
+      .selectOption("udp-fixture");
     await page
       .getByRole("button", { name: "保存并应用 DNS", exact: true })
       .click();
@@ -103,7 +102,10 @@ test("DNS MPA resolves through real UDP, shows TTL cache/context, clears and det
     await page
       .getByRole("button", { name: "编辑 DNS 策略", exact: true })
       .click();
-    expect(JSON.parse(await editor.inputValue()).timeout_ms).toBe(3000);
+    await editor.getByText("监听、缓存与 Linux 捕获", { exact: true }).click();
+    await expect(
+      editor.getByRole("spinbutton", { name: "解析超时（毫秒）" }),
+    ).toHaveValue("3000");
     await page.getByRole("button", { name: "取消编辑", exact: true }).click();
     await page.setViewportSize({ width: 390, height: 844 });
     expect(

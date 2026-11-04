@@ -118,10 +118,12 @@ test("health MPA keeps probes across navigation, recovers lost acknowledgment an
     await page
       .getByRole("button", { name: "编辑检测策略", exact: true })
       .click();
-    const editor = page.getByRole("textbox", { name: /检测策略 JSON/ });
-    const policy = JSON.parse(await editor.inputValue());
+    const editor = page.getByRole("form", { name: "检测策略表单" });
+    const interval = editor.getByRole("spinbutton", { name: "检测间隔（秒）" });
+    await interval.fill("30");
+    const policy = (await (await request.get("/api/v1/health?limit=1")).json())
+      .configuration;
     policy.interval_secs = 30;
-    await editor.fill(JSON.stringify(policy));
     const workspace = await (
       await request.get("/api/v1/config/workspace")
     ).json();
@@ -145,7 +147,7 @@ test("health MPA keeps probes across navigation, recovers lost acknowledgment an
     await page
       .getByRole("button", { name: "编辑检测策略", exact: true })
       .click();
-    expect(JSON.parse(await editor.inputValue()).interval_secs).toBe(30);
+    await expect(interval).toHaveValue("30");
     await page
       .getByRole("button", { name: "保存并应用策略", exact: true })
       .click();
