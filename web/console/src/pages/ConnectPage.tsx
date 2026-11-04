@@ -67,7 +67,7 @@ export default function ConnectPage({
             </p>
           </div>
           {error && (
-            <p role="alert" className="text-sm text-red-600">
+            <p role="alert" className="text-sm text-console-danger">
               {error}
             </p>
           )}

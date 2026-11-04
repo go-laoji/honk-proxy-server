@@ -74,7 +74,7 @@ export default function LocalSystemPanel({
         </button>
       </div>
       {loadError && (
-        <p role="alert" className="mt-3 text-sm text-red-600">
+        <p role="alert" className="mt-3 text-sm text-console-danger">
           {loadError}
         </p>
       )}
@@ -103,7 +103,7 @@ export default function LocalSystemPanel({
             </Badge>
           </div>
           {context?.service_error && (
-            <p role="alert" className="mt-3 text-sm text-red-600">
+            <p role="alert" className="mt-3 text-sm text-console-danger">
               {context.service_error}
             </p>
           )}
@@ -175,7 +175,7 @@ export default function LocalSystemPanel({
           <div className="mt-6 border-t border-console-border pt-5">
             <h3 className="text-sm font-medium">系统代理原值恢复</h3>
             {context?.network_changes_disabled && (
-              <p role="status" className="mt-2 text-sm text-amber-700">
+              <p role="status" className="mt-2 text-sm text-console-warning">
                 开发验收保护已开启：当前应用只读检查系统代理，修改与恢复均已停用。
               </p>
             )}
@@ -280,7 +280,7 @@ export default function LocalSystemPanel({
         </>
       )}
       {error && (
-        <p role="alert" className="mt-4 break-all text-sm text-red-600">
+        <p role="alert" className="mt-4 break-all text-sm text-console-danger">
           {error}
         </p>
       )}

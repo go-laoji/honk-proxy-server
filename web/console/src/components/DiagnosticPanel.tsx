@@ -105,7 +105,7 @@ export function TaskControlPanel({
         )}
       </div>
       {error && (
-        <p role="alert" className="break-all text-xs text-red-600">
+        <p role="alert" className="break-all text-xs text-console-danger">
           {error}
         </p>
       )}
@@ -285,7 +285,7 @@ export default function DiagnosticPanel() {
         </details>
       )}
       {error && (
-        <p role="alert" className="break-all text-xs text-red-600">
+        <p role="alert" className="break-all text-xs text-console-danger">
           {error}
         </p>
       )}

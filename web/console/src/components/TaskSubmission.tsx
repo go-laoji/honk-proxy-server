@@ -196,7 +196,10 @@ export default function TaskSubmission({
             </a>
           </div>
           {accepted && (
-            <p role="status" className="break-words text-sm text-emerald-700">
+            <p
+              role="status"
+              className="break-words text-sm text-console-success"
+            >
               任务 #{accepted.id}{" "}
               已接受。终态与结果以任务详情为准；同一请求再次提交会返回该任务。
             </p>
@@ -204,7 +207,7 @@ export default function TaskSubmission({
         </form>
       )}
       {error && (
-        <p role="alert" className="break-words text-sm text-red-600">
+        <p role="alert" className="break-words text-sm text-console-danger">
           {error}。若等待中断，可按页面中的同一请求 ID 查询；不要盲目换 ID
           重交。
         </p>

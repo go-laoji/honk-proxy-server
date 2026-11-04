@@ -1,14 +1,20 @@
 import { expect, test, type Page } from "@playwright/test";
 
-async function contrast(page: Page, text: string, background: string) {
+async function contrast(
+  page: Page,
+  text: string,
+  background: string,
+  foregroundProperty = "color",
+  backgroundProperty = "background-color",
+) {
   return page.evaluate(
-    ({ text, background }) => {
+    ({ text, background, foregroundProperty, backgroundProperty }) => {
       const canvas = document.createElement("canvas");
       canvas.width = canvas.height = 1;
       const context = canvas.getContext("2d")!;
       const luminance = (color: string) => {
         context.clearRect(0, 0, 1, 1);
-        context.fillStyle = color;
+        context.fillStyle = color.trim();
         context.fillRect(0, 0, 1, 1);
         const channels = [...context.getImageData(0, 0, 1, 1).data]
           .slice(0, 3)
@@ -23,17 +29,21 @@ async function contrast(page: Page, text: string, background: string) {
         );
       };
       const foreground = luminance(
-        getComputedStyle(document.querySelector(text)!).color,
+        getComputedStyle(document.querySelector(text)!).getPropertyValue(
+          foregroundProperty,
+        ),
       );
       const surface = luminance(
-        getComputedStyle(document.querySelector(background)!).backgroundColor,
+        getComputedStyle(document.querySelector(background)!).getPropertyValue(
+          backgroundProperty,
+        ),
       );
       return (
         (Math.max(foreground, surface) + 0.05) /
         (Math.min(foreground, surface) + 0.05)
       );
     },
-    { text, background },
+    { text, background, foregroundProperty, backgroundProperty },
   );
 }
 
@@ -46,21 +56,54 @@ test("both themes keep navigation, primary actions and secondary text readable a
   for (const mode of ["light", "dark"]) {
     if (mode === "dark")
       await page.getByRole("button", { name: "切换深色模式" }).click();
-    for (const [text, background] of [
+    for (const [text, background, foreground, surface] of [
       [".nav-link:not([aria-current])", ".sidebar"],
       [".nav-link[aria-current]", ".nav-link[aria-current]"],
       [".nav-group-label", ".sidebar"],
       [".btn-primary", ".btn-primary"],
+      [".btn-primary", ".btn-primary", "color", "--action-end"],
+      [".field", ".field"],
       [".panel p.muted", ".panel"],
+      [
+        ".status-badge[data-active='true']",
+        ".status-badge[data-active='true']",
+      ],
     ])
       await expect
-        .poll(() => contrast(page, text, background), {
+        .poll(() => contrast(page, text, background, foreground, surface), {
           message: `${mode} ${text}`,
         })
         .toBeGreaterThanOrEqual(4.5);
+    await expect
+      .poll(() => contrast(page, ".field", ".field", "border-top-color"))
+      .toBeGreaterThanOrEqual(3);
+    for (const [icon, surface, minimum] of [
+      [".nav-link:not([aria-current]) .nav-icon svg", ".sidebar", 7],
+      [".nav-link[aria-current] .nav-icon svg", ".nav-link[aria-current]", 6],
+      [".page-heading-mark svg", ".page-heading-mark", 6],
+      [".theme-icon svg", ".app-header", 7],
+      [".page-heading .action-icon svg", ".page-heading .btn", 7],
+    ] as const) {
+      await expect
+        .poll(() => contrast(page, icon, surface, "stroke"), {
+          message: `${mode} ${icon}`,
+        })
+        .toBeGreaterThanOrEqual(minimum);
+    }
     await page.getByRole("link", { name: "运行概览", exact: true }).click();
     await expect(page.locator(".stat-card").first()).toBeVisible();
     await expect(page.getByRole("figure").first()).toBeVisible();
+    await expect
+      .poll(() => contrast(page, ".runtime-notice", ".runtime-notice"))
+      .toBeGreaterThanOrEqual(4.5);
+    for (const series of ["down", "up", "active", "failed"]) {
+      const chart = `.chart-card[data-series='${series}']`;
+      await expect
+        .poll(() => contrast(page, chart, chart, "--metric-accent"), {
+          message: `${mode} ${series} chart`,
+        })
+        .toBeGreaterThanOrEqual(3);
+    }
     await page.screenshot({
       path: testInfo.outputPath(`overview-${mode}.png`),
       fullPage: true,

@@ -100,7 +100,7 @@ export default function LinuxDiagnosticsPanel() {
         epoch 和对象代次。
       </p>
       {error && (
-        <p role="alert" className="mt-3 text-red-600">
+        <p role="alert" className="mt-3 text-console-danger">
           {error}
         </p>
       )}

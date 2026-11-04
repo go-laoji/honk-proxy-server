@@ -45,7 +45,7 @@ export default function FeedControls({
       {state.message && (
         <p
           role={state.state === "error" ? "alert" : undefined}
-          className="break-words text-xs leading-6 text-amber-700 dark:text-amber-400"
+          className="break-words text-xs leading-6 text-console-warning"
         >
           {state.message}。数据保留在最后成功时刻。
         </p>

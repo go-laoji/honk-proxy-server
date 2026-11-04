@@ -194,7 +194,7 @@ export default function RuleImportPanel({
         </div>
       )}
       {error && (
-        <p role="alert" className="break-all text-sm text-red-600">
+        <p role="alert" className="break-all text-sm text-console-danger">
           {error}
         </p>
       )}

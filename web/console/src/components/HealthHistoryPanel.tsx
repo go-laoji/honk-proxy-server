@@ -96,7 +96,7 @@ export default function HealthHistoryPanel({ node }: { node?: string }) {
         探测响应提供出口地址，地域未知；每页最多 100 条。未配置画像时显示未知。
       </p>
       {error && (
-        <p role="alert" className="break-all text-sm text-red-600">
+        <p role="alert" className="break-all text-sm text-console-danger">
           {error}
         </p>
       )}

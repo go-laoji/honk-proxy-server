@@ -86,7 +86,7 @@ export default function ProfilesPanel() {
               <p className="font-medium">
                 {p.name}{" "}
                 {profiles.selected === p.id && (
-                  <span className="text-emerald-600">· 已选中</span>
+                  <span className="text-console-success">· 已选中</span>
                 )}
               </p>
               <p className="muted break-all text-xs">
@@ -212,7 +212,7 @@ export default function ProfilesPanel() {
         </div>
       </form>
       {error && (
-        <p role="alert" className="mt-3 break-all text-sm text-red-600">
+        <p role="alert" className="mt-3 break-all text-sm text-console-danger">
           {error}
         </p>
       )}

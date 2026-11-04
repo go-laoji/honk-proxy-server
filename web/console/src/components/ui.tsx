@@ -20,13 +20,13 @@ export function Stat({
   value,
   detail,
   icon: Icon,
-  tone = "brand",
+  tone,
 }: {
   title: string;
   value: string;
   detail: string;
   icon: ComponentType<{ size?: number; className?: string }>;
-  tone?: "brand" | "blue" | "amber" | "neutral";
+  tone?: "down" | "up" | "active" | "failed";
 }) {
   return (
     <div className="panel panel-body stat-card min-w-0" data-tone={tone}>

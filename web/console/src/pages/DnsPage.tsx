@@ -246,7 +246,7 @@ export default function DnsPage({
       {(error || loadError) && (
         <p
           role="alert"
-          className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
+          className="rounded-xl border border-console-danger-border bg-console-danger-soft p-4 text-sm text-console-danger"
         >
           {error || loadError}
         </p>
@@ -651,7 +651,7 @@ export default function DnsPage({
                     : "没有有效的本地 DNS 观测，使用 IP / 未知域名。"}
                 </p>
                 {context.ambiguous && (
-                  <p className="mt-2 text-amber-600">
+                  <p className="mt-2 text-console-warning">
                     此 IP 对应多个域名，无法据此确定当前连接的目标域名。
                   </p>
                 )}

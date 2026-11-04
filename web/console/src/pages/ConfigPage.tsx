@@ -196,7 +196,7 @@ export default function ConfigPage({
             此处只读展示脱敏版本内容。编辑器保持共享草稿；保存候选与激活分别执行。
           </p>
           {linkedError ? (
-            <p role="alert" className="break-words text-sm text-red-600">
+            <p role="alert" className="break-words text-sm text-console-danger">
               {linkedError}
             </p>
           ) : linkedRevision ? (
@@ -240,7 +240,7 @@ export default function ConfigPage({
         />
       </div>
       {workspace.pending_restart.length > 0 && (
-        <p className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-7 text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+        <p className="mt-5 rounded-xl border border-console-warning-border bg-console-warning-soft p-4 text-sm leading-7 text-console-warning">
           期望配置尚需重启：{workspace.pending_restart.join("、")}。当前仍运行 r
           {workspace.running_revision}，不会将保存成功显示为已运行。
         </p>
@@ -248,7 +248,7 @@ export default function ConfigPage({
       {error && (
         <div
           role="alert"
-          className="mt-5 rounded-xl bg-red-50 p-4 text-sm leading-7 text-red-700 dark:bg-red-950 dark:text-red-200"
+          className="mt-5 rounded-xl bg-console-danger-soft p-4 text-sm leading-7 text-console-danger"
         >
           {error}
           <p>
@@ -430,10 +430,7 @@ export default function ConfigPage({
             </Badge>
           </div>
           {validation.diagnostics.map((issue, index) => (
-            <p
-              key={index}
-              className="mt-3 text-sm text-red-700 dark:text-red-300"
-            >
+            <p key={index} className="mt-3 text-sm text-console-danger">
               {issue.path}
               {issue.line
                 ? ` · 第 ${issue.line} 行，第 ${issue.column} 列`
@@ -508,7 +505,7 @@ export default function ConfigPage({
                       </span>
                     )}
                     {revision.id === workspace.running_revision && (
-                      <span className="ml-2 text-xs text-emerald-600">
+                      <span className="ml-2 text-xs text-console-success">
                         运行
                       </span>
                     )}

@@ -80,23 +80,20 @@ export default function InboundsPage({
         </p>
       </div>
       {!proxy.eligible_upstreams && (
-        <p className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-7 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+        <p className="mt-5 rounded-xl border border-console-warning-border bg-console-warning-soft p-4 text-sm leading-7 text-console-warning">
           默认选择当前没有合格的代理池节点。规则可以明确直连或选择其他组，其余目标按规则处理；直连需要明确配置。
         </p>
       )}
       {error && (
         <p
           role="alert"
-          className="mt-5 rounded-xl bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950 dark:text-red-200"
+          className="mt-5 rounded-xl bg-console-danger-soft p-4 text-sm text-console-danger"
         >
           {error}。操作结果以刷新后的服务状态为准。
         </p>
       )}
       {message && (
-        <p
-          role="status"
-          className="mt-5 text-sm text-emerald-700 dark:text-emerald-300"
-        >
+        <p role="status" className="mt-5 text-sm text-console-success">
           {message}
         </p>
       )}

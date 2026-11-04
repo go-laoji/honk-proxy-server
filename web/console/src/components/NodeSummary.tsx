@@ -70,7 +70,7 @@ export function SourceStats({ sources }: { sources: ProviderNodeSummary[] }) {
               : ""}
           </p>
           {source.latest_error_code && (
-            <p className="break-all text-amber-700">
+            <p className="break-all text-console-warning">
               最近异常：{source.latest_error_code}
             </p>
           )}
@@ -122,7 +122,7 @@ export default function NodeSummary({ endpoint }: { endpoint: string }) {
         </>
       )}
       {error && (
-        <p role="alert" className="text-sm text-amber-700">
+        <p role="alert" className="text-sm text-console-warning">
           节点摘要暂不可用：{error}
         </p>
       )}

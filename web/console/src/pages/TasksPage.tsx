@@ -347,7 +347,7 @@ export default function TasksPage() {
       {notice && (
         <p
           role="status"
-          className="panel panel-body break-words text-sm text-amber-700"
+          className="panel panel-body break-words text-sm text-console-warning"
         >
           {notice}
         </p>
@@ -355,7 +355,7 @@ export default function TasksPage() {
       {error && (
         <p
           role="alert"
-          className="panel panel-body break-words text-sm text-red-600"
+          className="panel panel-body break-words text-sm text-console-danger"
         >
           任务读取失败：{error}
         </p>
@@ -375,7 +375,7 @@ export default function TasksPage() {
             </button>
           </div>
           {detailError ? (
-            <p className="break-words p-5 text-sm text-amber-700">
+            <p className="break-words p-5 text-sm text-console-warning">
               {detailError}
             </p>
           ) : detail && String(detail.id) === detailId ? (
@@ -512,7 +512,7 @@ export default function TasksPage() {
                 {task.succeeded} · 失败 {task.failed} · 跳过 {task.skipped}
               </p>
               {task.error_code && (
-                <p className="break-words text-amber-700">
+                <p className="break-words text-console-warning">
                   {taskErrors[task.error_code] ?? task.error_code}
                 </p>
               )}

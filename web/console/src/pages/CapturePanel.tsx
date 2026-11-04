@@ -114,7 +114,7 @@ export default function CapturePanel({
         </button>
       </div>
       {(error || loadError) && (
-        <p role="alert" className="break-words p-5 text-sm text-red-600">
+        <p role="alert" className="break-words p-5 text-sm text-console-danger">
           {error || loadError}
         </p>
       )}
@@ -396,10 +396,7 @@ export default function CapturePanel({
             </button>
           </fieldset>
           {supported && view && editorRevision !== view.desired_revision && (
-            <p
-              role="status"
-              className="text-sm text-amber-700 dark:text-amber-300"
-            >
+            <p role="status" className="text-sm text-console-warning">
               配置已变化，当前编辑内容未覆盖。请载入最新捕获配置后编辑。
             </p>
           )}

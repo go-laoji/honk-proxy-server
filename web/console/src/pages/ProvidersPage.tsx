@@ -357,7 +357,10 @@ export default function ProvidersPage({
     return <div className="panel p-8 text-sm muted">正在读取供应商配置…</div>;
   if (!loaded)
     return (
-      <div role="alert" className="panel panel-body text-sm text-red-700">
+      <div
+        role="alert"
+        className="panel panel-body text-sm text-console-danger"
+      >
         {error}
         <button
           className="btn ml-3"
@@ -373,7 +376,7 @@ export default function ProvidersPage({
       {error && (
         <div
           role="alert"
-          className="panel panel-body break-words border-red-200 text-sm text-red-700 dark:text-red-300"
+          className="panel panel-body break-words border-console-danger-border text-sm text-console-danger"
         >
           {error}
           <button
@@ -521,7 +524,7 @@ export default function ProvidersPage({
                   {task.error_code ? ` · ${task.error_code}` : ""}
                 </p>
                 {task.state === "outcome_unknown" && (
-                  <p className="mt-2 text-amber-700 dark:text-amber-300">
+                  <p className="mt-2 text-console-warning">
                     本次提取可能已扣费。没有自动重试；再次发起新请求前请检查供应商记录。
                   </p>
                 )}
@@ -811,7 +814,7 @@ export default function ProvidersPage({
             </button>
             {editingId && (
               <button
-                className="btn text-red-600"
+                className="btn text-console-danger"
                 type="button"
                 disabled={!!busy}
                 onClick={() =>

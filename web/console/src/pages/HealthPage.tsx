@@ -245,7 +245,7 @@ export default function HealthPage({
       {(error || loadError) && (
         <div
           role="alert"
-          className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
+          className="rounded-xl border border-console-danger-border bg-console-danger-soft p-4 text-sm text-console-danger"
         >
           {error || loadError}
         </div>
@@ -352,7 +352,7 @@ export default function HealthPage({
               </button>
             </form>
             {pending && (
-              <div className="m-5 rounded-xl bg-amber-50 p-4 text-xs leading-6 text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+              <div className="m-5 rounded-xl bg-console-warning-soft p-4 text-xs leading-6 text-console-warning">
                 <p>上次检测受理结果尚未确认 · {pending.request_id}</p>
                 <button
                   className="btn mt-2"
