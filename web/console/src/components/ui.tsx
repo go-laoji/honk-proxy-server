@@ -29,17 +29,17 @@ export function Stat({
   tone?: "brand" | "blue" | "amber" | "neutral";
 }) {
   return (
-    <div className="panel stat-card min-w-0 p-3.5 sm:p-4" data-tone={tone}>
+    <div className="panel stat-card min-w-0 p-3" data-tone={tone}>
       <div className="flex items-center gap-2">
         <span className="stat-icon" aria-hidden="true">
           <Icon size={15} />
         </span>
         <p className="muted text-xs font-medium">{title}</p>
       </div>
-      <p className="mt-2 text-xl font-semibold tracking-tight tabular-nums sm:text-2xl">
+      <p className="mt-1.5 text-xl font-semibold tracking-tight tabular-nums sm:text-2xl">
         {value}
       </p>
-      <p className="muted mt-1 text-xs leading-5">{detail}</p>
+      <p className="muted mt-0.5 text-xs leading-5">{detail}</p>
     </div>
   );
 }
@@ -50,7 +50,7 @@ export function Details({ rows }: { rows: [string, ReactNode][] }) {
       {rows.map(([label, value]) => (
         <div
           key={label}
-          className="flex flex-col gap-1 px-5 py-4 text-sm sm:flex-row sm:justify-between sm:gap-6"
+          className="flex flex-col gap-1 px-4 py-2.5 text-sm sm:flex-row sm:justify-between sm:gap-4"
         >
           <dt className="muted shrink-0">{label}</dt>
           <dd className="break-all sm:text-right">{value}</dd>

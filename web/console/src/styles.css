@@ -40,7 +40,7 @@
 
 :root {
   color-scheme: light;
-  scroll-padding-top: 4rem;
+  scroll-padding-top: 3.25rem;
   --page: #fbfaf7;
   --surface: #ffffff;
   --surface-soft: #f6f3ee;
@@ -130,7 +130,7 @@
   .btn {
     border: 1px solid var(--border);
     background: var(--surface);
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors;
+    @apply inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors;
   }
   .btn:not(:disabled):hover {
     background: var(--accent-soft);
@@ -138,7 +138,7 @@
     color: var(--accent-ink);
   }
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors;
+    @apply inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors;
     background: var(--accent);
     color: var(--page);
   }
@@ -152,7 +152,7 @@
   .input {
     border: 1px solid var(--border);
     background: var(--surface);
-    @apply w-full rounded-lg px-3 py-2.5 text-sm transition-colors;
+    @apply min-h-8 w-full rounded-md px-2.5 py-1.5 text-sm transition-colors;
   }
   .field:hover,
   .input:hover {
@@ -227,7 +227,7 @@
     background: var(--success-ink);
   }
   .app-header {
-    @apply sticky top-0 z-20 flex h-14 items-center justify-between gap-3 border-b px-3 backdrop-blur sm:px-7 xl:px-9;
+    @apply sticky top-0 z-20 flex h-11 items-center justify-between gap-3 border-b px-3 backdrop-blur sm:px-4 xl:px-5;
     border-color: var(--border);
     background: color-mix(in srgb, var(--page) 94%, transparent);
   }
@@ -240,10 +240,10 @@
     color: var(--accent-ink);
   }
   .page-heading {
-    @apply mb-5 flex flex-wrap items-center justify-between gap-x-6 gap-y-3;
+    @apply mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2;
   }
   .page-heading-mark {
-    @apply inline-flex size-10 shrink-0 items-center justify-center rounded-lg;
+    @apply inline-flex size-8 shrink-0 items-center justify-center rounded-md;
     background: var(--accent-soft);
     color: var(--accent-ink);
   }
@@ -272,10 +272,10 @@
     background: color-mix(in srgb, var(--stat-accent) 10%, var(--surface));
   }
   .metric-grid {
-    @apply grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4;
+    @apply grid grid-cols-2 gap-2 lg:grid-cols-4;
   }
   .dashboard-status > div {
-    @apply flex min-h-11 flex-wrap items-center justify-between gap-2 py-2 text-sm;
+    @apply flex min-h-9 flex-wrap items-center justify-between gap-2 py-1.5 text-sm;
     border-block-end: 1px solid var(--border);
   }
   .dashboard-status dt {
