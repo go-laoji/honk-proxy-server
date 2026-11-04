@@ -39,11 +39,11 @@ export function FilterStartTime({
 }) {
   const [timestamp, setTimestamp] = useState(value);
   return (
-    <label className="col-span-2 text-xs sm:col-span-1">
+    <label className="form-field col-span-2 sm:col-span-1">
       起始时间（本地）
       <input type="hidden" name={name} value={timestamp} />
       <input
-        className="field mt-1"
+        className="field"
         type="datetime-local"
         step="0.001"
         min={localDateTime("0")}

@@ -63,7 +63,7 @@ export function TaskControlPanel({
   }
   return (
     <div
-      className="space-y-2 rounded-xl border border-slate-200 p-4 dark:border-slate-700"
+      className="space-y-2 rounded-xl border border-console-border p-4"
       role="group"
       aria-label="任务控制"
     >
@@ -201,14 +201,14 @@ export default function DiagnosticPanel() {
     }
   }
   return (
-    <section className="panel space-y-4 p-5" aria-label="脱敏诊断包">
+    <section className="panel panel-body space-y-4" aria-label="脱敏诊断包">
       <h2 className="font-semibold">脱敏诊断包</h2>
       <p className="muted text-xs leading-6">
         后台收集版本、能力、计数和状态元数据。窗口 1–60
         分钟，历史有界；不导出代理地址、供应商凭据、配置正文或业务内容。此文件不是数据库一致性备份。离开页面不会终止已接受任务。
       </p>
       <div className="flex flex-wrap items-center gap-3">
-        <label className="text-xs">
+        <label className="form-field">
           诊断窗口{" "}
           <select
             aria-label="诊断窗口"

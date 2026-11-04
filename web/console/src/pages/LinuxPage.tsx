@@ -44,7 +44,7 @@ export default function LinuxPage({
     return () => controller.abort();
   }, [attempt]);
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <CapturePanel
         key={`${data.endpoint}:${data.status.instance_id}`}
         refreshService={refreshService}
@@ -53,7 +53,7 @@ export default function LinuxPage({
         key={`${data.endpoint}:${data.status.instance_id}`}
       />
       <section className="panel overflow-hidden" aria-label="Linux 环境预检">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-5 dark:border-slate-800">
+        <div className="panel-header panel-toolbar">
           <div>
             <h2 className="font-semibold">目标服务环境预检</h2>
             <p className="muted mt-2 text-xs">
@@ -81,11 +81,11 @@ export default function LinuxPage({
         )}
         {preflight ? (
           <>
-            <p className="muted border-b border-slate-100 px-5 py-4 text-xs dark:border-slate-800">
+            <p className="muted border-b border-console-border px-5 py-4 text-xs">
               平台：{preflight.platform} · 内核：
               {preflight.kernel_release ?? "不适用"} · {preflight.scope}
             </p>
-            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+            <div className="divide-y divide-console-border">
               {preflight.checks.map((check) => (
                 <div key={check.id} className="p-5">
                   <div className="flex items-center justify-between gap-3">
@@ -105,7 +105,7 @@ export default function LinuxPage({
           <p className="muted p-6 text-sm">正在读取目标服务内核条件…</p>
         )}
       </section>
-      <section className="panel p-5">
+      <section className="panel panel-body">
         <h2 className="font-semibold">本机隔离验证</h2>
         <p className="muted mt-3 text-sm leading-7">
           在目标 Linux 服务器本地运行
@@ -113,7 +113,7 @@ export default function LinuxPage({
           更新与回收。它只操作新建的测试
           cgroup，不启用生产流量接管；远端服务地址不会把该命令变成远程执行。
         </p>
-        <pre className="mt-4 overflow-x-auto rounded-xl bg-slate-950 p-4 text-xs leading-6 text-slate-100">
+        <pre className="code-block mt-4">
           <code>
             hps --output json linux self-test --object /opt/hps/hps-ebpf
           </code>

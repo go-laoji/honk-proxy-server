@@ -83,7 +83,7 @@ export default function LinuxDiagnosticsPanel() {
     JSON.stringify(current.capture.map_ids) ===
       JSON.stringify(previous.capture.map_ids);
   return (
-    <section className="panel p-5" aria-label="只读拓扑与内核诊断">
+    <section className="panel panel-body" aria-label="只读拓扑与内核诊断">
       <div className="flex items-center justify-between gap-3">
         <h2 className="font-semibold">只读拓扑与内核诊断</h2>
         <button
@@ -111,7 +111,7 @@ export default function LinuxDiagnosticsPanel() {
             {current.topology.network_namespace ?? "不可读"} · cgroup{" "}
             {current.topology.cgroup_namespace ?? "不可读"}
           </p>
-          <pre className="overflow-auto rounded-lg bg-slate-100 p-3 text-xs dark:bg-slate-900">
+          <pre className="overflow-auto rounded-lg bg-console-soft p-3 text-xs">
             {current.topology.cgroup_membership ??
               "当前平台不提供 Linux cgroup"}
           </pre>

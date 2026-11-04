@@ -104,7 +104,7 @@ export default function ManualNodePanel({
     }
   }
   return (
-    <section className="panel space-y-5 p-5" aria-label="手动添加节点">
+    <section className="panel panel-body space-y-5" aria-label="手动添加节点">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="font-semibold">手动添加代理节点</h2>
@@ -122,15 +122,13 @@ export default function ManualNodePanel({
           <X size={16} />
         </button>
       </div>
-      <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
-        <label className="block text-xs" htmlFor="manual-proxy-url">
-          代理链接（可选，用于快速填写）
-        </label>
-        <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+      <div className="form-field rounded-xl border border-console-border p-4">
+        <label htmlFor="manual-proxy-url">代理链接（可选，用于快速填写）</label>
+        <div className="flex flex-col gap-2 sm:flex-row">
           <input
             id="manual-proxy-url"
             autoFocus
-            className="field min-w-0 flex-1"
+            className="field flex-1"
             type="password"
             autoComplete="off"
             spellCheck={false}
@@ -148,7 +146,7 @@ export default function ManualNodePanel({
             填入表单
           </button>
         </div>
-        <p className="muted mt-2 text-xs">
+        <p className="muted font-normal">
           支持 HTTP、HTTPS、SOCKS5 / SOCKS5h；链接和密码默认隐藏。
         </p>
       </div>
@@ -158,25 +156,25 @@ export default function ManualNodePanel({
         className="space-y-4"
       >
         <fieldset disabled={busy} className="grid min-w-0 gap-4 sm:grid-cols-2">
-          <div className="text-xs">
+          <div className="form-field">
             <label htmlFor="manual-node-id">节点标识（可选）</label>
             <input
               id="manual-node-id"
-              className="field mt-1"
+              className="field"
               aria-describedby="manual-node-id-hint"
               value={form.id}
               maxLength={64}
               placeholder="留空自动生成，如 office-proxy"
               onChange={(e) => change("id", e.target.value)}
             />
-            <span id="manual-node-id-hint" className="muted mt-1 block">
+            <span id="manual-node-id-hint" className="muted font-normal">
               自定义标识支持字母、数字、下划线和连字符。
             </span>
           </div>
-          <label className="text-xs">
+          <label className="form-field">
             代理协议
             <select
-              className="field mt-1"
+              className="field"
               value={form.protocol}
               onChange={(e) => {
                 const protocol = e.target.value as ManualProtocol;
@@ -196,10 +194,10 @@ export default function ManualNodePanel({
               <option value="socks5">SOCKS5</option>
             </select>
           </label>
-          <label className="text-xs">
+          <label className="form-field">
             IP 或域名
             <input
-              className="field mt-1"
+              className="field"
               value={form.host}
               required
               autoComplete="off"
@@ -208,10 +206,10 @@ export default function ManualNodePanel({
               onChange={(e) => change("host", e.target.value)}
             />
           </label>
-          <label className="text-xs">
+          <label className="form-field">
             代理端口
             <input
-              className="field mt-1"
+              className="field"
               type="number"
               min={1}
               max={65535}
@@ -221,22 +219,22 @@ export default function ManualNodePanel({
               onChange={(e) => change("port", e.target.value)}
             />
           </label>
-          <label className="text-xs">
+          <label className="form-field">
             上游用户名（可选）
             <input
-              className="field mt-1"
+              className="field"
               autoComplete="off"
               spellCheck={false}
               value={form.username}
               onChange={(e) => change("username", e.target.value)}
             />
           </label>
-          <div className="text-xs">
+          <div className="form-field">
             <label htmlFor="manual-proxy-password">上游密码（可选）</label>
-            <div className="mt-1 flex gap-2">
+            <div className="flex gap-2">
               <input
                 id="manual-proxy-password"
-                className="field min-w-0 flex-1"
+                className="field flex-1"
                 type={showPassword ? "text" : "password"}
                 autoComplete="new-password"
                 value={form.password}
@@ -253,19 +251,19 @@ export default function ManualNodePanel({
               </button>
             </div>
           </div>
-          <div className="text-xs">
+          <div className="form-field">
             <label htmlFor="manual-node-expiry">
               到期时间（可选，本地时间）
             </label>
             <input
               id="manual-node-expiry"
-              className="field mt-1"
+              className="field"
               aria-describedby="manual-node-expiry-hint"
               type="datetime-local"
               value={form.expires}
               onChange={(e) => change("expires", e.target.value)}
             />
-            <span id="manual-node-expiry-hint" className="muted mt-1 block">
+            <span id="manual-node-expiry-hint" className="muted font-normal">
               长效节点可留空；短效节点请填写供应商实际到期时间。
             </span>
           </div>

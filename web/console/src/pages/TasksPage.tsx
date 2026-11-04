@@ -193,7 +193,7 @@ export default function TasksPage() {
   const source = detail && epoch ? sourceLink(detail, epoch) : null;
   return (
     <div className="space-y-3">
-      <section className="panel space-y-2.5 p-3">
+      <section className="panel panel-body space-y-2.5">
         <div>
           <h2 className="flex items-center gap-2 font-semibold">
             <ListChecks size={19} />
@@ -216,10 +216,10 @@ export default function TasksPage() {
           aria-label="任务筛选"
         >
           <div className="filter-grid">
-            <label className="text-xs">
+            <label className="form-field">
               任务类型
               <select
-                className="field mt-1"
+                className="field"
                 name="kind"
                 defaultValue={params.get("kind") ?? ""}
               >
@@ -231,10 +231,10 @@ export default function TasksPage() {
                 ))}
               </select>
             </label>
-            <label className="text-xs">
+            <label className="form-field">
               任务状态
               <select
-                className="field mt-1"
+                className="field"
                 name="state"
                 defaultValue={params.get("state") ?? ""}
               >
@@ -246,10 +246,10 @@ export default function TasksPage() {
                 ))}
               </select>
             </label>
-            <label className="text-xs">
+            <label className="form-field">
               请求 / 幂等键
               <input
-                className="field mt-1"
+                className="field"
                 name="request_id"
                 defaultValue={params.get("request_id") ?? ""}
               />
@@ -280,27 +280,27 @@ export default function TasksPage() {
               (params.get("limit") ?? "50") !== "50"
             }
           >
-            <label className="text-xs">
+            <label className="form-field">
               来源记录引用
               <input
-                className="field mt-1"
+                className="field"
                 name="source_ref"
                 placeholder="provider:1 / health:1 / activation:1"
                 defaultValue={params.get("source_ref") ?? ""}
               />
             </label>
-            <label className="text-xs">
+            <label className="form-field">
               资源类型
               <input
-                className="field mt-1"
+                className="field"
                 name="resource_kind"
                 defaultValue={params.get("resource_kind") ?? ""}
               />
             </label>
-            <label className="text-xs">
+            <label className="form-field">
               资源 ID
               <input
-                className="field mt-1"
+                className="field"
                 name="resource_id"
                 defaultValue={params.get("resource_id") ?? ""}
               />
@@ -309,10 +309,10 @@ export default function TasksPage() {
               name="created_after_unix_ms"
               value={params.get("created_after_unix_ms") ?? ""}
             />
-            <label className="text-xs">
+            <label className="form-field">
               每页
               <input
-                className="field mt-1"
+                className="field"
                 name="limit"
                 type="number"
                 min="1"
@@ -347,13 +347,16 @@ export default function TasksPage() {
       {notice && (
         <p
           role="status"
-          className="panel break-words p-4 text-sm text-amber-700"
+          className="panel panel-body break-words text-sm text-amber-700"
         >
           {notice}
         </p>
       )}
       {error && (
-        <p role="alert" className="panel break-words p-4 text-sm text-red-600">
+        <p
+          role="alert"
+          className="panel panel-body break-words text-sm text-red-600"
+        >
           任务读取失败：{error}
         </p>
       )}
@@ -434,19 +437,22 @@ export default function TasksPage() {
                 />
                 <div className="flex flex-wrap gap-4">
                   {source && (
-                    <a className="text-sm text-blue-600" href={source.href}>
+                    <a
+                      className="text-sm text-console-accent-ink"
+                      href={source.href}
+                    >
                       {source.label} →
                     </a>
                   )}
                   <a
-                    className="text-sm text-blue-600"
+                    className="text-sm text-console-accent-ink"
                     href={`./events.html?task_id=${detail.id}&epoch=${expected ?? epoch}`}
                   >
                     该任务的结构化事件 →
                   </a>
                 </div>
                 {detail.result !== null && (
-                  <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-all rounded-xl bg-slate-50 p-4 text-xs dark:bg-slate-800">
+                  <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-all rounded-xl bg-console-soft p-4 text-xs">
                     {JSON.stringify(detail.result, null, 2)}
                   </pre>
                 )}

@@ -68,7 +68,9 @@ test("controller MPA shows reservations, pauses in-flight refill and resumes to 
     await page
       .getByRole("button", { name: "保存并激活来源", exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText("来源配置已激活");
+    await expect(page.getByRole("main").getByRole("status")).toContainText(
+      "来源配置已激活",
+    );
     await page.getByRole("link", { name: "预算控制测试", exact: true }).click();
     await expect(
       page.getByRole("region", { name: "补池控制器" }),
@@ -77,7 +79,9 @@ test("controller MPA shows reservations, pauses in-flight refill and resumes to 
     await page
       .getByRole("button", { name: "暂停全部提取", exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText("后续提取已暂停");
+    await expect(page.getByRole("main").getByRole("status")).toContainText(
+      "后续提取已暂停",
+    );
     const reserved = await (
       await request.get("/api/v1/providers/refill-vendor/controller")
     ).json();
@@ -97,7 +101,9 @@ test("controller MPA shows reservations, pauses in-flight refill and resumes to 
     await page
       .getByRole("button", { name: "确认结果并恢复提取", exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText("预算和冷却保持不变");
+    await expect(page.getByRole("main").getByRole("status")).toContainText(
+      "预算和冷却保持不变",
+    );
     await expect.poll(() => quantities.length).toBe(2);
     await expect(page.getByTestId("controller-decision")).toHaveText(
       "已达到目标库存",

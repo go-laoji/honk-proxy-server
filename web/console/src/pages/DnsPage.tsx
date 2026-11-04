@@ -251,7 +251,7 @@ export default function DnsPage({
       {info && (
         <p
           role="status"
-          className="rounded-xl bg-blue-50 p-4 text-sm text-blue-700 dark:bg-blue-950 dark:text-blue-200"
+          className="rounded-xl bg-console-accent-soft p-4 text-sm text-console-accent-ink"
         >
           {info}
         </p>
@@ -308,7 +308,7 @@ export default function DnsPage({
           </div>
           <section
             id="dns-routing"
-            className="panel p-3"
+            className="panel panel-body"
             aria-label="DNS 上游与路由"
           >
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -336,7 +336,7 @@ export default function DnsPage({
               {data.configuration.upstreams.map((up) => (
                 <div
                   key={up.id}
-                  className="rounded-xl bg-slate-50 p-4 text-sm dark:bg-slate-800"
+                  className="rounded-xl bg-console-soft p-4 text-sm"
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <strong>{up.id}</strong>
@@ -369,7 +369,7 @@ export default function DnsPage({
                 data.configuration.routes.map((route) => (
                   <p
                     key={route.id}
-                    className="break-all rounded-lg border border-slate-200 p-3 dark:border-slate-700"
+                    className="break-all rounded-lg border border-console-border p-3"
                   >
                     <strong>{route.id}</strong> ·{" "}
                     {route.domain
@@ -389,19 +389,16 @@ export default function DnsPage({
             </div>
             {editor !== null && (
               <div className="mt-5 space-y-3">
-                <label
-                  htmlFor="dns-policy"
-                  className="block text-sm font-medium"
-                >
+                <label className="form-field">
                   DNS 策略 JSON · 基于配置 r{revision}
+                  <textarea
+                    id="dns-policy"
+                    className="field editor-field min-h-96"
+                    value={editor}
+                    onChange={(e) => setEditor(e.target.value)}
+                    spellCheck={false}
+                  />
                 </label>
-                <textarea
-                  id="dns-policy"
-                  className="input min-h-96 w-full font-mono text-xs"
-                  value={editor}
-                  onChange={(e) => setEditor(e.target.value)}
-                  spellCheck={false}
-                />
                 <p className="muted text-xs leading-6">
                   监听模式需使用显式 IP 地址的 UDP、TCP、TLS 或 HTTPS
                   上游。TLS/HTTPS 验证
@@ -436,7 +433,7 @@ export default function DnsPage({
           </section>
           <section
             id="dns-query"
-            className="panel p-3"
+            className="panel panel-body"
             aria-label="DNS 查询诊断"
           >
             <h2 className="font-semibold">查询诊断</h2>
@@ -455,20 +452,20 @@ export default function DnsPage({
                 });
               }}
             >
-              <label className="min-w-0 flex-1 basis-52 text-xs">
+              <label className="form-field flex-1 basis-52">
                 查询域名
                 <input
-                  className="input mt-2 w-full"
+                  className="field"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   maxLength={253}
                   required
                 />
               </label>
-              <label className="text-xs">
+              <label className="form-field">
                 记录类型
                 <select
-                  className="input mt-2 block"
+                  className="field"
                   value={kind}
                   onChange={(e) => setKind(e.target.value)}
                 >
@@ -477,10 +474,10 @@ export default function DnsPage({
                   ))}
                 </select>
               </label>
-              <label className="text-xs">
+              <label className="form-field">
                 解析用途
                 <select
-                  className="input mt-2 block"
+                  className="field"
                   value={purpose}
                   onChange={(e) => setPurpose(e.target.value as Purpose)}
                 >
@@ -521,7 +518,7 @@ export default function DnsPage({
                 {[...lookup.answers, ...lookup.authorities].map((record, i) => (
                   <p
                     key={i}
-                    className="break-all rounded-lg bg-slate-50 p-3 font-mono leading-6 dark:bg-slate-800"
+                    className="break-all rounded-lg bg-console-soft p-3 font-mono leading-6"
                   >
                     {record.name} {record.ttl} IN {record.query_type}{" "}
                     {record.value}
@@ -535,7 +532,11 @@ export default function DnsPage({
               </div>
             )}
           </section>
-          <section id="dns-cache" className="panel p-3" aria-label="DNS 缓存">
+          <section
+            id="dns-cache"
+            className="panel panel-body"
+            aria-label="DNS 缓存"
+          >
             <h2 className="font-semibold">缓存与清理</h2>
             <form
               className="mt-4 flex flex-wrap gap-3"
@@ -556,10 +557,10 @@ export default function DnsPage({
                 });
               }}
             >
-              <label className="min-w-0 flex-1 basis-56 text-xs">
+              <label className="form-field flex-1 basis-56">
                 清理域名（留空清理全部）
                 <input
-                  className="input mt-2 w-full"
+                  className="field"
                   value={domain}
                   onChange={(e) => setDomain(e.target.value)}
                   maxLength={253}
@@ -570,7 +571,7 @@ export default function DnsPage({
                 清理缓存
               </button>
             </form>
-            <div className="mt-4 divide-y divide-slate-100 dark:divide-slate-800">
+            <div className="mt-4 divide-y divide-console-border">
               {data.cache.entries.map((entry) => (
                 <div
                   key={entry.id}
@@ -612,7 +613,7 @@ export default function DnsPage({
           </section>
           <section
             id="dns-context"
-            className="panel p-3"
+            className="panel panel-body"
             aria-label="DNS 域名上下文"
           >
             <h2 className="font-semibold">域名上下文</h2>
@@ -628,10 +629,10 @@ export default function DnsPage({
                 });
               }}
             >
-              <label className="min-w-0 flex-1 basis-56 text-xs">
+              <label className="form-field flex-1 basis-56">
                 IPv4 / IPv6
                 <input
-                  className="input mt-2 w-full"
+                  className="field"
                   value={ip}
                   onChange={(e) => setIp(e.target.value)}
                   maxLength={45}
@@ -659,7 +660,7 @@ export default function DnsPage({
                   {(context.mappings ?? []).map((mapping, index) => (
                     <li
                       key={index}
-                      className="break-all rounded-lg bg-slate-50 p-3 dark:bg-slate-900"
+                      className="break-all rounded-lg bg-console-soft p-3"
                     >
                       {mapping.domain} · 上游 {mapping.upstream} · 剩余 TTL{" "}
                       {mapping.remaining_ttl}s · 观察年龄{" "}
@@ -681,7 +682,7 @@ export default function DnsPage({
               {data.linux_capture_active ? "已启用" : "未启用"}。
             </p>
             {data.linux_capture && (
-              <details className="mt-4 rounded-xl bg-slate-50 p-4 text-xs leading-6 dark:bg-slate-800">
+              <details className="mt-4 rounded-xl bg-console-soft p-4 text-xs leading-6">
                 <summary className="cursor-pointer font-medium">
                   Linux DNS 内核证据
                 </summary>

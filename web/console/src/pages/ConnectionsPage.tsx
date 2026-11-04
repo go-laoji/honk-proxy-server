@@ -362,7 +362,7 @@ export default function ConnectionsPage() {
       {value && (
         <ConnectionStats value={value.statistics} rates={rates} compact />
       )}
-      <section className="panel space-y-2.5 p-3">
+      <section className="panel panel-body space-y-2.5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="flex items-center gap-2 font-semibold">
@@ -405,26 +405,26 @@ export default function ConnectionsPage() {
           aria-label="连接筛选"
         >
           <div className="filter-grid">
-            <label className="text-xs">
+            <label className="form-field">
               目标地址或已使用域名
               <input
-                className="field mt-1"
+                className="field"
                 name="destination"
                 defaultValue={params.get("destination") ?? ""}
               />
             </label>
-            <label className="text-xs">
+            <label className="form-field">
               客户端 IP / CIDR
               <input
-                className="field mt-1"
+                className="field"
                 name="source"
                 defaultValue={params.get("source") ?? ""}
               />
             </label>
-            <label className="text-xs">
+            <label className="form-field">
               连接状态
               <select
-                className="field mt-1"
+                className="field"
                 name="state"
                 defaultValue={params.get("state") ?? "active"}
               >
@@ -476,10 +476,10 @@ export default function ConnectionsPage() {
               (params.get("limit") ?? "50") !== "50"
             }
           >
-            <label className="text-xs">
+            <label className="form-field">
               客户端端口
               <input
-                className="field mt-1"
+                className="field"
                 name="source_port"
                 type="number"
                 min="1"
@@ -487,10 +487,10 @@ export default function ConnectionsPage() {
                 defaultValue={params.get("source_port") ?? ""}
               />
             </label>
-            <label className="text-xs">
+            <label className="form-field">
               目标端口
               <input
-                className="field mt-1"
+                className="field"
                 name="destination_port"
                 type="number"
                 min="1"
@@ -498,10 +498,10 @@ export default function ConnectionsPage() {
                 defaultValue={params.get("destination_port") ?? ""}
               />
             </label>
-            <label className="text-xs">
+            <label className="form-field">
               入口
               <input
-                className="field mt-1"
+                className="field"
                 name="inbound"
                 list="connection-inbounds"
                 defaultValue={params.get("inbound") ?? ""}
@@ -512,10 +512,10 @@ export default function ConnectionsPage() {
                 ))}
               </datalist>
             </label>
-            <label className="text-xs">
+            <label className="form-field">
               入口协议
               <select
-                className="field mt-1"
+                className="field"
                 name="protocol"
                 defaultValue={params.get("protocol") ?? ""}
               >
@@ -525,10 +525,10 @@ export default function ConnectionsPage() {
                 ))}
               </select>
             </label>
-            <label className="text-xs">
+            <label className="form-field">
               传输
               <select
-                className="field mt-1"
+                className="field"
                 name="transport"
                 defaultValue={params.get("transport") ?? ""}
               >
@@ -537,10 +537,10 @@ export default function ConnectionsPage() {
                 <option value="udp">UDP</option>
               </select>
             </label>
-            <label className="text-xs">
+            <label className="form-field">
               来源类型
               <select
-                className="field mt-1"
+                className="field"
                 name="origin"
                 defaultValue={params.get("origin") ?? ""}
               >
@@ -552,18 +552,18 @@ export default function ConnectionsPage() {
                 ))}
               </select>
             </label>
-            <label className="text-xs">
+            <label className="form-field">
               节点 ID（直连填 @direct）
               <input
-                className="field mt-1"
+                className="field"
                 name="node"
                 defaultValue={params.get("node") ?? ""}
               />
             </label>
-            <label className="text-xs">
+            <label className="form-field">
               分组（未分组填 @none）
               <input
-                className="field mt-1"
+                className="field"
                 name="group"
                 list="connection-groups"
                 defaultValue={params.get("group") ?? ""}
@@ -574,10 +574,10 @@ export default function ConnectionsPage() {
                 ))}
               </datalist>
             </label>
-            <label className="text-xs">
+            <label className="form-field">
               供应商（静态填 @static）
               <input
-                className="field mt-1"
+                className="field"
                 name="provider"
                 list="connection-providers"
                 defaultValue={params.get("provider") ?? ""}
@@ -588,18 +588,18 @@ export default function ConnectionsPage() {
                 ))}
               </datalist>
             </label>
-            <label className="text-xs">
+            <label className="form-field">
               规则 ID（默认填 @default）
               <input
-                className="field mt-1"
+                className="field"
                 name="rule"
                 defaultValue={params.get("rule") ?? ""}
               />
             </label>
-            <label className="text-xs">
+            <label className="form-field">
               错误码
               <input
-                className="field mt-1"
+                className="field"
                 name="error"
                 defaultValue={params.get("error") ?? ""}
               />
@@ -608,10 +608,10 @@ export default function ConnectionsPage() {
               name="created_after_unix_ms"
               value={params.get("created_after_unix_ms") ?? ""}
             />
-            <label className="text-xs">
+            <label className="form-field">
               排序
               <select
-                className="field mt-1"
+                className="field"
                 name="sort"
                 defaultValue={params.get("sort") ?? "newest"}
               >
@@ -622,10 +622,10 @@ export default function ConnectionsPage() {
                 <option value="elapsed">持续时间</option>
               </select>
             </label>
-            <label className="text-xs">
+            <label className="form-field">
               每页
               <select
-                className="field mt-1"
+                className="field"
                 name="limit"
                 defaultValue={params.get("limit") ?? "50"}
               >
@@ -658,19 +658,25 @@ export default function ConnectionsPage() {
         )}
       </section>
       {loadError && (
-        <p role="alert" className="panel break-words p-4 text-sm text-red-600">
+        <p
+          role="alert"
+          className="panel panel-body break-words text-sm text-red-600"
+        >
           连接读取失败：{loadError}
         </p>
       )}
       {error && (
-        <p role="alert" className="panel break-words p-4 text-sm text-red-600">
+        <p
+          role="alert"
+          className="panel panel-body break-words text-sm text-red-600"
+        >
           {error}
         </p>
       )}
       {notice && (
         <p
           role="status"
-          className="panel break-words p-4 text-sm text-emerald-700"
+          className="panel panel-body break-words text-sm text-emerald-700"
         >
           {notice}
         </p>
@@ -706,7 +712,7 @@ export default function ConnectionsPage() {
       </div>
       {(single || preview) && (
         <section
-          className="panel space-y-4 border-amber-300 p-5 dark:border-amber-900"
+          className="panel panel-body space-y-4 border-amber-300 dark:border-amber-900"
           aria-label="断开确认"
         >
           <h2 className="font-semibold">确认断开具体连接</h2>
@@ -721,7 +727,7 @@ export default function ConnectionsPage() {
           </p>
           <div className="max-h-64 space-y-2 overflow-auto">
             {single ? (
-              <div className="break-all rounded-lg bg-slate-50 p-3 text-xs dark:bg-slate-800">
+              <div className="break-all rounded-lg bg-console-soft p-3 text-xs">
                 {single.id}
                 <br />
                 {endpointLabel(
@@ -734,7 +740,7 @@ export default function ConnectionsPage() {
               preview?.targets.map((target) => (
                 <div
                   key={target.id}
-                  className="break-all rounded-lg bg-slate-50 p-3 text-xs dark:bg-slate-800"
+                  className="break-all rounded-lg bg-console-soft p-3 text-xs"
                 >
                   {target.id}
                   <br />
@@ -783,7 +789,7 @@ export default function ConnectionsPage() {
           className="panel"
           aria-label="连接路由详情"
         >
-          <div className="flex items-center justify-between gap-3 border-b border-slate-100 p-5 dark:border-slate-800">
+          <div className="panel-header panel-toolbar">
             <h2 className="font-semibold">连接路由详情</h2>
             <button className="btn" onClick={() => show(null)}>
               <X size={14} />
@@ -822,7 +828,7 @@ export default function ConnectionsPage() {
                   [
                     "命中规则",
                     <a
-                      className="text-blue-600"
+                      className="text-console-accent-ink"
                       href={`./rules.html?revision=${detail.routing.configuration_revision}`}
                     >
                       {detail.routing.rule_id ?? "默认动作"} · r
@@ -843,7 +849,7 @@ export default function ConnectionsPage() {
                     "节点",
                     detail.choice ? (
                       <a
-                        className="text-blue-600"
+                        className="text-console-accent-ink"
                         href={`./node-detail.html?id=${encodeURIComponent(detail.choice.node_id)}`}
                       >
                         {detail.choice.node_id} ·{" "}

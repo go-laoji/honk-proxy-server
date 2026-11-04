@@ -77,7 +77,7 @@ export default function SubscriptionsPanel({
     }
   }
   return (
-    <section className="panel mb-6 space-y-4 p-5" aria-label="标准订阅">
+    <section className="panel panel-body mb-6 space-y-4" aria-label="标准订阅">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-semibold">标准订阅 · 独立于短效提取 API</h2>
         <div className="flex gap-2">
@@ -115,7 +115,7 @@ export default function SubscriptionsPanel({
         </p>
       )}
       {info && (
-        <p role="status" className="text-sm text-blue-600">
+        <p role="status" className="text-sm text-console-accent-ink">
           {info}
         </p>
       )}
@@ -125,7 +125,7 @@ export default function SubscriptionsPanel({
       <div className="grid gap-4 lg:grid-cols-2">
         {data?.subscriptions.map((source) => (
           <article
-            className="rounded-xl border border-slate-200 p-4 dark:border-slate-700"
+            className="rounded-xl border border-console-border p-4"
             key={source.id}
           >
             <h3 className="break-all font-medium">
@@ -216,7 +216,7 @@ export default function SubscriptionsPanel({
               </button>
             </div>
             <a
-              className="mt-3 inline-block text-xs text-blue-600"
+              className="mt-3 inline-block text-xs text-console-accent-ink"
               href={`./nodes.html?provider=${encodeURIComponent(`subscription:${source.id}`)}`}
             >
               查看来源节点
@@ -226,10 +226,10 @@ export default function SubscriptionsPanel({
       </div>
       {editor && (
         <div className="space-y-3" aria-label="订阅编辑器">
-          <label className="block text-xs">
+          <label className="form-field">
             订阅定义 JSON · r{editor.revision}
             <textarea
-              className="input mt-2 min-h-64 w-full font-mono text-xs"
+              className="field editor-field min-h-64"
               spellCheck={false}
               value={editor.body}
               onChange={(event) =>
@@ -266,10 +266,10 @@ export default function SubscriptionsPanel({
       )}
       {importing && (
         <div className="space-y-3" aria-label="导入订阅文档">
-          <label className="block text-xs">
+          <label className="form-field">
             {importing.id} · 文档内容 · r{importing.revision}
             <textarea
-              className="input mt-2 min-h-48 w-full font-mono text-xs"
+              className="field editor-field min-h-48"
               spellCheck={false}
               value={importing.document}
               onChange={(event) =>

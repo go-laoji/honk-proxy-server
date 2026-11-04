@@ -59,7 +59,7 @@ export default function BackupPanel() {
     }
   }
   return (
-    <section className="panel min-w-0 p-5" aria-label="数据库备份与恢复">
+    <section className="panel panel-body min-w-0" aria-label="数据库备份与恢复">
       <h2 className="font-semibold">数据库备份与恢复</h2>
       <p className="muted mt-3 text-sm leading-7">
         一致性在线快照包含配置历史、上游凭据、节点和任务。请保存到可信的私有位置。普通诊断包不包含完整数据库。
@@ -87,7 +87,7 @@ export default function BackupPanel() {
         CLI。维护锁阻止运行中替换，原库会保留；完成后显式重启服务。备份不包含外部证书文件、Desktop
         偏好或系统网络配置。
       </p>
-      <pre className="mt-3 overflow-x-auto rounded-xl bg-slate-950 p-3 text-xs text-slate-100">
+      <pre className="code-block mt-3">
         <code>
           hps backup inspect ./hps-backup.sqlite3{"\n"}hps backup restore
           ./hps-backup.sqlite3 --offline --data-dir /private/hps-data --sha256

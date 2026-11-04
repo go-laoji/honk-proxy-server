@@ -42,7 +42,7 @@ export default function DesktopPreferencesPanel() {
     }
   }
   return (
-    <section className="panel p-5" aria-label="Desktop 系统体验">
+    <section className="panel panel-body" aria-label="Desktop 系统体验">
       <h2 className="font-semibold">Desktop 系统体验</h2>
       <p className="muted mt-3 text-xs leading-6">
         托盘可显示窗口或退出 Desktop。退出不会停止独立

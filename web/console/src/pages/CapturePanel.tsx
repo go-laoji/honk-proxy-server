@@ -97,7 +97,7 @@ export default function CapturePanel({
     editorRevision === view.desired_revision;
   return (
     <section className="panel overflow-hidden" aria-label="透明代理运行控制">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-5 dark:border-slate-800">
+      <div className="panel-header panel-toolbar">
         <div>
           <h2 className="font-semibold">透明代理运行控制</h2>
           <p className="muted mt-2 text-xs">
@@ -220,7 +220,7 @@ export default function CapturePanel({
               查看操作任务
             </a>
           </div>
-          <details className="border-t border-slate-100 p-5 dark:border-slate-800">
+          <details className="border-t border-console-border p-5">
             <summary className="cursor-pointer text-sm">
               内核对象与资源证据
             </summary>
@@ -246,7 +246,7 @@ export default function CapturePanel({
       )}
       {editor && (
         <form
-          className="space-y-4 border-t border-slate-100 p-5 dark:border-slate-800"
+          className="space-y-4 border-t border-console-border p-5"
           onSubmit={(event) => {
             event.preventDefault();
             void run("save", async () => {
@@ -277,20 +277,20 @@ export default function CapturePanel({
               持久启用透明捕获
             </label>
             <div className="grid gap-4 sm:grid-cols-2">
-              <label className="text-sm">
+              <label className="form-field">
                 eBPF 对象路径
                 <input
-                  className="input mt-2 w-full"
+                  className="field"
                   value={editor.object}
                   onChange={(e) =>
                     setEditor({ ...editor, object: e.target.value })
                   }
                 />
               </label>
-              <label className="text-sm">
+              <label className="form-field">
                 本机 cgroup 路径
                 <input
-                  className="input mt-2 w-full"
+                  className="field"
                   value={editor.local_cgroup ?? ""}
                   onChange={(e) =>
                     setEditor({
@@ -300,10 +300,10 @@ export default function CapturePanel({
                   }
                 />
               </label>
-              <label className="text-sm">
+              <label className="form-field">
                 LAN 网卡（逗号分隔）
                 <input
-                  className="input mt-2 w-full"
+                  className="field"
                   value={editor.lan_interfaces.join(",")}
                   onChange={(e) =>
                     setEditor({
@@ -319,10 +319,10 @@ export default function CapturePanel({
                   }
                 />
               </label>
-              <label className="text-sm">
+              <label className="form-field">
                 旁路 CIDR（逗号分隔）
                 <input
-                  className="input mt-2 w-full"
+                  className="field"
                   value={editor.bypass_cidrs.join(",")}
                   onChange={(e) =>
                     setEditor({
@@ -375,10 +375,10 @@ export default function CapturePanel({
                     "max_queued_bytes",
                   ] as const
                 ).map((key) => (
-                  <label className="break-all text-xs" key={key}>
+                  <label className="form-field break-all" key={key}>
                     {key}
                     <input
-                      className="input mt-1 w-full"
+                      className="field"
                       type="number"
                       min="0"
                       value={editor[key]}
@@ -430,7 +430,7 @@ export default function CapturePanel({
             <p role="status" className="text-sm">
               已保存候选 r{saved.id}，
               <a
-                className="text-blue-600 hover:underline"
+                className="text-console-accent-ink hover:underline"
                 href={`./config.html?revision=${saved.id}&epoch=${encodeURIComponent(view!.epoch)}`}
               >
                 审阅并激活配置
@@ -439,7 +439,7 @@ export default function CapturePanel({
             </p>
           )}
           <a
-            className="text-sm text-blue-600 hover:underline"
+            className="text-sm text-console-accent-ink hover:underline"
             href="./config.html"
           >
             打开配置工作区

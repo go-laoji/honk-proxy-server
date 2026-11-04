@@ -105,7 +105,7 @@ export default function TaskSubmission({
     }
   }
   return (
-    <section className="panel space-y-3 p-3" aria-label="后台配置提交">
+    <section className="panel panel-body space-y-3" aria-label="后台配置提交">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-2 font-semibold">
@@ -137,10 +137,10 @@ export default function TaskSubmission({
             不重复执行，改变输入须使用新的请求 ID。
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="text-xs">
+            <label className="form-field">
               任务动作
               <select
-                className="field mt-1"
+                className="field"
                 disabled={busy}
                 value={prepare ? "prepare" : "validate"}
                 onChange={(e) => setPrepare(e.target.value === "prepare")}
@@ -149,10 +149,10 @@ export default function TaskSubmission({
                 <option value="prepare">预检并保存未激活候选</option>
               </select>
             </label>
-            <label className="text-xs">
+            <label className="form-field">
               幂等请求 ID
               <input
-                className="field mt-1"
+                className="field"
                 required
                 minLength={1}
                 maxLength={64}
@@ -163,10 +163,10 @@ export default function TaskSubmission({
               />
             </label>
           </div>
-          <label className="block text-xs">
+          <label className="form-field">
             后台配置 TOML
             <textarea
-              className="field mt-1 min-h-64 font-mono text-xs"
+              className="field editor-field min-h-64"
               disabled={busy}
               value={body}
               onChange={(e) => setBody(e.target.value)}
@@ -188,7 +188,10 @@ export default function TaskSubmission({
             >
               生成新的请求 ID
             </button>
-            <a className="py-2 text-xs text-blue-600" href="./config.html">
+            <a
+              className="py-2 text-xs text-console-accent-ink"
+              href="./config.html"
+            >
               配置工作台 →
             </a>
           </div>

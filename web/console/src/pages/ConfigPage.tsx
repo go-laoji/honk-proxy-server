@@ -188,7 +188,7 @@ export default function ConfigPage({
     <>
       {revisionLink && (
         <section
-          className="panel mb-6 space-y-3 p-5"
+          className="panel panel-body mb-6 space-y-3"
           aria-label="关联配置版本详情"
         >
           <h2 className="font-semibold">关联版本 r{revisionLink}</h2>
@@ -200,18 +200,16 @@ export default function ConfigPage({
               {linkedError}
             </p>
           ) : linkedRevision ? (
-            <pre className="max-h-96 overflow-auto rounded-lg bg-slate-950 p-4 text-xs text-slate-100">
-              {linkedRevision.toml}
-            </pre>
+            <pre className="code-block max-h-96">{linkedRevision.toml}</pre>
           ) : (
             <p className="muted text-sm">正在读取关联版本…</p>
           )}
-          <a className="text-xs text-blue-600" href="./config.html">
+          <a className="text-xs text-console-accent-ink" href="./config.html">
             清除版本关联 →
           </a>
         </section>
       )}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="metric-grid">
         <Stat
           title="实际运行版本"
           value={`r${workspace.running_revision}`}
@@ -261,13 +259,13 @@ export default function ConfigPage({
       {info && (
         <p
           role="status"
-          className="mt-5 text-sm leading-7 text-blue-700 dark:text-blue-300"
+          className="mt-5 text-sm leading-7 text-console-accent-ink"
         >
           {info}
         </p>
       )}
-      <section className="panel mt-6 min-w-0">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-5 dark:border-slate-800">
+      <section className="panel mt-3 min-w-0">
+        <div className="panel-header panel-toolbar">
           <div>
             <h2 className="font-semibold">共享配置编辑器</h2>
             <p className="muted mt-1 text-xs">
@@ -337,21 +335,18 @@ export default function ConfigPage({
             </button>
           </div>
         </div>
-        <div className="p-5">
-          <label
-            htmlFor="config-toml"
-            className="mb-2 block text-sm font-medium"
-          >
+        <div className="panel-body">
+          <label className="form-field">
             配置 TOML
+            <textarea
+              id="config-toml"
+              spellCheck={false}
+              value={editor}
+              disabled={Boolean(pending)}
+              onChange={(event) => setEditor(event.target.value)}
+              className="field editor-field min-h-[25rem]"
+            />
           </label>
-          <textarea
-            id="config-toml"
-            spellCheck={false}
-            value={editor}
-            disabled={Boolean(pending)}
-            onChange={(event) => setEditor(event.target.value)}
-            className="min-h-[25rem] w-full resize-y rounded-xl border border-slate-200 bg-slate-950 p-4 font-mono text-xs leading-6 text-slate-100 outline-none focus:border-blue-500 dark:border-slate-700"
-          />
           <p className="muted mt-3 text-xs leading-6">
             [REDACTED] 仅保留同 ID
             已有上游凭据；新节点需填写实际凭据或不配置认证。导入的相对证书路径基于服务数据目录，文件须位于
@@ -367,7 +362,7 @@ export default function ConfigPage({
               onChange={(event) => setNote(event.target.value)}
               maxLength={64}
               placeholder="版本说明（最多 64 字）"
-              className="min-w-0 rounded-lg border border-slate-200 bg-transparent px-3 py-2 text-sm dark:border-slate-700"
+              className="field sm:w-auto"
             />
             <button
               className="btn"
@@ -427,7 +422,7 @@ export default function ConfigPage({
         </div>
       </section>
       {validation && (
-        <section className="panel mt-6 min-w-0 p-5">
+        <section className="panel panel-body mt-3 min-w-0">
           <div className="flex items-center gap-3">
             <h2 className="font-semibold">校验与差异</h2>
             <Badge active={validation.valid}>
@@ -458,17 +453,17 @@ export default function ConfigPage({
             {validation.changes.map((change) => (
               <div
                 key={change.path}
-                className="rounded-xl border border-slate-200 p-4 dark:border-slate-800"
+                className="rounded-xl border border-console-border p-4"
               >
                 <p className="break-all font-mono text-xs">
                   {change.path} ·{" "}
                   {change.apply_mode === "restart" ? "需重启" : "在线激活"}
                 </p>
                 <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                  <pre className="max-h-52 overflow-auto rounded-lg bg-slate-50 p-3 text-xs dark:bg-slate-950">
+                  <pre className="max-h-52 overflow-auto rounded-lg bg-console-soft p-3 text-xs">
                     {preview(change.before)}
                   </pre>
-                  <pre className="max-h-52 overflow-auto rounded-lg bg-blue-50 p-3 text-xs dark:bg-blue-950">
+                  <pre className="max-h-52 overflow-auto rounded-lg bg-console-accent-soft p-3 text-xs">
                     {preview(change.after)}
                   </pre>
                 </div>
@@ -482,8 +477,8 @@ export default function ConfigPage({
           )}
         </section>
       )}
-      <section className="panel mt-6 min-w-0">
-        <div className="border-b border-slate-100 p-5 dark:border-slate-800">
+      <section className="panel mt-3 min-w-0">
+        <div className="panel-header">
           <h2 className="font-semibold">配置版本</h2>
           <p className="muted mt-1 text-xs">
             最近 50 个保留版本；回滚仅允许已实际应用的版本，并重新验证兼容性。
@@ -491,7 +486,7 @@ export default function ConfigPage({
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[680px] text-left text-sm">
-            <thead className="muted border-b border-slate-100 text-xs dark:border-slate-800">
+            <thead className="muted border-b border-console-border text-xs">
               <tr>
                 <th className="p-4">版本</th>
                 <th className="p-4">说明 / 时间</th>
@@ -503,12 +498,14 @@ export default function ConfigPage({
               {workspace.revisions.map((revision) => (
                 <tr
                   key={revision.id}
-                  className="border-b border-slate-100 last:border-0 dark:border-slate-800"
+                  className="border-b border-console-border last:border-0"
                 >
                   <td className="p-4">
                     <span className="font-mono">r{revision.id}</span>
                     {revision.id === workspace.desired_revision && (
-                      <span className="ml-2 text-xs text-blue-600">期望</span>
+                      <span className="ml-2 text-xs text-console-accent-ink">
+                        期望
+                      </span>
                     )}
                     {revision.id === workspace.running_revision && (
                       <span className="ml-2 text-xs text-emerald-600">
@@ -587,11 +584,9 @@ export default function ConfigPage({
           </table>
         </div>
       </section>
-      <div className="mt-6 grid gap-6 lg:grid-cols-2">
+      <div className="mt-3 grid gap-3 lg:grid-cols-2">
         <section className="panel min-w-0">
-          <h2 className="border-b border-slate-100 p-5 font-semibold dark:border-slate-800">
-            存储与激活记录
-          </h2>
+          <h2 className="panel-header">存储与激活记录</h2>
           <Details
             rows={[
               ["数据存储", workspace.storage_path ?? "临时内存，退出后丢弃"],
@@ -599,7 +594,7 @@ export default function ConfigPage({
               ["共享草稿更新时间", date(workspace.draft.updated_at)],
             ]}
           />
-          <div className="space-y-3 p-5">
+          <div className="panel-body space-y-3">
             {workspace.activations.slice(0, 8).map((activation) => (
               <p key={activation.id} className="break-all text-xs leading-6">
                 #{activation.id} · r{activation.previous_revision} → r
@@ -609,7 +604,7 @@ export default function ConfigPage({
             ))}
           </div>
         </section>
-        <section className="panel p-5">
+        <section className="panel panel-body">
           <h2 className="font-semibold">激活影响</h2>
           <p className="muted mt-3 text-sm leading-7">
             代理入口、上游、资源限制和实例名称可在线激活。管理监听、管理 TLS

@@ -51,7 +51,7 @@ interface Pending {
 }
 function Evidence({ result }: { result: ProbeResult }) {
   return (
-    <div className="rounded-xl border border-slate-200 p-4 text-xs dark:border-slate-700">
+    <div className="rounded-xl border border-console-border p-4 text-xs">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <strong>
           {result.transport.toUpperCase()} / {result.family.toUpperCase()}
@@ -87,7 +87,7 @@ function Evidence({ result }: { result: ProbeResult }) {
         <dd>{result.exit_ip ?? "未知"} · 地域未知</dd>
       </dl>
       {result.error_code && (
-        <p className="mt-3 break-all rounded-lg bg-slate-50 p-2 font-mono leading-5 dark:bg-slate-800">
+        <p className="mt-3 break-all rounded-lg bg-console-soft p-2 font-mono leading-5">
           {result.error_code}
         </p>
       )}
@@ -251,7 +251,7 @@ export default function HealthPage({
       {info && (
         <p
           role="status"
-          className="rounded-xl bg-blue-50 p-4 text-sm text-blue-700 dark:bg-blue-950 dark:text-blue-200"
+          className="rounded-xl bg-console-accent-soft p-4 text-sm text-console-accent-ink"
         >
           {info}
         </p>
@@ -259,7 +259,7 @@ export default function HealthPage({
       {nodeFilter && (
         <p className="text-sm">
           节点筛选：{nodeFilter}{" "}
-          <a className="ml-2 text-blue-600" href="./health.html">
+          <a className="ml-2 text-console-accent-ink" href="./health.html">
             查看全部健康记录 →
           </a>
         </p>
@@ -268,7 +268,7 @@ export default function HealthPage({
         <div className="panel p-10 text-center text-sm">正在读取健康状态…</div>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="metric-grid">
             <Stat
               title="本页可准入"
               value={`${data.nodes.filter((n) => n.eligible).length} / ${data.nodes.length}`}
@@ -295,7 +295,7 @@ export default function HealthPage({
             />
           </div>
           <section className="panel overflow-hidden" aria-label="节点健康状态">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 p-3 dark:border-slate-800">
+            <div className="panel-header panel-toolbar">
               <h2 className="font-semibold">节点准入与能力</h2>
               <div className="flex flex-wrap items-center gap-2">
                 <a className="text-link" href="#health-policy-settings">
@@ -333,14 +333,14 @@ export default function HealthPage({
             </div>
             <form
               action="./health.html"
-              className="flex flex-wrap items-end gap-2 border-b border-slate-100 p-3 dark:border-slate-800"
+              className="flex flex-wrap items-end gap-2 border-b border-console-border p-3"
               aria-label="健康记录筛选"
             >
-              <label className="min-w-0 flex-1 text-xs sm:max-w-80">
+              <label className="form-field flex-1 sm:max-w-80">
                 节点 ID
                 <input
                   name="node"
-                  className="field mt-1"
+                  className="field"
                   placeholder="输入完整节点 ID"
                   defaultValue={nodeFilter}
                 />
@@ -370,7 +370,7 @@ export default function HealthPage({
                 当前池暂无节点。先在供应商页面提取节点或添加静态上游。
               </p>
             ) : (
-              <div className="divide-y divide-slate-100 dark:divide-slate-800">
+              <div className="divide-y divide-console-border">
                 {data.nodes.map((node) => (
                   <div key={node.node_id}>
                     <div className="flex flex-wrap items-center gap-3 p-5">
@@ -388,7 +388,7 @@ export default function HealthPage({
                       />
                       <div className="min-w-0 flex-1 basis-[calc(100%_-_2rem)] sm:basis-0">
                         <button
-                          className="break-all text-left text-sm font-semibold hover:text-blue-600"
+                          className="break-all text-left text-sm font-semibold hover:text-console-accent-ink"
                           aria-expanded={expanded === node.node_id}
                           onClick={() =>
                             setExpanded(
@@ -430,7 +430,7 @@ export default function HealthPage({
                     {expanded === node.node_id && (
                       <div className="grid gap-3 px-5 pb-5 md:grid-cols-2">
                         {node.last_traffic && (
-                          <div className="rounded-xl bg-slate-50 p-4 text-xs leading-6 dark:bg-slate-800 md:col-span-2">
+                          <div className="rounded-xl bg-console-soft p-4 text-xs leading-6 md:col-span-2">
                             <strong>当前进程内最近流量反馈</strong>
                             <p>
                               {date(node.last_traffic.observed_at)} ·{" "}
@@ -461,7 +461,7 @@ export default function HealthPage({
                 ))}
               </div>
             )}
-            <div className="flex justify-between border-t border-slate-100 p-4 dark:border-slate-800">
+            <div className="flex justify-between border-t border-console-border p-4">
               <button
                 className="btn"
                 disabled={!after || !!busy}
@@ -484,7 +484,7 @@ export default function HealthPage({
               </button>
             </div>
           </section>
-          <section id="health-policy-settings" className="panel p-3">
+          <section id="health-policy-settings" className="panel panel-body">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="font-semibold">检测策略</h2>
               <button
@@ -519,19 +519,16 @@ export default function HealthPage({
             </p>
             {editor !== null && (
               <div className="mt-5 space-y-3">
-                <label
-                  htmlFor="health-policy"
-                  className="block text-sm font-medium"
-                >
+                <label className="form-field">
                   检测策略 JSON · 基于配置 r{revision}
+                  <textarea
+                    id="health-policy"
+                    className="field editor-field min-h-80"
+                    value={editor}
+                    onChange={(event) => setEditor(event.target.value)}
+                    spellCheck={false}
+                  />
                 </label>
-                <textarea
-                  id="health-policy"
-                  className="input min-h-80 w-full font-mono text-xs"
-                  value={editor}
-                  onChange={(event) => setEditor(event.target.value)}
-                  spellCheck={false}
-                />
                 <p className="muted text-xs">
                   服务端验证策略和 TLS
                   信任后应用。其他页面已修改配置时会提示冲突，请重新打开编辑器。
@@ -556,7 +553,7 @@ export default function HealthPage({
               </div>
             )}
           </section>
-          <section className="panel p-5" aria-label="健康检测任务">
+          <section className="panel panel-body" aria-label="健康检测任务">
             <h2 className="font-semibold">后台检测任务</h2>
             <div className="mt-4 grid gap-4 lg:grid-cols-2">
               <div className="max-h-96 space-y-2 overflow-y-auto">
@@ -564,7 +561,7 @@ export default function HealthPage({
                   data.tasks.map((item) => (
                     <button
                       key={item.id}
-                      className="flex w-full items-center justify-between rounded-xl border border-slate-200 p-3 text-left text-xs hover:border-blue-400 dark:border-slate-700"
+                      className="flex w-full items-center justify-between rounded-xl border border-console-border p-3 text-left text-xs hover:border-console-accent"
                       onClick={() =>
                         void action("task", async () => {
                           const value = await getJson<HealthTask>(
@@ -605,7 +602,7 @@ export default function HealthPage({
                       请求 ID：{task.request_id}
                     </p>
                     <a
-                      className="mt-2 inline-flex text-xs text-blue-600"
+                      className="mt-2 inline-flex text-xs text-console-accent-ink"
                       href={`./tasks.html?source_ref=health:${task.id}&epoch=${encodeURIComponent(taskEpoch.current)}`}
                     >
                       查看统一任务与关联事件 →
@@ -618,7 +615,7 @@ export default function HealthPage({
                       {task.runs.slice(0, 100).map((run) => (
                         <div
                           key={run.id}
-                          className="rounded-lg bg-slate-50 p-3 text-xs leading-6 dark:bg-slate-800"
+                          className="rounded-lg bg-console-soft p-3 text-xs leading-6"
                         >
                           <strong>{run.node_id}</strong> · {run.state}
                           <p className="muted break-all">

@@ -29,7 +29,7 @@ export function Stat({
   tone?: "brand" | "blue" | "amber" | "neutral";
 }) {
   return (
-    <div className="panel stat-card min-w-0 p-3" data-tone={tone}>
+    <div className="panel panel-body stat-card min-w-0" data-tone={tone}>
       <div className="flex items-center gap-2">
         <span className="stat-icon" aria-hidden="true">
           <Icon size={15} />
@@ -46,7 +46,7 @@ export function Stat({
 
 export function Details({ rows }: { rows: [string, ReactNode][] }) {
   return (
-    <dl className="divide-y divide-slate-100 dark:divide-slate-800">
+    <dl className="divide-y divide-console-border">
       {rows.map(([label, value]) => (
         <div
           key={label}

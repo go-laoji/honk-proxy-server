@@ -66,7 +66,7 @@ export default function LocalSystemPanel({
         )
       : [];
   return (
-    <section className="panel mt-6 p-6">
+    <section className="panel panel-body mt-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-semibold">本机服务与系统代理</h2>
         <button className="btn" disabled={busy} onClick={() => void refresh()}>
@@ -115,19 +115,19 @@ export default function LocalSystemPanel({
                 void act("local_service_install", { binary, config });
               }}
             >
-              <label className="text-xs">
+              <label className="form-field">
                 hpsd 程序绝对路径
                 <input
-                  className="field mt-1"
+                  className="field"
                   required
                   value={binary}
                   onChange={(e) => setBinary(e.target.value)}
                 />
               </label>
-              <label className="text-xs">
+              <label className="form-field">
                 Daemon 配置绝对路径
                 <input
-                  className="field mt-1"
+                  className="field"
                   required
                   value={config}
                   onChange={(e) => setConfig(e.target.value)}
@@ -172,7 +172,7 @@ export default function LocalSystemPanel({
               ))}
             </div>
           )}
-          <div className="mt-6 border-t border-slate-100 pt-5 dark:border-slate-800">
+          <div className="mt-6 border-t border-console-border pt-5">
             <h3 className="text-sm font-medium">系统代理原值恢复</h3>
             {context?.network_changes_disabled && (
               <p role="status" className="mt-2 text-sm text-amber-700">
@@ -198,10 +198,10 @@ export default function LocalSystemPanel({
                   });
                 }}
               >
-                <label className="text-xs">
+                <label className="form-field">
                   网络服务
                   <select
-                    className="field mt-1"
+                    className="field"
                     required
                     value={network}
                     onChange={(e) => setNetwork(e.target.value)}
@@ -214,10 +214,10 @@ export default function LocalSystemPanel({
                     ))}
                   </select>
                 </label>
-                <label className="text-xs">
+                <label className="form-field">
                   HTTP / HTTPS 目标代理入口
                   <select
-                    className="field mt-1"
+                    className="field"
                     value={http}
                     onChange={(e) => setHttp(e.target.value)}
                   >
@@ -231,10 +231,10 @@ export default function LocalSystemPanel({
                       ))}
                   </select>
                 </label>
-                <label className="text-xs">
+                <label className="form-field">
                   SOCKS5 入口
                   <select
-                    className="field mt-1"
+                    className="field"
                     value={socks}
                     onChange={(e) => setSocks(e.target.value)}
                   >

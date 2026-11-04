@@ -52,7 +52,7 @@ export default function ProfilesPanel() {
     }
   }
   return (
-    <section className="panel mt-6 p-6">
+    <section className="panel panel-body mt-6">
       <h2 className="font-semibold">连接档案</h2>
       <button
         className="btn mt-3"
@@ -76,7 +76,7 @@ export default function ProfilesPanel() {
         档案保存在本机，CLI 和 Desktop 共用。远端档案仅管理目标服务；即使地址是
         localhost，也不会启用本机系统操作。
       </p>
-      <ul className="my-5 divide-y divide-slate-100 dark:divide-slate-800">
+      <ul className="my-5 divide-y divide-console-border">
         {profiles?.profiles.map((p) => (
           <li
             key={p.id}
@@ -133,10 +133,10 @@ export default function ProfilesPanel() {
           void change({ action: "upsert", profile: editing }, false);
         }}
       >
-        <label className="text-xs">
+        <label className="form-field">
           档案标识
           <input
-            className="field mt-1"
+            className="field"
             required
             pattern="[a-z0-9][a-z0-9-]{0,47}"
             value={editing.id}
@@ -144,20 +144,20 @@ export default function ProfilesPanel() {
             placeholder="例如 local"
           />
         </label>
-        <label className="text-xs">
+        <label className="form-field">
           档案名称
           <input
-            className="field mt-1"
+            className="field"
             required
             value={editing.name}
             maxLength={80}
             onChange={(e) => setEditing({ ...editing, name: e.target.value })}
           />
         </label>
-        <label className="text-xs">
+        <label className="form-field">
           档案类型
           <select
-            className="field mt-1"
+            className="field"
             value={editing.kind}
             onChange={(e) =>
               setEditing({
@@ -170,10 +170,10 @@ export default function ProfilesPanel() {
             <option value="local">本机服务 · 允许明确的本机 OS 操作</option>
           </select>
         </label>
-        <label className="text-xs">
+        <label className="form-field">
           档案服务地址
           <input
-            className="field mt-1"
+            className="field"
             required
             type="url"
             value={editing.endpoint}
@@ -182,10 +182,10 @@ export default function ProfilesPanel() {
             }
           />
         </label>
-        <label className="text-xs sm:col-span-2">
+        <label className="form-field sm:col-span-2">
           可选 CA 证书绝对路径
           <input
-            className="field mt-1"
+            className="field"
             value={editing.ca_certificate ?? ""}
             onChange={(e) =>
               setEditing({ ...editing, ca_certificate: e.target.value || null })
