@@ -1,10 +1,11 @@
 use super::*;
 use hps_domain::{
     HealthOverview, HealthProbeInput, HealthTask, HealthTransport, HealthVerdict, IpFamily,
-    NodeHealth, ProbePhase, ProbeResult,
+    NodeHealth, NodeOperationState, ProbePhase, ProbeResult,
 };
 use hps_engine::dial::ProbePlan;
 use hps_storage::health::{HealthState, ProbeReservation};
+use hps_storage::nodes::LeaseScope;
 use std::{
     collections::{HashMap, HashSet},
     sync::atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -357,15 +358,19 @@ impl Supervisor {
             return;
         }
         let key = (result.identity.clone(), result.profile_fingerprint.clone());
-        let failures = if result.verdict == HealthVerdict::Healthy {
-            0
-        } else {
-            self.health
-                .states
-                .lock()
-                .unwrap()
-                .get(&key)
-                .map_or(1, |s| s.failures.saturating_add(1))
+        let (failures, confirmed_failure) = {
+            let states = self.health.states.lock().unwrap();
+            let previous = states.get(&key);
+            let failures = if result.verdict == HealthVerdict::Healthy {
+                0
+            } else {
+                previous.map_or(1, |s| s.failures.saturating_add(1))
+            };
+            let confirmed = current.config.health.auto_remove_failed_leases
+                && settings.auto_remove_failed_leases
+                && lease_connection_failed(&result)
+                && previous.is_some_and(|state| lease_connection_failed(&state.result));
+            (failures, confirmed)
         };
         let wait = if failures == 0 {
             settings.interval_secs
@@ -386,32 +391,87 @@ impl Supervisor {
                 .engine
                 .health_registry()
                 .publish(result.clone(), current.config.health.max_staleness_secs);
-            let mut states = self.health.states.lock().unwrap();
-            if states.len() >= 400000 {
-                let identities = current
-                    .engine
-                    .probe_plans()
-                    .into_iter()
-                    .map(|p| p.identity().to_owned())
-                    .collect::<HashSet<_>>();
-                let fingerprints = current
-                    .health_profiles
-                    .iter()
-                    .map(|p| p.fingerprint.clone())
-                    .collect::<HashSet<_>>();
-                states.retain(|(identity, fp), _| {
-                    identities.contains(identity) && fingerprints.contains(fp)
-                });
+            {
+                let mut states = self.health.states.lock().unwrap();
+                if states.len() >= 400000 {
+                    let identities = current
+                        .engine
+                        .probe_plans()
+                        .into_iter()
+                        .map(|p| p.identity().to_owned())
+                        .collect::<HashSet<_>>();
+                    let fingerprints = current
+                        .health_profiles
+                        .iter()
+                        .map(|p| p.fingerprint.clone())
+                        .collect::<HashSet<_>>();
+                    states.retain(|(identity, fp), _| {
+                        identities.contains(identity) && fingerprints.contains(fp)
+                    });
+                }
+                states.insert(
+                    key,
+                    HealthState {
+                        result,
+                        failures,
+                        next_due_at: next,
+                    },
+                );
             }
-            states.insert(
-                key,
-                HealthState {
-                    result,
-                    failures,
-                    next_due_at: next,
-                },
-            );
+            if confirmed_failure && !current.engine.health_usable(plan.identity()) {
+                let mut changed = false;
+                // A single probe may represent identical endpoints across sources.
+                for current_plan in current.engine.probe_plans() {
+                    if current_plan.identity() == plan.identity() {
+                        changed |= self.remove_failed_lease(&current, &current_plan).await;
+                    }
+                }
+                if changed {
+                    let _ = self.refresh_pool().await;
+                }
+            }
         }
+    }
+
+    async fn remove_failed_lease(&self, current: &RuntimeSnapshot, plan: &ProbePlan) -> bool {
+        let node_id = &plan.config().id;
+        let Some(id) = node_id
+            .strip_prefix("lease:")
+            .and_then(|raw| raw.parse::<i64>().ok())
+        else {
+            return false;
+        };
+        let operation = plan.operation();
+        if operation.state != NodeOperationState::Enabled
+            || plan.remaining().is_none_or(|remaining| remaining.is_zero())
+        {
+            return false;
+        }
+        let Ok(lease) = self.store.node_lease(id).await else {
+            return false;
+        };
+        if lease.state != "active" || plan.provider_id() != Some(lease.provider_id.as_str()) {
+            return false;
+        }
+        if let Ok(control) = self
+            .store
+            .set_node_control(
+                node_id.clone(),
+                NodeOperationState::Deleted,
+                operation.version,
+                current.revision,
+                Some(LeaseScope {
+                    id,
+                    batch_id: lease.batch_id,
+                    provider_id: lease.provider_id,
+                }),
+            )
+            .await
+        {
+            current.engine.node_registry().publish(control);
+            return true;
+        }
+        false
     }
     pub async fn probe_health(
         self: &Arc<Self>,
@@ -658,6 +718,14 @@ impl Supervisor {
         })
     }
 }
+fn lease_connection_failed(result: &ProbeResult) -> bool {
+    result.verdict == HealthVerdict::Failed
+        && matches!(
+            result.phase,
+            ProbePhase::EndpointConnect | ProbePhase::UpstreamTls | ProbePhase::Authentication
+        )
+}
+
 fn placeholder(
     plan: &ProbePlan,
     transport: HealthTransport,

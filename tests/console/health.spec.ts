@@ -148,12 +148,21 @@ test("health MPA keeps probes across navigation, recovers lost acknowledgment an
       .getByRole("button", { name: "编辑检测策略", exact: true })
       .click();
     await expect(interval).toHaveValue("30");
+    await editor.getByText("短效节点清理", { exact: true }).click();
+    const cleanup = editor.getByRole("checkbox", {
+      name: "自动移除失效的短效节点",
+      exact: true,
+    });
+    await expect(cleanup).not.toBeChecked();
+    await cleanup.check();
     await page
       .getByRole("button", { name: "保存并应用策略", exact: true })
       .click();
     await expect(page.getByRole("main").getByRole("status")).toContainText(
       "检测策略已保存",
     );
+    const applied = await (await request.get("/api/v1/health?limit=1")).json();
+    expect(applied.configuration.auto_remove_failed_leases).toBe(true);
     // The actual POST reaches the daemon; only its acknowledgment is lost.
     await page.route("**/api/v1/health/probe", async (route) => {
       await route.fetch();

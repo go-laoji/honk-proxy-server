@@ -60,6 +60,103 @@ async fn boot(config: DaemonConfig) -> Arc<Supervisor> {
 }
 
 #[tokio::test]
+async fn auto_remove_waits_for_two_connection_failures_and_only_removes_leases() {
+    let target = support::origin(None).await;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let failed_address = listener.local_addr().unwrap();
+    drop(listener);
+    let provider = ProviderConfig {
+        id: "failed-source".into(),
+        enabled: true,
+        kind: ProviderKind::Text,
+        endpoint: "http://127.0.0.1:9/list".into(),
+        ttl_secs: Some(300),
+        ..Default::default()
+    };
+    let mut static_node = support::upstream(failed_address, ProxyProtocol::Http);
+    static_node.id = "keep-manual".into();
+    let config = DaemonConfig {
+        proxy: ProxyConfig {
+            upstreams: vec![static_node],
+            ..Default::default()
+        },
+        providers: vec![provider.clone()],
+        health: HealthConfig {
+            auto_remove_failed_leases: true,
+            retry_initial_secs: 2,
+            retry_max_secs: 2,
+            profiles: vec![ProbeProfile {
+                url: format!("http://{}/health", target.address),
+                ..Default::default()
+            }],
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let store = Store::open(None, config).unwrap();
+    let (task, _) = store
+        .begin_extraction(
+            provider.clone(),
+            "failed-lease".into(),
+            hps_provider::fingerprint(&provider),
+        )
+        .await
+        .unwrap();
+    store.extraction_requesting(task.id).await.unwrap();
+    let nodes = hps_provider::parse(
+        &provider,
+        failed_address.to_string().as_bytes(),
+        hps_storage::unix_now(),
+    )
+    .unwrap();
+    store
+        .finish_extraction(task.id, provider, nodes, true)
+        .await
+        .unwrap();
+    let app = Supervisor::boot(store, StartupOverrides::default())
+        .await
+        .unwrap();
+    app.confirm_startup().await.unwrap();
+    let lease_id = app
+        .nodes(hps_domain::NodeQuery {
+            provider: Some("failed-source".into()),
+            ..Default::default()
+        })
+        .await
+        .unwrap()
+        .nodes[0]
+        .id
+        .clone();
+    until(async || {
+        app.node(lease_id.clone()).await.unwrap().nodes[0]
+            .health_results
+            .iter()
+            .any(|result| result.verdict == HealthVerdict::Failed)
+    })
+    .await;
+    assert_eq!(
+        app.node(lease_id.clone()).await.unwrap().nodes[0]
+            .operation
+            .state,
+        hps_domain::NodeOperationState::Enabled
+    );
+    until(async || {
+        app.node(lease_id.clone()).await.unwrap().nodes[0]
+            .operation
+            .state
+            == hps_domain::NodeOperationState::Deleted
+    })
+    .await;
+    assert_eq!(
+        app.node("keep-manual".into()).await.unwrap().nodes[0]
+            .operation
+            .state,
+        hps_domain::NodeOperationState::Enabled
+    );
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
 async fn all_inlets_wait_for_real_proof_probe_has_no_demand_and_real_failure_revokes() {
     let target = support::origin(None).await;
     let proxy = support::http_proxy(None, None, 200).await;

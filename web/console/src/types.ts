@@ -265,6 +265,7 @@ export interface ProbeProfile {
 }
 export interface HealthConfig {
   enabled: boolean;
+  auto_remove_failed_leases?: boolean;
   profiles: ProbeProfile[];
   max_parallel: number;
   queue_capacity: number;

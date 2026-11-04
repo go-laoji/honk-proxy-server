@@ -34,6 +34,13 @@ export const healthFields: Field[] = [
   number("timeout_ms", "单次超时（毫秒）", 100, 60000),
   number("max_parallel", "最大并行检测数", 1, 64),
   {
+    kind: "section",
+    key: "lease_cleanup",
+    label: "短效节点清理",
+    help: "同一档案连续确认两次连接、上游 TLS 或鉴权失败时移除。手动和订阅节点继续保留。",
+    fields: [toggle("auto_remove_failed_leases", "自动移除失效的短效节点")],
+  },
+  {
     kind: "rows",
     key: "profiles",
     label: "探测档案",
