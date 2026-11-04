@@ -19,39 +19,66 @@ import { Stat } from "./ui";
 export function ConnectionStats({
   value,
   rates,
+  compact = false,
 }: {
   value: ConnectionStatistics;
   rates: Rates | null;
+  compact?: boolean;
 }) {
+  const metrics = [
+    {
+      title: "下载速率",
+      value: rates ? `${formatBytes(rates.down)}/s` : "采样中",
+      detail: `本周期累计 ${formatBytes(value.bytes_down)}`,
+      icon: ArrowDown,
+      tone: "brand",
+    },
+    {
+      title: "上传速率",
+      value: rates ? `${formatBytes(rates.up)}/s` : "采样中",
+      detail: `本周期累计 ${formatBytes(value.bytes_up)}`,
+      icon: ArrowUp,
+      tone: "amber",
+    },
+    {
+      title: "活跃业务连接",
+      value: String(value.active),
+      detail: `完整观测 ${value.active_tracked} · 未完整观测 ${value.active_untracked}`,
+      icon: Activity,
+      tone: "blue",
+    },
+    {
+      title: "失败 / 规则拒绝 / 主动断开",
+      value: `${value.failed} / ${value.rejected} / ${value.disconnected}`,
+      detail: `本周期已开始 ${value.started} · 已打开 ${value.opened}`,
+      icon: CircleAlert,
+      tone: "neutral",
+    },
+  ] as const;
+  if (compact) {
+    return (
+      <dl
+        className="panel grid grid-cols-2 gap-x-4 gap-y-2 px-3 py-2 text-xs sm:grid-cols-4"
+        aria-label="连接统计"
+      >
+        {metrics.map(({ title, value, detail }) => (
+          <div
+            key={title}
+            className="flex flex-wrap items-baseline gap-x-2"
+            title={detail}
+          >
+            <dt className="muted">{title}</dt>
+            <dd className="font-semibold tabular-nums">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    );
+  }
   return (
     <div className="metric-grid">
-      <Stat
-        title="下载速率"
-        value={rates ? `${formatBytes(rates.down)}/s` : "采样中"}
-        detail={`本周期累计 ${formatBytes(value.bytes_down)}`}
-        icon={ArrowDown}
-      />
-      <Stat
-        title="上传速率"
-        value={rates ? `${formatBytes(rates.up)}/s` : "采样中"}
-        detail={`本周期累计 ${formatBytes(value.bytes_up)}`}
-        icon={ArrowUp}
-        tone="amber"
-      />
-      <Stat
-        title="活跃业务连接"
-        value={String(value.active)}
-        detail={`完整观测 ${value.active_tracked} · 未完整观测 ${value.active_untracked}`}
-        icon={Activity}
-        tone="blue"
-      />
-      <Stat
-        title="失败 / 规则拒绝 / 主动断开"
-        value={`${value.failed} / ${value.rejected} / ${value.disconnected}`}
-        detail={`本周期已开始 ${value.started} · 已打开 ${value.opened}`}
-        icon={CircleAlert}
-        tone="neutral"
-      />
+      {metrics.map((metric) => (
+        <Stat key={metric.title} {...metric} />
+      ))}
     </div>
   );
 }

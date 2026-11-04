@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { FileCode2, Filter, Search, X } from "lucide-react";
+import { AdvancedFilters, FilterStartTime } from "../components/FilterOptions";
 import { Badge, Details } from "../components/ui";
 import AlertPanel from "../components/AlertPanel";
 import DiagnosticPanel from "../components/DiagnosticPanel";
@@ -73,9 +74,13 @@ export default function EventsPage() {
     records: ServiceEvent[];
   } | null>(null);
   const [selected, setSelected] = useState<ServiceEvent | null>(null);
+  const detailRegion = useRef<HTMLElement>(null);
   const [notice, setNotice] = useState("");
   const lastEpoch = useRef<string | null>(null);
   useEffect(() => setSelected(null), [queryKey]);
+  useEffect(() => {
+    if (selected) detailRegion.current?.focus();
+  }, [selected]);
   const feed = useEventFeed(
     query,
     automatic,
@@ -136,19 +141,21 @@ export default function EventsPage() {
     feed.reconnect();
   }
   return (
-    <div className="space-y-6">
-      <DiagnosticPanel />
-      <AlertPanel />
-      <section className="panel space-y-4 p-5">
-        <div>
-          <h2 className="flex items-center gap-2 font-semibold">
+    <div className="space-y-3">
+      <section id="service-events" className="panel space-y-2.5 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="flex items-center gap-2 text-sm font-semibold">
             <FileCode2 size={19} />
             结构化服务事件
           </h2>
-          <p className="muted mt-2 text-xs leading-6">
-            先补快照，再从完整游标跟踪。只记录操作和状态元数据；不保存业务正文、供应商
-            URL 查询或认证头。TCP 对端不代表已认证操作人。
-          </p>
+          <nav className="flex flex-wrap gap-3" aria-label="日志与事件页内导航">
+            <a className="text-link" href="#service-alerts">
+              状态告警
+            </a>
+            <a className="text-link" href="#service-diagnostics">
+              诊断
+            </a>
+          </nav>
         </div>
         <FeedControls
           state={feed.state}
@@ -160,119 +167,126 @@ export default function EventsPage() {
           key={search}
           aria-label="事件筛选"
           onSubmit={filters}
-          className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+          className="space-y-2"
         >
-          <label className="text-xs">
-            级别
-            <select
-              className="field mt-1"
-              name="level"
-              defaultValue={params.get("level") ?? ""}
-            >
-              <option value="">全部级别</option>
-              {Object.entries(eventLevels).map(([key, label]) => (
-                <option value={key} key={key}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-xs">
-            模块
-            <select
-              className="field mt-1"
-              name="module"
-              defaultValue={params.get("module") ?? ""}
-            >
-              <option value="">全部模块</option>
-              {Object.entries(eventModules).map(([key, label]) => (
-                <option value={key} key={key}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-xs">
-            统一任务 ID
-            <input
-              className="field mt-1"
-              name="task_id"
-              type="number"
-              min="1"
-              defaultValue={params.get("task_id") ?? ""}
-            />
-          </label>
-          <label className="text-xs">
-            请求 ID
-            <input
-              className="field mt-1"
-              name="request_id"
-              defaultValue={params.get("request_id") ?? ""}
-            />
-          </label>
-          <label className="text-xs">
-            节点 ID
-            <input
-              className="field mt-1"
-              name="node_id"
-              defaultValue={params.get("node_id") ?? ""}
-            />
-          </label>
-          <label className="text-xs">
-            供应商 ID
-            <input
-              className="field mt-1"
-              name="provider_id"
-              defaultValue={params.get("provider_id") ?? ""}
-            />
-          </label>
-          <label className="text-xs">
-            起始时间（Unix ms）
-            <input
-              className="field mt-1"
-              name="after_unix_ms"
-              type="number"
-              min="0"
-              defaultValue={params.get("after_unix_ms") ?? ""}
-            />
-          </label>
-          <label className="text-xs">
-            每批最多
-            <input
-              className="field mt-1"
-              name="limit"
-              type="number"
-              min="1"
-              max="200"
-              defaultValue={params.get("limit") ?? "100"}
-            />
-          </label>
-          <label className="text-xs sm:col-span-2">
-            从游标恢复（可选）
-            <input
-              className="field mt-1"
-              name="cursor"
-              defaultValue={params.get("cursor") ?? ""}
-            />
-          </label>
-          <div className="flex flex-wrap items-end gap-2">
-            <button className="btn">
-              <Filter size={15} />
-              应用事件筛选
-            </button>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => {
-                setSelected(null);
-                setNotice("");
-                navigate(new URLSearchParams());
-                feed.reconnect();
-              }}
-            >
-              重置筛选
-            </button>
+          <div className="filter-grid">
+            <label className="text-xs">
+              级别
+              <select
+                className="field mt-1"
+                name="level"
+                defaultValue={params.get("level") ?? ""}
+              >
+                <option value="">全部级别</option>
+                {Object.entries(eventLevels).map(([key, label]) => (
+                  <option value={key} key={key}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs">
+              模块
+              <select
+                className="field mt-1"
+                name="module"
+                defaultValue={params.get("module") ?? ""}
+              >
+                <option value="">全部模块</option>
+                {Object.entries(eventModules).map(([key, label]) => (
+                  <option value={key} key={key}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs">
+              统一任务 ID
+              <input
+                className="field mt-1"
+                name="task_id"
+                type="number"
+                min="1"
+                defaultValue={params.get("task_id") ?? ""}
+              />
+            </label>
+            <div className="filter-actions">
+              <button className="btn">
+                <Filter size={15} />
+                应用事件筛选
+              </button>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  setSelected(null);
+                  setNotice("");
+                  navigate(new URLSearchParams());
+                  feed.reconnect();
+                }}
+              >
+                重置筛选
+              </button>
+            </div>
           </div>
+          <AdvancedFilters
+            active={
+              params.has("request_id") ||
+              params.has("node_id") ||
+              params.has("provider_id") ||
+              params.has("after_unix_ms") ||
+              (params.get("limit") ?? "100") !== "100" ||
+              params.has("cursor")
+            }
+          >
+            <label className="text-xs">
+              请求 ID
+              <input
+                className="field mt-1"
+                name="request_id"
+                defaultValue={params.get("request_id") ?? ""}
+              />
+            </label>
+            <label className="text-xs">
+              节点 ID
+              <input
+                className="field mt-1"
+                name="node_id"
+                defaultValue={params.get("node_id") ?? ""}
+              />
+            </label>
+            <label className="text-xs">
+              供应商 ID
+              <input
+                className="field mt-1"
+                name="provider_id"
+                defaultValue={params.get("provider_id") ?? ""}
+              />
+            </label>
+            <FilterStartTime
+              name="after_unix_ms"
+              value={params.get("after_unix_ms") ?? ""}
+            />
+            <label className="text-xs">
+              每批最多
+              <input
+                className="field mt-1"
+                name="limit"
+                type="number"
+                min="1"
+                max="200"
+                defaultValue={params.get("limit") ?? "100"}
+              />
+            </label>
+            <label className="text-xs sm:col-span-2">
+              从游标恢复（可选）
+              <input
+                className="field mt-1"
+                name="cursor"
+                defaultValue={params.get("cursor") ?? ""}
+              />
+            </label>
+          </AdvancedFilters>
         </form>
         {params.has("epoch") && (
           <div className="muted flex flex-wrap items-center gap-2 break-all text-xs">
@@ -283,18 +297,21 @@ export default function EventsPage() {
           </div>
         )}
         {value && (
-          <p className="muted break-all text-xs leading-6">
-            最近成功：{dateMs(value.page.observed_at_unix_ms)} · 服务保留至多{" "}
-            {value.page.retention_limit} 条，本页缓存最近 500 条、显示最近 100
-            条。当前缓存 {value.records.length} 条。
-            {value.page.has_more
-              ? "仍有待补事件，恢复订阅或再次补取可继续。"
-              : ""}
-            <br />
-            观测周期：{value.page.epoch}
-            <br />
-            完整游标：{value.page.cursor}
-          </p>
+          <details className="muted text-xs">
+            <summary className="cursor-pointer">
+              显示 {records.length} 条 · 最近读取{" "}
+              {dateMs(value.page.observed_at_unix_ms)}
+            </summary>
+            <p className="mt-2 break-all leading-5">
+              保留上限 {value.page.retention_limit} 条 · 本页缓存{" "}
+              {value.records.length} 条
+              {value.page.has_more ? " · 仍有待补事件" : ""}
+              <br />
+              观测周期 {value.page.epoch}
+              <br />
+              完整游标 {value.page.cursor}
+            </p>
+          </details>
         )}
       </section>
       {notice && (
@@ -306,7 +323,12 @@ export default function EventsPage() {
         </p>
       )}
       {selected && value && (
-        <section className="panel" aria-label="事件详情">
+        <section
+          ref={detailRegion}
+          tabIndex={-1}
+          className="panel"
+          aria-label="事件详情"
+        >
           <div className="flex items-center justify-between p-5">
             <h2 className="font-semibold">事件 #{selected.sequence}</h2>
             <button className="btn" onClick={() => setSelected(null)}>
@@ -383,26 +405,31 @@ export default function EventsPage() {
           />
         </section>
       )}
-      <div className="space-y-3" aria-label="服务事件列表">
+      <div
+        className={records.length ? "panel" : undefined}
+        aria-label="服务事件列表"
+      >
         {records.map((event) => (
           <article
             key={event.sequence}
             aria-label={`事件 ${event.sequence}`}
-            className="panel min-w-0 space-y-2 p-4"
+            className="management-record"
           >
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <strong className="break-words text-sm">
-                {descriptions[event.code] ?? event.code}
-              </strong>
-              <Badge active={event.level === "info"}>
-                {eventLevels[event.level] ?? event.level}
-              </Badge>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <strong className="break-words text-sm">
+                  {descriptions[event.code] ?? event.code}
+                </strong>
+                <Badge active={event.level === "info"}>
+                  {eventLevels[event.level] ?? event.level}
+                </Badge>
+              </div>
+              <p className="muted mt-0.5 break-words text-xs">
+                #{event.sequence} · {dateMs(event.occurred_at_unix_ms)} ·{" "}
+                {eventModules[event.module] ?? event.module} · {event.code}
+              </p>
             </div>
-            <p className="muted break-words text-xs">
-              #{event.sequence} · {dateMs(event.occurred_at_unix_ms)} ·{" "}
-              {eventModules[event.module] ?? event.module} · {event.code}
-            </p>
-            <p className="break-all text-xs">
+            <p className="muted min-w-0 break-words text-xs [overflow-wrap:anywhere]">
               {event.resource_kind ?? "资源未记录"}
               {event.resource_id ? ` / ${event.resource_id}` : ""}
               {event.task_id
@@ -410,7 +437,7 @@ export default function EventsPage() {
                 : ""}
               {event.request_id ? ` · 请求 ${event.request_id}` : ""}
             </p>
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 className="btn text-xs"
                 onClick={() => setSelected(event)}
@@ -420,7 +447,7 @@ export default function EventsPage() {
               </button>
               {event.task_id && value && (
                 <a
-                  className="py-2 text-xs text-blue-600"
+                  className="text-link"
                   href={`./tasks.html?detail=${event.task_id}&epoch=${value.page.epoch}`}
                 >
                   查看统一任务 →
@@ -435,6 +462,12 @@ export default function EventsPage() {
           当前保留窗口内没有符合筛选的事件。后台任务仍由服务独立运行。
         </p>
       )}
+      <div id="service-alerts">
+        <AlertPanel />
+      </div>
+      <div id="service-diagnostics">
+        <DiagnosticPanel />
+      </div>
     </div>
   );
 }

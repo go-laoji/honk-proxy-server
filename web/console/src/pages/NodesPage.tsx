@@ -43,7 +43,8 @@ async function loadInventory(params: URLSearchParams, signal: AbortSignal) {
       !params.has("hide_expired") ||
       !(cause instanceof ApiRequestError) ||
       !(
-        (cause.status === 400 && !cause.code) ||
+        (cause.status === 400 &&
+          (!cause.code || cause.code === "invalid_server_response")) ||
         cause.message === "unsupported API path"
       )
     ) {
