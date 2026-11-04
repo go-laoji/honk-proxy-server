@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { Activity, ArrowDownUp, Clock3, CircleAlert } from "lucide-react";
+import {
+  Activity,
+  ArrowDown,
+  ArrowRight,
+  ArrowUp,
+  CircleAlert,
+} from "lucide-react";
 import { getJson } from "../platform";
 import {
   formatBytes,
@@ -18,38 +24,33 @@ export function ConnectionStats({
   rates: Rates | null;
 }) {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="metric-grid">
       <Stat
-        title="活动业务交换 / 隧道"
+        title="下载速率"
+        value={rates ? `${formatBytes(rates.down)}/s` : "采样中"}
+        detail={`本周期累计 ${formatBytes(value.bytes_down)}`}
+        icon={ArrowDown}
+      />
+      <Stat
+        title="上传速率"
+        value={rates ? `${formatBytes(rates.up)}/s` : "采样中"}
+        detail={`本周期累计 ${formatBytes(value.bytes_up)}`}
+        icon={ArrowUp}
+        tone="amber"
+      />
+      <Stat
+        title="活跃业务连接"
         value={String(value.active)}
         detail={`完整观测 ${value.active_tracked} · 未完整观测 ${value.active_untracked}`}
         icon={Activity}
-      />
-      <Stat
-        title="出口上传 / 下载速率"
-        value={
-          rates
-            ? `${formatBytes(rates.up)}/s / ${formatBytes(rates.down)}/s`
-            : "采样中"
-        }
-        detail={
-          rates
-            ? `单调时间差 ${Math.round(rates.interval)} ms，非瞬时带宽上限`
-            : "需要同一观测周期的两个样本"
-        }
-        icon={ArrowDownUp}
-      />
-      <Stat
-        title="累计上传 / 下载"
-        value={`${formatBytes(value.bytes_up)} / ${formatBytes(value.bytes_down)}`}
-        detail={`本次观测周期始于 ${new Date(value.started_at_unix_ms).toLocaleString("zh-CN")}`}
-        icon={Clock3}
+        tone="blue"
       />
       <Stat
         title="失败 / 规则拒绝 / 主动断开"
         value={`${value.failed} / ${value.rejected} / ${value.disconnected}`}
         detail={`本周期已开始 ${value.started} · 已打开 ${value.opened}`}
         icon={CircleAlert}
+        tone="neutral"
       />
     </div>
   );
@@ -121,24 +122,34 @@ export default function ConnectionSummary({ endpoint }: { endpoint: string }) {
     };
   }, [endpoint]);
   return (
-    <section className="mt-6 space-y-3" aria-label="连接流量与异常摘要">
-      <div className="flex items-center justify-between">
-        <h2 className="font-semibold">连接、流量与运行事项</h2>
-        <a className="text-sm text-blue-600" href="./connections.html">
-          查看连接 →
+    <section className="space-y-3" aria-label="连接流量与异常摘要">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-semibold">实时流量</h2>
+        <a className="text-link" href="./connections.html">
+          查看连接 <ArrowRight size={14} aria-hidden="true" />
         </a>
       </div>
+      {!value && !error && <p className="muted text-sm">正在读取连接摘要…</p>}
       {value && (
         <>
           <ConnectionStats value={value.statistics} rates={rates} />
-          <p className="muted text-xs leading-6">
-            入口 TCP 套接字 {value.proxy.active_connections}，与 HTTP 业务交换 /
-            隧道分别统计。出口字节不含代理协商，HTTP 含转发首部，HTTPS
-            目标内容保持不透明。每 2 秒采样；最近成功时间{" "}
-            {new Date(value.evaluated_at_unix_ms).toLocaleString("zh-CN")}。
-          </p>
+          <details className="muted text-xs">
+            <summary className="cursor-pointer">采样口径与时间</summary>
+            <p className="mt-2 leading-6">
+              入口 TCP 套接字 {value.proxy.active_connections}，与 HTTP 业务交换
+              / 隧道分别统计。出口字节不含代理协商，HTTP 含转发首部，HTTPS
+              目标内容保持不透明。每 2 秒采样；速率取同一观测周期内的相邻样本。
+              观测周期始于{" "}
+              {new Date(value.statistics.started_at_unix_ms).toLocaleString(
+                "zh-CN",
+              )}
+              ， 最近成功时间{" "}
+              {new Date(value.evaluated_at_unix_ms).toLocaleString("zh-CN")}。
+            </p>
+          </details>
           {value.attention.length > 0 && (
             <div className="panel space-y-3 p-4" aria-label="异常与运行事项">
+              <h3 className="text-sm font-semibold">运行事项</h3>
               {value.attention.map((item, index) => (
                 <div
                   key={`${item.kind}:${item.resource_id}:${index}`}

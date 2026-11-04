@@ -71,18 +71,17 @@ export default function ObservationPanel({
       up: (sample.bytes_up_delta * 1000) / Math.max(1, sample.interval_ms),
       down: (sample.bytes_down_delta * 1000) / Math.max(1, sample.interval_ms),
       failed: sample.failed_delta + sample.rejected_delta,
-      at: sample.at_unix_ms,
       active: sample.active,
     })) ?? [];
   return (
-    <section className="panel space-y-4 p-5" aria-label={name}>
+    <section className="panel min-w-0 space-y-4 p-4 sm:p-5" aria-label={name}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-semibold">{name}</h2>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {mode !== "rules" && (
             <select
               aria-label="观测时间窗口"
-              className="field"
+              className="field w-auto"
               value={windowSecs}
               onChange={(event) => {
                 const next = new URLSearchParams(window.location.search);
@@ -100,10 +99,12 @@ export default function ObservationPanel({
           </button>
         </div>
       </div>
-      <p className="muted text-xs leading-6">
-        当前 Daemon 运行期的真实计数和元数据，重启后重置。采样每 5 秒、最多 721
-        点 / 1 小时；页隐藏时暂停读取，不保存业务正文。
-      </p>
+      {mode !== "traffic" && (
+        <p className="muted text-xs leading-6">
+          当前 Daemon 运行期的真实计数和元数据，重启后重置。采样每 5 秒、最多
+          721 点 / 1 小时；页隐藏时暂停读取，不保存业务正文。
+        </p>
+      )}
       {error && (
         <p role="alert" className="break-all text-sm text-red-600">
           {error} · 已有数据可能过期
@@ -112,8 +113,9 @@ export default function ObservationPanel({
       {!data && !error && <p className="muted text-sm">正在读取观测窗口…</p>}
       {data && (
         <>
-          <p className="muted break-all text-xs leading-6">
-            观察实例 {data.epoch.slice(0, 8)} · 实际采样{" "}
+          <p className="muted text-xs leading-5">
+            {mode !== "traffic" && `观察实例 ${data.epoch.slice(0, 8)} · `}
+            实际采样{" "}
             {data.oldest_sample_unix_ms === null
               ? "尚无"
               : date(data.oldest_sample_unix_ms)}{" "}
@@ -124,15 +126,7 @@ export default function ObservationPanel({
           </p>
           {mode === "traffic" && (
             <>
-              <div className="grid gap-3 text-xs sm:grid-cols-3">
-                <p>本运行期上传 {formatBytes(data.statistics.bytes_up)}</p>
-                <p>本运行期下载 {formatBytes(data.statistics.bytes_down)}</p>
-                <p>
-                  当前活跃 {data.statistics.active} · 关闭{" "}
-                  {data.statistics.closed} · 失败 {data.statistics.failed}
-                </p>
-              </div>
-              <div className="grid gap-3 md:grid-cols-2">
+              <div className="grid gap-2.5 sm:grid-cols-2">
                 {[
                   { key: "down" as const, label: "下载速度 B/s" },
                   { key: "up" as const, label: "上传速度 B/s" },
@@ -140,46 +134,60 @@ export default function ObservationPanel({
                   { key: "active" as const, label: "采样时活跃连接数" },
                 ].map(({ key, label }) => {
                   const max = Math.max(1, ...series.map((p) => p[key]));
-                  const duration = Math.max(
-                    1,
-                    series[series.length - 1]?.elapsed ?? 1,
-                  );
+                  const lastElapsed = series[series.length - 1]?.elapsed ?? 0;
+                  const duration = Math.max(1, lastElapsed);
                   const points = series
-                    .map(
-                      (p) =>
-                        `${5 + (p.elapsed / duration) * 310},${75 - (p[key] / max) * 70}`,
-                    )
+                    .map((p) => {
+                      const x = 5 + (p.elapsed / duration) * 310;
+                      const y = 75 - (p[key] / max) * 70;
+                      return `${x.toFixed(2)},${y.toFixed(2)}`;
+                    })
                     .join(" ");
-                  const lastX =
-                    5 +
-                    ((series[series.length - 1]?.elapsed ?? 0) / duration) *
-                      310;
+                  const lastX = 5 + (lastElapsed / duration) * 310;
+                  const rate = key === "up" || key === "down";
                   return (
                     <figure className="chart-card" data-series={key} key={key}>
-                      <figcaption className="flex items-center gap-2 text-xs">
-                        <span className="chart-label-dot" aria-hidden="true" />
-                        {label} · 上界 {Math.ceil(max)}
+                      <figcaption className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs">
+                        <span className="inline-flex items-center gap-2 font-medium">
+                          <span
+                            className="chart-label-dot"
+                            aria-hidden="true"
+                          />
+                          {label}
+                        </span>
+                        <span className="muted tabular-nums">
+                          上界 {rate ? `${formatBytes(max)}/s` : Math.ceil(max)}
+                        </span>
                       </figcaption>
                       <svg
                         viewBox="0 0 320 80"
-                        className="chart-line mt-2 h-24 w-full"
+                        preserveAspectRatio="none"
+                        className="chart-line mt-2 h-16 w-full"
                         role="img"
                         aria-label={label}
                       >
-                        {(key === "up" || key === "down") &&
-                          series.length > 1 && (
-                            <polygon
-                              className="chart-area"
-                              points={`5,75 ${points} ${lastX},75`}
-                              aria-hidden="true"
-                            />
-                          )}
-                        <polyline
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          points={points}
+                        <path
+                          className="chart-gridlines"
+                          d="M5 5H315 M5 40H315 M5 75H315"
+                          aria-hidden="true"
                         />
+                        {rate && series.length > 1 && (
+                          <polygon
+                            className="chart-area"
+                            points={`5,75 ${points} ${lastX.toFixed(2)},75`}
+                            aria-hidden="true"
+                          />
+                        )}
+                        {series.length > 1 && (
+                          <polyline
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                            strokeLinejoin="round"
+                            vectorEffect="non-scaling-stroke"
+                            points={points}
+                          />
+                        )}
                         {series.length === 1 && (
                           <circle
                             cx="5"
@@ -193,9 +201,25 @@ export default function ObservationPanel({
                   );
                 })}
               </div>
-              <p className="muted text-xs">
-                速率由相邻累计字节和真实单调采样间隔计算；首个点为基线。这里只显示已采样区间，不把它当作完整流量审计。延迟曲线见健康检查的持久探测历史。
-              </p>
+              {series.length === 0 && (
+                <p className="muted text-xs">此窗口尚无采样数据。</p>
+              )}
+              <details className="muted text-xs">
+                <summary className="cursor-pointer">
+                  观测说明与运行期累计
+                </summary>
+                <p className="mt-2 leading-5">
+                  观察实例 {data.epoch.slice(0, 8)} · 本运行期上传{" "}
+                  {formatBytes(data.statistics.bytes_up)} · 下载{" "}
+                  {formatBytes(data.statistics.bytes_down)} · 活跃{" "}
+                  {data.statistics.active} · 关闭 {data.statistics.closed} ·
+                  失败 {data.statistics.failed}。
+                </p>
+                <p className="mt-1 leading-5">
+                  每 5 秒采样，每小时最多 721
+                  点，页隐藏时暂停读取，重启后计数重置。速率由相邻累计字节和单调采样间隔计算，首个点为基线。延迟曲线可在健康检查的探测历史中查看。
+                </p>
+              </details>
             </>
           )}
           {mode === "connections" && (

@@ -1,4 +1,11 @@
-import { useState, useEffect, lazy, Suspense, type ComponentType } from "react";
+import {
+  useState,
+  useEffect,
+  useRef,
+  lazy,
+  Suspense,
+  type ComponentType,
+} from "react";
 import {
   Activity,
   ArrowDownUp,
@@ -24,9 +31,10 @@ import {
   Sun,
   Unplug,
   Waypoints,
+  X,
 } from "lucide-react";
 import manifest from "../pages.manifest.json";
-import { useService } from "./use-service";
+import { useService, type ServiceData } from "./use-service";
 import { Badge } from "./components/ui";
 import BrandLogo from "./components/BrandLogo";
 import Overview from "./pages/Overview";
@@ -65,18 +73,84 @@ const icons: Record<
   config: Code2,
   settings: Settings2,
 };
-const groups = ["工作台", "代理网络", "运行观测", "系统管理"];
+const groups = ["工作台", "运行观测", "代理与路由", "系统管理"].map(
+  (title) => ({
+    title,
+    pages: manifest.filter((page) => page.group === title),
+  }),
+);
 const current =
   manifest.find((page) => page.id === document.documentElement.dataset.page) ??
   manifest[0];
 
-const CurrentIcon =
-  icons[current.id] ??
-  icons[current.id.replace("-detail", "s")] ??
-  CircleDashed;
+const parent = manifest.find((page) => page.id === current.parent);
+const currentSection = parent ?? current;
+const CurrentIcon = icons[currentSection.id] ?? CircleDashed;
+
+function Navigation({ data }: { data: ServiceData | null }) {
+  return (
+    <>
+      <a href="./overview.html" className="brand-link">
+        <BrandLogo />
+        <span>
+          <strong className="block text-base tracking-tight">Honk Proxy</strong>
+          <span className="muted block text-[11px]">代理控制台</span>
+        </span>
+      </a>
+      <nav
+        aria-label="主导航"
+        className="min-h-0 flex-1 overflow-y-auto px-3 py-2"
+      >
+        {groups.map(({ title, pages }) => (
+          <div key={title} className="nav-group">
+            <p className="nav-group-label">{title}</p>
+            {pages.map((page) => {
+              const Icon = icons[page.id] ?? CircleDashed;
+              const active = page.id === currentSection.id;
+              return (
+                <a
+                  key={page.id}
+                  href={`./${page.file}`}
+                  aria-current={
+                    active ? (parent ? "location" : "page") : undefined
+                  }
+                  className="nav-link"
+                >
+                  <span className="nav-icon" aria-hidden="true">
+                    <Icon size={17} />
+                  </span>
+                  {page.title}
+                </a>
+              );
+            })}
+          </div>
+        ))}
+      </nav>
+      <div className="sidebar-instance">
+        <div className="flex items-center gap-2 text-xs font-semibold">
+          <span
+            className="instance-dot"
+            data-connected={Boolean(data)}
+            aria-hidden="true"
+          />
+          <span className="truncate">
+            {data?.status.instance_name ?? "未连接服务"}
+          </span>
+        </div>
+        <p className="muted mt-1 truncate text-[11px]" title={data?.endpoint}>
+          {data?.endpoint ?? "选择一个服务开始管理"}
+        </p>
+        <a href="./index.html" className="text-link mt-2">
+          切换连接 <ChevronRight size={13} aria-hidden="true" />
+        </a>
+      </div>
+    </>
+  );
+}
 
 export default function App() {
   const service = useService();
+  const mobileNav = useRef<HTMLDialogElement>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [dark, setDark] = useState(() => {
     try {
@@ -93,101 +167,69 @@ export default function App() {
       /* Theme persistence is optional. */
     }
   }, [dark]);
-  const pageParent = current.group === "详情" ? "代理网络" : current.group;
+  useEffect(() => {
+    const desktop = window.matchMedia("(min-width: 64rem)");
+    const closeOnDesktop = () => {
+      if (desktop.matches) mobileNav.current?.close();
+    };
+    desktop.addEventListener("change", closeOnDesktop);
+    return () => desktop.removeEventListener("change", closeOnDesktop);
+  }, []);
   return (
-    <div className="min-h-screen">
-      {mobileOpen && (
-        <button
-          aria-label="关闭导航"
-          className="fixed inset-0 z-30 bg-slate-950/50 lg:hidden"
-          onClick={() => setMobileOpen(false)}
-        />
-      )}
-      <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r sidebar transition-transform lg:translate-x-0 ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}
-      >
-        <a
-          href="./overview.html"
-          className="brand-link flex h-20 items-center gap-3 px-6"
-        >
-          <BrandLogo />
-          <span>
-            <strong className="block text-base tracking-tight">
-              Honk Proxy
-            </strong>
-            <span className="muted mt-0.5 block text-[10px] tracking-[0.18em]">
-              PROXY CONTROL
-            </span>
-          </span>
-        </a>
-        <nav
-          aria-label="主导航"
-          className="flex-1 space-y-5 overflow-y-auto px-3 py-3"
-        >
-          {groups.map((group) => (
-            <div key={group}>
-              <p className="nav-group-label">{group}</p>
-              <div className="space-y-0.5">
-                {manifest
-                  .filter((page) => page.group === group)
-                  .map((page) => {
-                    const Icon = icons[page.id] ?? CircleDashed;
-                    const active = page.id === current.id;
-                    return (
-                      <a
-                        key={page.id}
-                        href={`./${page.file}`}
-                        aria-current={active ? "page" : undefined}
-                        className="nav-link"
-                      >
-                        <span className="nav-icon" aria-hidden="true">
-                          <Icon size={17} />
-                        </span>
-                        {page.title}
-                        {active && (
-                          <span className="ml-auto size-1.5 rounded-full bg-brand-600 dark:bg-brand-300" />
-                        )}
-                      </a>
-                    );
-                  })}
-              </div>
-            </div>
-          ))}
-        </nav>
-        <div className="sidebar-instance">
-          <div className="flex items-center gap-2 text-xs font-medium">
-            <span
-              className={`size-2 rounded-full ${service.data ? "bg-emerald-500" : "bg-slate-400"}`}
-            />
-            {service.data?.status.instance_name ?? "未连接服务"}
-          </div>
-          <p className="muted mt-2 truncate text-[10px]">
-            {service.data?.endpoint ?? "选择一个服务开始管理"}
-          </p>
-          <a
-            href="./index.html"
-            className="mt-3 inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400"
-          >
-            切换连接 <ChevronRight size={12} />
-          </a>
-        </div>
+    <div className="app-shell min-h-screen">
+      <aside className="sidebar desktop-sidebar">
+        <Navigation data={service.data} />
       </aside>
-      <div className="lg:pl-60">
-        <header className="app-header flex h-16 items-center justify-between border-b px-5 backdrop-blur sm:px-8">
-          <div className="flex items-center gap-3 text-xs">
+      <dialog
+        id="mobile-navigation"
+        ref={mobileNav}
+        className="sidebar mobile-sidebar"
+        aria-label="导航菜单"
+        onClose={() => setMobileOpen(false)}
+        onClick={(event) => {
+          if (event.target === event.currentTarget) event.currentTarget.close();
+        }}
+      >
+        <div className="relative flex h-full flex-col">
+          <button
+            type="button"
+            className="icon-button absolute right-3 top-3"
+            aria-label="关闭导航"
+            onClick={() => mobileNav.current?.close()}
+          >
+            <X size={19} aria-hidden="true" />
+          </button>
+          {mobileOpen && <Navigation data={service.data} />}
+        </div>
+      </dialog>
+      <div className="app-content min-w-0">
+        <header className="app-header">
+          <div className="flex min-w-0 items-center gap-2 text-xs sm:gap-3">
             <button
+              type="button"
               aria-label="打开导航"
-              className="lg:hidden"
-              onClick={() => setMobileOpen(true)}
+              aria-controls="mobile-navigation"
+              aria-expanded={mobileOpen}
+              className="icon-button lg:hidden"
+              onClick={() => {
+                mobileNav.current?.showModal();
+                setMobileOpen(true);
+              }}
             >
-              <Menu size={20} />
+              <Menu size={20} aria-hidden="true" />
             </button>
-            <span className="muted">{pageParent}</span>
-            <ChevronRight size={12} className="text-slate-400" />
-            <span>{current.title}</span>
+            <span className="muted hidden sm:inline">
+              {currentSection.group}
+            </span>
+            <ChevronRight
+              size={13}
+              className="muted hidden sm:block"
+              aria-hidden="true"
+            />
+            <span className="truncate font-medium">{current.title}</span>
           </div>
-          <div className="flex items-center gap-4">
-            <span className="hidden sm:block">
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+            <span role="status">
               <Badge active={Boolean(service.data)}>
                 {service.data
                   ? "服务已连接"
@@ -199,7 +241,7 @@ export default function App() {
             <button
               className="icon-button"
               aria-label={dark ? "切换浅色模式" : "切换深色模式"}
-              onClick={() => setDark(!dark)}
+              onClick={() => setDark((value) => !value)}
             >
               <span className="theme-icon inline-flex" aria-hidden="true">
                 {dark ? <Sun size={18} /> : <Moon size={18} />}
@@ -207,18 +249,18 @@ export default function App() {
             </button>
           </div>
         </header>
-        <main className="mx-auto max-w-[1440px] p-5 sm:p-8 xl:p-10">
-          <div className="mb-7 flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-3">
-                <span className="page-heading-mark" aria-hidden="true">
-                  <CurrentIcon size={21} />
-                </span>
-                <h1 className="text-2xl font-semibold tracking-tight">
+        <main className="mx-auto max-w-[1480px] px-4 py-5 sm:p-7 xl:px-9">
+          <div className="page-heading">
+            <div className="flex min-w-0 items-start gap-3">
+              <span className="page-heading-mark" aria-hidden="true">
+                <CurrentIcon size={21} />
+              </span>
+              <div className="min-w-0">
+                <h1 className="text-2xl leading-tight font-semibold tracking-tight sm:text-[28px]">
                   {current.title}
                 </h1>
+                <p className="muted mt-1 text-sm">{current.description}</p>
               </div>
-              <p className="muted mt-2 text-sm">{current.description}</p>
             </div>
             <button
               className="btn"

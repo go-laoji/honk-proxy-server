@@ -26,18 +26,20 @@ export function Stat({
   value: string;
   detail: string;
   icon: ComponentType<{ size?: number; className?: string }>;
-  tone?: "brand" | "blue" | "neutral";
+  tone?: "brand" | "blue" | "amber" | "neutral";
 }) {
   return (
-    <div className="panel stat-card p-5" data-tone={tone}>
-      <div className="flex items-center justify-between">
-        <p className="muted text-sm">{title}</p>
+    <div className="panel stat-card min-w-0 p-3.5 sm:p-4" data-tone={tone}>
+      <div className="flex items-center gap-2">
         <span className="stat-icon" aria-hidden="true">
-          <Icon size={18} />
+          <Icon size={15} />
         </span>
+        <p className="muted text-xs font-medium">{title}</p>
       </div>
-      <p className="mt-4 text-2xl font-semibold tracking-tight">{value}</p>
-      <p className="muted mt-2 text-xs leading-5">{detail}</p>
+      <p className="mt-2 text-xl font-semibold tracking-tight tabular-nums sm:text-2xl">
+        {value}
+      </p>
+      <p className="muted mt-1 text-xs leading-5">{detail}</p>
     </div>
   );
 }

@@ -18,56 +18,56 @@
     "file": "inbounds.html",
     "title": "代理入口",
     "description": "HTTP、HTTPS 与 SOCKS5 接入",
-    "group": "代理网络"
+    "group": "代理与路由"
   },
   {
     "id": "providers",
     "file": "providers.html",
     "title": "上游供应商",
     "description": "管理短效代理提取 API 与补池策略",
-    "group": "代理网络"
+    "group": "代理与路由"
   },
   {
     "id": "provider-detail",
     "file": "provider-detail.html",
     "title": "供应商详情",
     "description": "查看提取批次、租约和有效期",
-    "group": "详情"
+    "parent": "providers"
   },
   {
     "id": "nodes",
     "file": "nodes.html",
     "title": "代理节点",
     "description": "查看节点能力、健康与剩余寿命",
-    "group": "代理网络"
+    "group": "代理与路由"
   },
   {
     "id": "node-detail",
     "file": "node-detail.html",
     "title": "节点详情",
     "description": "查看节点来源、租约与连接信息",
-    "group": "详情"
+    "parent": "nodes"
   },
   {
     "id": "groups",
     "file": "groups.html",
     "title": "节点分组",
     "description": "配置选点策略与回退范围",
-    "group": "代理网络"
+    "group": "代理与路由"
   },
   {
     "id": "group-detail",
     "file": "group-detail.html",
     "title": "分组详情",
     "description": "查看成员、策略和当前选择",
-    "group": "详情"
+    "parent": "groups"
   },
   {
     "id": "rules",
     "file": "rules.html",
     "title": "路由规则",
     "description": "配置流量匹配、模拟与发布",
-    "group": "代理网络"
+    "group": "代理与路由"
   },
   {
     "id": "health",
@@ -81,7 +81,7 @@
     "file": "dns.html",
     "title": "DNS 设置",
     "description": "配置解析上游、缓存与引导解析",
-    "group": "代理网络"
+    "group": "代理与路由"
   },
   {
     "id": "connections",
