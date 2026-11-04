@@ -58,30 +58,28 @@ test("rules MPA separates candidates and runtime, orders by keyboard/buttons and
     await page
       .getByRole("button", { name: "编辑规则策略", exact: true })
       .click();
-    const policyEditor = page.getByRole("textbox", {
-      name: "规则策略 JSON",
+    const editor = page.getByRole("form", { name: "规则配置" });
+    const action = editor.getByRole("combobox", {
+      name: "流量动作",
       exact: true,
     });
-    const policy = JSON.parse(await policyEditor.inputValue());
-    policy.default_action = { kind: "direct" };
-    await policyEditor.fill(JSON.stringify(policy));
+    await action.selectOption("group");
+    await editor.getByLabel("目标节点或分组 ID").fill("old-draft-target");
+    await action.selectOption("direct");
     await page.getByRole("button", { name: "保存为候选", exact: true }).click();
     await expect(page.getByRole("main").getByRole("status")).toContainText(
       "需要显式激活",
     );
     expect((await throughProxy(proxy, target)).status).toBe(503);
-    await page
-      .getByRole("textbox", { name: "连接上下文 JSON", exact: true })
-      .fill(
-        JSON.stringify({
-          destination_host: "127.0.0.1",
-          destination_port: port,
-          transport: "tcp",
-          source_ip: "127.0.0.1",
-          inbound: "browser-http",
-          inbound_protocol: "http",
-        }),
-      );
+    const context = page.getByRole("form", { name: "规则模拟条件" });
+    await context.getByLabel("目标域名或 IP").fill("127.0.0.1");
+    await context.getByLabel("目标端口").fill(String(port));
+    await context.getByLabel("入口 ID").fill("browser-http");
+    await context.getByText("来源、DNS 观测与进程", { exact: true }).click();
+    await context.getByLabel("来源 IP", { exact: true }).fill("127.0.0.1");
+    await context
+      .getByRole("combobox", { name: "入口协议", exact: true })
+      .selectOption("http");
     const result = page.getByLabel("规则模拟结果", { exact: true });
     await page
       .getByRole("button", { name: "执行规则模拟", exact: true })
@@ -99,14 +97,14 @@ test("rules MPA separates candidates and runtime, orders by keyboard/buttons and
     });
     async function add(id: string, kind: string) {
       await page.getByRole("button", { name: "新增规则", exact: true }).click();
-      await page.getByRole("textbox", { name: "规则 JSON", exact: true }).fill(
-        JSON.stringify({
-          id,
-          enabled: true,
-          conditions: { destination_ports: [{ start: port, end: port }] },
-          action: { kind },
-        }),
-      );
+      await editor.getByLabel("规则 ID").fill(id);
+      await editor.getByLabel("启用此规则").check();
+      await editor
+        .getByRole("combobox", { name: "流量动作", exact: true })
+        .selectOption(kind);
+      await editor.getByRole("button", { name: "添加目标端口范围" }).click();
+      await editor.getByLabel("起始端口").fill(String(port));
+      await editor.getByLabel("结束端口").fill(String(port));
       await page
         .getByRole("button", { name: "保存为候选", exact: true })
         .click();
@@ -224,14 +222,10 @@ test("rules MPA separates candidates and runtime, orders by keyboard/buttons and
       .getByRole("combobox", { name: "查看版本", exact: true })
       .selectOption(String(concurrent.id));
     await page.getByRole("button", { name: "新增规则", exact: true }).click();
-    await page.getByRole("textbox", { name: "规则 JSON", exact: true }).fill(
-      JSON.stringify({
-        id: "process-future",
-        enabled: false,
-        conditions: { process: { command: "browser" } },
-        action: { kind: "reject" },
-      }),
-    );
+    await editor.getByLabel("规则 ID").fill("process-future");
+    await editor.getByText("入口、来源与本机进程", { exact: true }).click();
+    await editor.getByLabel("配置进程条件").check();
+    await editor.getByLabel("进程名称").fill("browser");
     await page.getByRole("button", { name: "保存为候选", exact: true }).click();
     await expect(
       page.getByRole("button", { name: "启用 process-future", exact: true }),

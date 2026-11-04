@@ -42,12 +42,38 @@ test("DNS MPA resolves through real UDP, shows TTL cache/context, clears and det
     await editor
       .getByRole("combobox", { name: "默认上游" })
       .selectOption("udp-fixture");
+    for (const [index, id, domain] of [
+      [1, "fallback", "other.example"],
+      [2, "fixture", "console.example"],
+    ] as const) {
+      await editor.getByRole("button", { name: "添加解析路由" }).click();
+      const row = editor.getByRole("group", {
+        name: `解析路由 ${index}`,
+        exact: true,
+      });
+      await row.getByLabel("路由 ID", { exact: true }).fill(id);
+      await row
+        .getByRole("combobox", { name: "目标上游", exact: true })
+        .selectOption("udp-fixture");
+      await row.getByLabel("域名（留空匹配所有域名）").fill(domain);
+    }
+    await editor
+      .getByRole("group", { name: "解析路由 2", exact: true })
+      .getByRole("button", { name: "上移", exact: true })
+      .click();
+
     await page
       .getByRole("button", { name: "保存并应用 DNS", exact: true })
       .click();
     await expect(page.getByRole("main").getByRole("status")).toContainText(
       "DNS 策略已保存",
     );
+    const applied = (await (await request.get("/api/v1/dns")).json())
+      .configuration;
+    expect(applied.routes.map(({ id }: { id: string }) => id)).toEqual([
+      "fixture",
+      "fallback",
+    ]);
     await page
       .getByRole("textbox", { name: "查询域名", exact: true })
       .fill("console.example");
