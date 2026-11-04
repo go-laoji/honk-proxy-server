@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Globe2, Clock3, Activity, Shield } from "lucide-react";
+import { Globe2, Clock3, Activity, ArrowRight, Shield } from "lucide-react";
 import { getJson } from "../platform";
 import type {
   NodesOverview,
@@ -10,7 +10,7 @@ import { Stat } from "./ui";
 
 export function NodeStats({ value }: { value: Summary }) {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="metric-grid">
       <Stat
         title="节点库存"
         value={String(value.inventory)}
@@ -92,13 +92,19 @@ export default function NodeSummary({ endpoint }: { endpoint: string }) {
     return () => controller.abort();
   }, [endpoint]);
   return (
-    <section className="mt-6 space-y-3" aria-label="节点与来源摘要">
-      <div className="flex items-center justify-between">
+    <section className="space-y-3" aria-label="节点与来源摘要">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-semibold">节点与来源</h2>
-        <a className="text-sm text-blue-600" href="./nodes.html">
-          查看节点 →
-        </a>
+        <div className="flex flex-wrap gap-x-4 gap-y-2">
+          <a className="text-link" href="./providers.html">
+            查看上游供应商 <ArrowRight size={14} aria-hidden="true" />
+          </a>
+          <a className="text-link" href="./nodes.html">
+            查看节点 <ArrowRight size={14} aria-hidden="true" />
+          </a>
+        </div>
       </div>
+      {!value && !error && <p className="muted text-sm">正在读取节点摘要…</p>}
       {value && (
         <>
           <NodeStats value={value.summary} />
