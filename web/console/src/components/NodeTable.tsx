@@ -6,7 +6,7 @@ const actions = [
   ["disable", "禁用", "disabled"],
   ["drain", "排空", "draining"],
 ] as const;
-export type NodeAction = (typeof actions)[number][0];
+export type NodeAction = (typeof actions)[number][0] | "delete" | "remove";
 
 type ActionProps = {
   disabled: boolean;
@@ -18,23 +18,34 @@ export function NodeActions({
   disabled,
   onAction,
 }: ActionProps & { node: NodeView }) {
-  if (node.kind === "lease" && node.lease_state !== "active") {
-    return <span className="muted">—</span>;
-  }
-
+  const canOperate = node.kind !== "lease" || node.lease_state === "active";
   return (
-    <div className="flex gap-1">
-      {actions.map(([action, label, state]) => (
-        <button
-          type="button"
-          key={action}
-          className="btn min-h-7 px-2 py-0.5 text-xs whitespace-nowrap"
-          disabled={disabled || node.operation.state === state}
-          onClick={() => onAction(node, action)}
-        >
-          {label}
-        </button>
-      ))}
+    <div className="flex flex-wrap gap-1">
+      {canOperate &&
+        actions.map(([action, label, state]) => (
+          <button
+            type="button"
+            key={action}
+            className="btn min-h-7 px-2 py-0.5 text-xs whitespace-nowrap"
+            disabled={disabled || node.operation.state === state}
+            onClick={() => onAction(node, action)}
+          >
+            {label}
+          </button>
+        ))}
+      <button
+        type="button"
+        className="btn min-h-7 px-2 py-0.5 text-xs whitespace-nowrap text-console-danger"
+        disabled={
+          disabled ||
+          (node.kind !== "static" && node.operation.state === "deleted")
+        }
+        onClick={() =>
+          onAction(node, node.kind === "static" ? "remove" : "delete")
+        }
+      >
+        删除
+      </button>
     </div>
   );
 }
@@ -60,13 +71,13 @@ export default function NodeTable({
     >
       <table className="node-table" aria-label="节点列表">
         <colgroup>
-          <col className="w-[25%]" />
+          <col className="w-[22%]" />
+          <col className="w-[12%]" />
+          <col className="w-[11%]" />
+          <col className="w-[10%]" />
           <col className="w-[13%]" />
-          <col className="w-[12%]" />
-          <col className="w-[12%]" />
-          <col className="w-[12%]" />
           <col className="w-[6%]" />
-          <col className="w-[20%]" />
+          <col className="w-[26%]" />
         </colgroup>
         <thead>
           <tr>

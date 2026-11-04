@@ -420,6 +420,7 @@ fn application_error(error: ApplicationError) -> (StatusCode, Json<ApiError>) {
         ApplicationError::NodeCapacity => {
             (StatusCode::TOO_MANY_REQUESTS, "node_operation_capacity")
         }
+        ApplicationError::NodeReferenced(_) => (StatusCode::CONFLICT, "node_referenced"),
         ApplicationError::ClockRollback => (StatusCode::CONFLICT, "clock_rollback"),
         ApplicationError::Storage(StorageError::PoolFull) => {
             (StatusCode::CONFLICT, "provider_pool_budget")

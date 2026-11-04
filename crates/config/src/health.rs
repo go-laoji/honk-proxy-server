@@ -38,6 +38,8 @@ impl Default for ProbeProfile {
 #[serde(default, deny_unknown_fields)]
 pub struct HealthConfig {
     pub enabled: bool,
+    #[serde(skip_serializing_if = "is_false")]
+    pub auto_remove_failed_leases: bool,
     pub profiles: Vec<ProbeProfile>,
     pub max_parallel: usize,
     pub queue_capacity: usize,
@@ -55,6 +57,7 @@ impl Default for HealthConfig {
     fn default() -> Self {
         Self {
             enabled: true,
+            auto_remove_failed_leases: false,
             profiles: vec![
                 ProbeProfile::default(),
                 ProbeProfile {

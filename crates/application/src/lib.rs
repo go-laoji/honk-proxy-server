@@ -78,6 +78,8 @@ pub enum ApplicationError {
     ConnectionScope,
     #[error("too many concurrent node inventory operations")]
     NodeCapacity,
+    #[error("node is still used by {0}")]
+    NodeReferenced(String),
     #[error("rule not found")]
     RuleUnavailable,
     #[error(
@@ -588,6 +590,12 @@ impl Supervisor {
         input: ConfigActivate,
     ) -> Result<ConfigActivationResult, ApplicationError> {
         let _operation = self.operation.lock().await;
+        self.activate_locked(input).await
+    }
+    async fn activate_locked(
+        &self,
+        input: ConfigActivate,
+    ) -> Result<ConfigActivationResult, ApplicationError> {
         if self.closed.load(std::sync::atomic::Ordering::Acquire) {
             return Err(EngineError::ShuttingDown.into());
         }

@@ -2,7 +2,7 @@ use super::*;
 use hps_config::{GroupConfig, UpstreamConfig};
 use hps_domain::{
     HealthVerdict, NodeActionInput, NodeActionResult, NodeOperationState, NodeQuery, NodeSummary,
-    NodeView, NodesOverview,
+    NodeView, NodesOverview, RouteAction,
 };
 use hps_storage::{nodes::LeaseScope, provider::NodeInventoryLease};
 use std::collections::HashMap;
@@ -70,10 +70,11 @@ impl Supervisor {
             return Err(ApplicationError::Invalid);
         }
         let state = match input.action.as_str() {
-            "enable" => NodeOperationState::Enabled,
-            "disable" => NodeOperationState::Disabled,
-            "drain" => NodeOperationState::Draining,
-            "delete" => NodeOperationState::Deleted,
+            "enable" => Some(NodeOperationState::Enabled),
+            "disable" => Some(NodeOperationState::Disabled),
+            "drain" => Some(NodeOperationState::Draining),
+            "delete" => Some(NodeOperationState::Deleted),
+            "remove" => None,
             _ => return Err(ApplicationError::Invalid),
         };
         let permit = self
@@ -91,6 +92,9 @@ impl Supervisor {
             if current.revision != input.expected_revision {
                 return Err(StorageError::Conflict.into());
             }
+            let Some(state) = state else {
+                return service.remove_static_node(&current, input).await;
+            };
             let lease = if let Some(raw) = input.id.strip_prefix("lease:") {
                 let id = raw.parse::<i64>().map_err(|_| ApplicationError::Invalid)?;
                 let row = service.store.node_lease(id).await?;
@@ -161,6 +165,89 @@ impl Supervisor {
             })
         })
         .await
+    }
+
+    async fn remove_static_node(
+        &self,
+        current: &RuntimeSnapshot,
+        input: NodeActionInput,
+    ) -> Result<NodeActionResult, ApplicationError> {
+        let id = &input.id;
+        if id.contains(':')
+            || input.lease_id.is_some()
+            || input.batch_id.is_some()
+            || input.provider_id.is_some()
+        {
+            return Err(ApplicationError::Invalid);
+        }
+        if current.engine.node_registry().control(id).version != input.expected_control_version {
+            return Err(StorageError::Conflict.into());
+        }
+        let mut config = current.base_config.clone();
+        let before = config.proxy.upstreams.len();
+        config.proxy.upstreams.retain(|node| node.id != *id);
+        if before == config.proxy.upstreams.len() {
+            return Err(StorageError::NotFound.into());
+        }
+        let points_to_node = |action: &RouteAction| matches!(action, RouteAction::Node { id: target } if target == id);
+        if points_to_node(&config.proxy.routing.default_action) {
+            return Err(ApplicationError::NodeReferenced("the default route".into()));
+        }
+        if let Some(rule) = config
+            .proxy
+            .routing
+            .rules
+            .iter()
+            .find(|rule| points_to_node(&rule.action))
+        {
+            return Err(ApplicationError::NodeReferenced(format!(
+                "routing rule {}",
+                rule.id
+            )));
+        }
+        if let Some(upstream) = config
+            .dns
+            .upstreams
+            .iter()
+            .find(|upstream| upstream.proxy_id.as_ref() == Some(id))
+        {
+            return Err(ApplicationError::NodeReferenced(format!(
+                "DNS upstream {}",
+                upstream.id
+            )));
+        }
+        let selection = &mut config.proxy.selection;
+        for group in &mut selection.groups {
+            if group.pinned_node.as_ref() == Some(id) {
+                return Err(ApplicationError::NodeReferenced(format!(
+                    "pinned group {}",
+                    group.id
+                )));
+            }
+            group.members.retain(|member| member != id);
+            group.fallback_nodes.retain(|member| member != id);
+            group.weights.remove(id);
+        }
+        selection.node_tags.remove(id);
+        config.validate().map_err(|_| ApplicationError::Invalid)?;
+        let revision = self
+            .store
+            .create_revision(input.expected_revision, config, format!("Remove node {id}"))
+            .await?;
+        // node_action holds the operation lock through both CAS checks and publication.
+        let activation = self
+            .activate_locked(ConfigActivate {
+                revision: revision.id,
+                expected_revision: input.expected_revision,
+                defer_until_restart: false,
+            })
+            .await?;
+        Ok(NodeActionResult {
+            pool_refreshed: activation.state == "applied",
+            running_revision: activation.running_revision,
+            control: None,
+            configuration_activation: Some(activation),
+        })
     }
 }
 
@@ -300,6 +387,7 @@ fn inventory(
             source.expired += usize::from(node.remaining_secs == Some(0));
         }
         if (q.hide_expired == Some(true) && node.remaining_secs == Some(0))
+            || (q.hide_deleted == Some(true) && node.operation.state == NodeOperationState::Deleted)
             || q.id.as_ref().is_some_and(|id| *id != node.id)
             || needle.as_ref().is_some_and(|s| {
                 !node.id.to_lowercase().contains(s) && !node.host.to_lowercase().contains(s)
@@ -789,6 +877,24 @@ mod tests {
         assert_eq!(selected.operation.state, NodeOperationState::Deleted);
         assert_eq!(selected.expires_at_unix, lease.expires_at_unix);
         assert_eq!(selected.lease_state, "active");
+        let visible = service
+            .nodes(NodeQuery {
+                hide_deleted: Some(true),
+                limit: Some(1),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert_eq!(visible.filtered_total, 4);
+        let history = service
+            .nodes(NodeQuery {
+                state: Some("deleted".into()),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert_eq!(history.nodes.len(), 1);
+        assert_eq!(history.nodes[0].id, lease.id);
         let other = service
             .nodes(NodeQuery {
                 provider: Some("vendor-b".into()),
@@ -830,6 +936,63 @@ mod tests {
             .await
             .unwrap();
         assert!(!service.node("disabled".into()).await.unwrap().nodes[0].eligible);
+        service.shutdown().await.unwrap();
+    }
+    #[tokio::test]
+    async fn remove_static_node_checks_versions_and_preserves_routing_references() {
+        let service = fixture().await;
+        let original = service.node("manual".into()).await.unwrap().nodes.remove(0);
+        service
+            .node_action(action(&original, 1, "disable"))
+            .await
+            .unwrap();
+        assert!(matches!(
+            service.node_action(action(&original, 1, "remove")).await,
+            Err(ApplicationError::Storage(StorageError::Conflict))
+        ));
+        let current = service.node("manual".into()).await.unwrap().nodes.remove(0);
+        let result = service
+            .node_action(action(&current, 1, "remove"))
+            .await
+            .unwrap();
+        assert_eq!(result.configuration_activation.unwrap().state, "applied");
+        assert!(matches!(
+            service.node("manual".into()).await,
+            Err(ApplicationError::Storage(StorageError::NotFound))
+        ));
+        let saved = service.store.workspace().await.unwrap().desired.config;
+        assert_eq!(saved.proxy.upstreams.len(), 2);
+        assert!(saved.proxy.selection.groups[0].members.is_empty());
+        let mut next = saved;
+        next.proxy.routing.default_action = RouteAction::Node {
+            id: "disabled".into(),
+        };
+        let revision = service
+            .store
+            .create_revision(result.running_revision, next, "Route reference".into())
+            .await
+            .unwrap();
+        service
+            .activate(ConfigActivate {
+                revision: revision.id,
+                expected_revision: result.running_revision,
+                defer_until_restart: false,
+            })
+            .await
+            .unwrap();
+        let referenced = service
+            .node("disabled".into())
+            .await
+            .unwrap()
+            .nodes
+            .remove(0);
+        assert!(matches!(
+            service
+                .node_action(action(&referenced, revision.id, "remove"))
+                .await,
+            Err(ApplicationError::NodeReferenced(_))
+        ));
+        assert_eq!(service.current().revision, revision.id);
         service.shutdown().await.unwrap();
     }
     #[tokio::test]
