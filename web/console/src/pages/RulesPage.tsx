@@ -342,7 +342,7 @@ export default function RulesPage({
     data ? [data.running_revision, ...data.candidates.map((c) => c.id)] : [],
   );
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       {error && (
         <p
           role="alert"
@@ -359,7 +359,7 @@ export default function RulesPage({
           {info}
         </p>
       )}
-      <section className="panel space-y-4 p-5 sm:p-6">
+      <section className="panel space-y-2.5 p-3">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h2 className="flex items-center gap-2 font-semibold">
@@ -381,6 +381,9 @@ export default function RulesPage({
               <Plus size={14} />
               新增规则
             </button>
+            <a className="btn" href="#rule-simulation">
+              规则模拟
+            </a>
             <button
               className="btn"
               disabled={!canMutate}
@@ -404,7 +407,7 @@ export default function RulesPage({
           </div>
         </div>
         <p className="muted text-xs leading-6">
-          从上到下首条命中；保存、启停和排序仅生成候选，显式激活后才改变新接入流量。已有连接保留原代际，不承诺迁移。直连必须由动作明确指定。
+          按顺序匹配首条规则。候选激活后对新连接生效。
         </p>
         {data && (
           <>
@@ -569,7 +572,7 @@ export default function RulesPage({
           </div>
         </section>
       )}
-      <section className="space-y-3" aria-label="有序规则">
+      <section className="space-y-2" aria-label="有序规则">
         {data?.configuration.rules
           .slice(page * 50, (page + 1) * 50)
           .map((rule, localIndex) => {
@@ -581,7 +584,7 @@ export default function RulesPage({
             return (
               <article
                 key={rule.id}
-                className="panel min-w-0 p-5"
+                className="panel min-w-0 p-3"
                 tabIndex={0}
                 onKeyDown={(event) => {
                   if (
@@ -711,7 +714,11 @@ export default function RulesPage({
           聚焦规则卡片可使用 Alt + ↑ / ↓ 调整顺序；调整仅保存新候选。
         </p>
       </section>
-      <section className="panel space-y-4 p-5 sm:p-6" aria-label="规则模拟">
+      <section
+        id="rule-simulation"
+        className="panel space-y-3 p-3"
+        aria-label="规则模拟"
+      >
         <h2 className="flex items-center gap-2 font-semibold">
           <Search size={17} />
           模拟当前查看的规则

@@ -239,7 +239,7 @@ export default function DnsPage({
     await Promise.all([refresh(), refreshService()]);
   }
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       {(error || loadError) && (
         <p
           role="alert"
@@ -260,7 +260,21 @@ export default function DnsPage({
         <p className="panel p-10 text-center text-sm">正在读取 DNS…</p>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <nav aria-label="DNS 页内导航" className="flex flex-wrap gap-2">
+            <a className="btn" href="#dns-routing">
+              上游与路由
+            </a>
+            <a className="btn" href="#dns-query">
+              查询诊断
+            </a>
+            <a className="btn" href="#dns-cache">
+              缓存
+            </a>
+            <a className="btn" href="#dns-context">
+              域名上下文
+            </a>
+          </nav>
+          <div className="metric-grid">
             <Stat
               title="DNS 服务"
               value={data.configuration.enabled ? "已启用" : "停用"}
@@ -292,7 +306,11 @@ export default function DnsPage({
               icon={RefreshCw}
             />
           </div>
-          <section className="panel p-5" aria-label="DNS 上游与路由">
+          <section
+            id="dns-routing"
+            className="panel p-3"
+            aria-label="DNS 上游与路由"
+          >
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="font-semibold">DNS 上游与路由</h2>
               <div className="flex gap-2">
@@ -416,7 +434,11 @@ export default function DnsPage({
               </div>
             )}
           </section>
-          <section className="panel p-5" aria-label="DNS 查询诊断">
+          <section
+            id="dns-query"
+            className="panel p-3"
+            aria-label="DNS 查询诊断"
+          >
             <h2 className="font-semibold">查询诊断</h2>
             <form
               className="mt-4 flex flex-wrap items-end gap-3"
@@ -513,7 +535,7 @@ export default function DnsPage({
               </div>
             )}
           </section>
-          <section className="panel p-5" aria-label="DNS 缓存">
+          <section id="dns-cache" className="panel p-3" aria-label="DNS 缓存">
             <h2 className="font-semibold">缓存与清理</h2>
             <form
               className="mt-4 flex flex-wrap gap-3"
@@ -588,7 +610,11 @@ export default function DnsPage({
               </button>
             </div>
           </section>
-          <section className="panel p-5" aria-label="DNS 域名上下文">
+          <section
+            id="dns-context"
+            className="panel p-3"
+            aria-label="DNS 域名上下文"
+          >
             <h2 className="font-semibold">域名上下文</h2>
             <form
               className="mt-4 flex flex-wrap items-end gap-3"

@@ -382,7 +382,7 @@ export default function ProvidersPage({
     );
   const current = detail?.provider.configuration;
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       {error && (
         <div
           role="alert"
@@ -676,8 +676,8 @@ export default function ProvidersPage({
           )}
         </>
       ) : (
-        <div className="panel p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="panel overflow-hidden">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 dark:border-slate-800">
             <h2 className="font-semibold">供应商来源</h2>
             <button
               className="btn"
@@ -693,15 +693,12 @@ export default function ProvidersPage({
               尚未配置供应商。选择下方模板，填写接口与有效期后保存。
             </p>
           )}
-          <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div>
             {providers.map((view) => (
-              <div
-                key={view.configuration.id}
-                className="rounded-xl border border-slate-200 p-4 dark:border-slate-800"
-              >
-                <div className="flex items-center justify-between gap-3">
+              <div key={view.configuration.id} className="management-record">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <a
-                    className="font-medium text-blue-600"
+                    className="min-w-0 break-all text-sm font-semibold text-blue-600"
                     href={`./provider-detail.html?id=${encodeURIComponent(view.configuration.id)}`}
                   >
                     {view.configuration.name || view.configuration.id}
@@ -710,14 +707,18 @@ export default function ProvidersPage({
                     {view.configuration.enabled ? "启用" : "停用"}
                   </Badge>
                 </div>
-                <p className="muted mt-3 break-all text-xs">
-                  {view.configuration.endpoint}
-                </p>
-                <p className="mt-3 text-sm">
-                  {view.active_leases} 条有效租约 · {view.configuration.kind} ·
-                  健康未验证
-                </p>
-                <div className="mt-4 flex flex-wrap gap-2">
+                <div className="min-w-0 text-xs">
+                  <p>
+                    {view.active_leases} 条有效租约 · {view.configuration.kind}
+                  </p>
+                  <p
+                    className="muted truncate"
+                    title={view.configuration.endpoint}
+                  >
+                    {view.configuration.endpoint}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
                   <a
                     className="btn"
                     href={`./provider-detail.html?id=${encodeURIComponent(view.configuration.id)}`}
@@ -744,6 +745,7 @@ export default function ProvidersPage({
                     onClick={() => {
                       setEditor(JSON.stringify(view.configuration, null, 2));
                       setEditingId(view.configuration.id);
+                      document.getElementById("provider-editor")?.focus();
                     }}
                   >
                     编辑
