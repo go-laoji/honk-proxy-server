@@ -15,6 +15,7 @@ import { Badge, Details } from "../components/ui";
 import { ConnectionStats } from "../components/ConnectionSummary";
 import ObservationPanel from "../components/ObservationPanel";
 import { candidateReasons, strategyLabels } from "../selection";
+import { quickRuleHref } from "../routing";
 import {
   connectionStates,
   connectionErrors,
@@ -791,10 +792,25 @@ export default function ConnectionsPage() {
         >
           <div className="panel-header panel-toolbar">
             <h2 className="font-semibold">连接路由详情</h2>
-            <button className="btn" onClick={() => show(null)}>
-              <X size={14} />
-              关闭详情
-            </button>
+            <div className="flex flex-wrap gap-2">
+              {detail?.id === detailId && (
+                <a
+                  className="btn"
+                  href={quickRuleHref({
+                    target: detail.context.destination_host,
+                    port: detail.context.destination_port,
+                    transport: detail.context.transport,
+                    group: detail.selection?.group ?? undefined,
+                  })}
+                >
+                  按此目标建规则
+                </a>
+              )}
+              <button className="btn" onClick={() => show(null)}>
+                <X size={14} />
+                关闭详情
+              </button>
+            </div>
           </div>
           {detailError ? (
             <p className="break-words p-5 text-sm text-console-warning">

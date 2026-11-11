@@ -95,6 +95,8 @@ pub struct RulesOverview<C> {
     pub viewed_parent_revision: Option<i64>,
     pub configuration: C,
     pub active_configuration: C,
+    #[serde(default)]
+    pub available_groups: Vec<String>,
     pub candidates: Vec<crate::ConfigRevision>,
     pub changes: Vec<crate::ConfigChange>,
     pub other_configuration_changes: bool,

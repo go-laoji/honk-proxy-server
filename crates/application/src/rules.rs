@@ -153,6 +153,14 @@ impl Supervisor {
             viewed_parent_revision: document.revision.parent_id,
             configuration: document.config.proxy.routing,
             active_configuration: current.base_config.proxy.routing.clone(),
+            available_groups: current
+                .config
+                .proxy
+                .selection
+                .groups
+                .iter()
+                .map(|group| group.id.clone())
+                .collect(),
             candidates: workspace
                 .revisions
                 .into_iter()
