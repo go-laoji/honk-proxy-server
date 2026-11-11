@@ -577,7 +577,8 @@ async fn api_post(
     };
     let timeout = match path.as_str() {
         "api/v1/dns/resolve" => 65,
-        "api/v1/nodes/ip2region/update" => 75,
+        // Allow the metadata check, two bounded downloads and XDB validation.
+        "api/v1/nodes/ip2region/update" => 265,
         _ => 10,
     };
     let client = endpoint

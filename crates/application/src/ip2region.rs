@@ -196,7 +196,7 @@ fn searcher(path: &Path, blob: &Blob, family: u8) -> Result<Searcher, UpdateErro
     {
         return Err(UpdateError::InvalidData);
     }
-    for vector in bytes[256..INDEX_START].chunks_exact(8) {
+    for vector in bytes[256..INDEX_START].as_chunks::<8>().0 {
         let start = ptr(&vector[..4]);
         let end = ptr(&vector[4..]);
         if (start, end) != (0, 0)
@@ -322,30 +322,39 @@ impl Ip2Region {
         let mut database = Database::open(stage.path().to_owned(), manifest, source)?;
         let status = database.status();
         let mut current = self.database.write().unwrap();
-        if let Some(root) = &self.root {
-            #[cfg(unix)]
-            File::open(stage.path())?.sync_all()?;
-            let directory = stage
-                .path()
-                .file_name()
-                .unwrap()
-                .to_string_lossy()
-                .into_owned();
-            let mut pointer = NamedTempFile::new_in(root)?;
-            pointer.write_all(&encode(&Active { directory, source })?)?;
-            pointer.as_file().sync_all()?;
-            pointer
-                .persist(root.join("active.json"))
-                .map_err(|error| error.error)?;
-            let _ = stage.keep();
-            #[cfg(unix)]
-            if let Err(error) = File::open(root).and_then(|f| f.sync_all()) {
-                tracing::warn!(%error, "could not sync the published ip2region directory");
-            }
-        } else {
-            database.temporary = Some(stage);
-        }
-        if let Some(previous) = current.replace(database)
+        let durable =
+            if let Some(root) = &self.root {
+                #[cfg(unix)]
+                File::open(stage.path())?.sync_all()?;
+                let directory = stage
+                    .path()
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned();
+                let mut pointer = NamedTempFile::new_in(root)?;
+                pointer.write_all(&encode(&Active { directory, source })?)?;
+                pointer.as_file().sync_all()?;
+                pointer
+                    .persist(root.join("active.json"))
+                    .map_err(|error| error.error)?;
+                let _ = stage.keep();
+                #[cfg(unix)]
+                {
+                    File::open(root).and_then(|f| f.sync_all()).inspect_err(|error| {
+                    tracing::warn!(%error, "could not sync the published ip2region directory");
+                }).is_ok()
+                }
+                #[cfg(not(unix))]
+                true
+            } else {
+                database.temporary = Some(stage);
+                true
+            };
+        let previous = current.replace(database);
+        drop(current);
+        if durable
+            && let Some(previous) = previous
             && previous.temporary.is_none()
             && let Err(error) = fs::remove_dir_all(previous.directory)
         {
@@ -418,7 +427,8 @@ impl Supervisor {
             .https_only(true)
             .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(Duration::from_secs(8))
-            .timeout(Duration::from_secs(50))
+            .read_timeout(Duration::from_secs(30))
+            .timeout(Duration::from_secs(240))
             .build()
             .map_err(UpdateError::from)?;
         self.update_ip2region_from(client, METADATA, RAW).await

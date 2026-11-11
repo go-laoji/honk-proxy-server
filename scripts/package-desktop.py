@@ -37,6 +37,10 @@ def main():
     require(not args.debug or args.allow_dirty, "debug bundles must be explicitly marked exploratory")
     daemon = args.daemon.resolve()
     info = support.build_info(daemon, True)
+    seed_root = os.environ.get("HPS_IP2REGION_DIR")
+    if seed_root is None:
+        candidates = (daemon.parent.parent / "ip2region", daemon.parent.parent.parent / "ip2region")
+        seed_root = next((path for path in candidates if (path / "current").is_file()), ROOT / "target/ip2region")
     kernel=support.verified_ebpf(args.ebpf,args.kernel_report) if platform.system()=="Linux" else None
     web_directory = args.web_dir.resolve()
     web = json.loads((web_directory / "web-manifest.json").read_text())
@@ -75,6 +79,7 @@ def main():
     override = staging / "tauri-package.json"
     override.write_text(json.dumps(config, indent=2) + "\n")
     environment = dict(os.environ, CARGO_TARGET_DIR=str(target_directory), HPS_WEB_ASSETS_DIR=str(web_directory), HPS_SOURCE_REVISION=revision, HPS_SOURCE_DIRTY="1" if dirty else "0", HPS_FORBID_HOST_NETWORK_CHANGES="1")
+    environment["HPS_IP2REGION_DIR"] = str(Path(seed_root).resolve())
     # This command creates local candidates. It does not perform cloud signing,
     # notarization, updater publishing, or inherit credentials for those actions.
     for key in ("APPLE_ID", "APPLE_PASSWORD", "APPLE_TEAM_ID", "APPLE_API_ISSUER", "APPLE_API_KEY", "APPLE_API_KEY_PATH", "APPLE_SIGNING_IDENTITY", "TAURI_SIGNING_PRIVATE_KEY", "TAURI_SIGNING_PRIVATE_KEY_PASSWORD"):
