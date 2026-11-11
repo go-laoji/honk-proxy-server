@@ -197,3 +197,123 @@ test("provider MPA CRUD, conflicts, owned extraction recovery, redaction and lea
     await new Promise<void>((resolve) => vendor.close(() => resolve()));
   }
 });
+
+test("provider detail fills a region rule from a lease and moves it to a new group", async ({
+  page,
+  request,
+}) => {
+  const provider = "region-fixture";
+  const vendor = createServer((_req, res) => res.end("183.62.57.1:8080\n"));
+  await new Promise<void>((resolve) => vendor.listen(0, "127.0.0.1", resolve));
+  const port = (vendor.address() as AddressInfo).port;
+  const workspace = async () =>
+    (await request.get("/api/v1/config/workspace")).json();
+  const initial = await workspace();
+  try {
+    const providerPath = `/api/v1/providers/${provider}`;
+    const saved = await request.post(`${providerPath}/save`, {
+      data: {
+        expected_revision: initial.desired_revision,
+        configuration: {
+          id: provider,
+          enabled: true,
+          kind: "text",
+          endpoint: `http://127.0.0.1:${port}/extract`,
+          count: 1,
+          ttl_secs: 300,
+        },
+      },
+    });
+    expect(saved.ok()).toBe(true);
+    const group = await request.post("/api/v1/groups/upsert", {
+      data: {
+        expected_revision: (await workspace()).desired_revision,
+        group: { id: "region-existing" },
+      },
+    });
+    expect(group.ok()).toBe(true);
+    const extraction = await request.post(`${providerPath}/extract`, {
+      data: { request_id: "console-region-fixture" },
+    });
+    expect(extraction.ok()).toBe(true);
+    const { id } = await extraction.json();
+    await expect
+      .poll(
+        async () =>
+          (await (await request.get(`/api/v1/provider-tasks/${id}`)).json())
+            .state,
+      )
+      .toBe("succeeded");
+    // Supply stable suggestions when the source checkout has no packaged XDB.
+    await page.route(`**${providerPath}`, async (route) => {
+      const response = await route.fetch();
+      const detail = await response.json();
+      detail.leases[0].location = {
+        ip: "183.62.57.1",
+        source: "endpoint_ip",
+        country: "中国",
+        country_code: "CN",
+        province: "广东省",
+        city: "广州市",
+        isp: "电信",
+      };
+      await route.fulfill({ response, json: detail });
+    });
+    await page.goto(`/console/provider-detail.html?id=${provider}`);
+    const region = page.getByRole("region", { name: "按地区加入代理组" });
+    await region.getByRole("button", { name: "新增规则" }).click();
+    const form = region.getByRole("form", { name: "地区规则编辑" });
+    await form
+      .getByLabel("从租约填入地区")
+      .selectOption({ label: "广东省 · 广州市 · 电信" });
+    await expect(form.getByLabel("运营商", { exact: true })).toHaveValue(
+      "电信",
+    );
+    await expect(form.getByLabel("省份", { exact: true })).toHaveValue(
+      "广东省",
+    );
+    await expect(form.getByLabel("城市", { exact: true })).toHaveValue(
+      "广州市",
+    );
+    await form.getByLabel("目标代理组").selectOption("region-existing");
+    await form.getByRole("button", { name: "保存地区规则" }).click();
+    const rule = region.getByRole("list", { name: "地区入组规则" });
+    await expect(
+      rule.getByRole("link", { name: "→ region-existing" }),
+    ).toHaveAttribute(
+      "href",
+      `./nodes.html?provider=${provider}&group=region-existing`,
+    );
+    await rule.getByRole("button", { name: "编辑规则" }).click();
+    await form.getByLabel("目标代理组").selectOption("@new");
+    await form.getByLabel("新组 ID").fill("region-guangzhou");
+    await form.getByLabel("运营商", { exact: true }).fill("");
+    await form.getByRole("button", { name: "保存地区规则" }).click();
+    await expect(
+      rule.getByRole("link", { name: "→ region-guangzhou" }),
+    ).toBeVisible();
+    const data = await (await request.get("/api/v1/groups")).json();
+    const groups = data.configuration.groups;
+    expect(
+      groups.find((group: { id: string }) => group.id === "region-existing")
+        .provider_regions ?? [],
+    ).toEqual([]);
+    expect(
+      groups.find((group: { id: string }) => group.id === "region-guangzhou")
+        .provider_regions,
+    ).toEqual([{ provider, isp: null, province: "广东省", city: "广州市" }]);
+    await rule.getByRole("button", { name: "移除规则" }).click();
+    await expect(region.getByText("暂无地区入组规则。")).toBeVisible();
+  } finally {
+    const latest = await workspace();
+    if (latest.desired_revision !== initial.desired_revision) {
+      await request.post("/api/v1/config/rollback", {
+        data: {
+          revision: initial.desired_revision,
+          expected_revision: latest.desired_revision,
+        },
+      });
+    }
+    await new Promise<void>((resolve) => vendor.close(() => resolve()));
+  }
+});

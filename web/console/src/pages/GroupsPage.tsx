@@ -5,6 +5,10 @@ import {
 } from "../components/config/routingFields";
 import {
   type SelectionDecision as Decision,
+  type Group,
+  type Policy,
+  type GroupsOverview,
+  blankGroup,
   strategyLabels as strategies,
   candidateReasons as reasons,
 } from "../selection";
@@ -13,64 +17,6 @@ import { Layers3, Plus, RefreshCw, Search, Settings2 } from "lucide-react";
 import { Badge } from "../components/ui";
 import { getJson, postJson } from "../platform";
 
-type Group = {
-  id: string;
-  strategy: string;
-  include_all: boolean;
-  members: string[];
-  groups: string[];
-  score: {
-    latency_weight: number;
-    lifetime_weight: number;
-    priority_weight: number;
-    latency_ceiling_ms: number;
-    lifetime_target_secs: number;
-    missing_evidence_penalty: number;
-  };
-  providers: string[];
-  tags: string[];
-  protocols: string[];
-  pinned_node: string | null;
-  fallback_nodes: string[];
-  weights: Record<string, number>;
-  session: { key: string; ttl_secs: number } | null;
-};
-type Policy = {
-  groups: Group[];
-  default_group: string | null;
-  inbound_groups: Record<string, string>;
-  node_tags: Record<string, string[]>;
-  provider_tags: Record<string, string[]>;
-  max_sessions: number;
-};
-type Overview = {
-  running_revision: number;
-  configuration: Policy;
-  recent_choices: Record<string, string>;
-  default_selection: Decision;
-};
-const blankGroup: Group = {
-  id: "",
-  strategy: "round_robin",
-  include_all: false,
-  members: [],
-  groups: [],
-  score: {
-    latency_weight: 60,
-    lifetime_weight: 30,
-    priority_weight: 10,
-    latency_ceiling_ms: 2000,
-    lifetime_target_secs: 300,
-    missing_evidence_penalty: 250,
-  },
-  providers: [],
-  tags: [],
-  protocols: [],
-  pinned_node: null,
-  fallback_nodes: [],
-  weights: {},
-  session: null,
-};
 const message = (cause: unknown) =>
   cause instanceof Error ? cause.message : "操作失败";
 
@@ -79,7 +25,7 @@ export default function GroupsPage({
 }: {
   refreshService: () => Promise<void>;
 }) {
-  const [data, setData] = useState<Overview>();
+  const [data, setData] = useState<GroupsOverview>();
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [busy, setBusy] = useState(false);
@@ -110,7 +56,7 @@ export default function GroupsPage({
     mounted.current = true;
     const controller = new AbortController();
     const request = ++sequence.current;
-    getJson<Overview>("api/v1/groups", controller.signal)
+    getJson<GroupsOverview>("api/v1/groups", controller.signal)
       .then((value) => {
         if (mounted.current && request === sequence.current) {
           setData(value);
@@ -134,7 +80,7 @@ export default function GroupsPage({
   }, []);
   async function refresh() {
     const request = ++sequence.current;
-    const value = await getJson<Overview>("api/v1/groups");
+    const value = await getJson<GroupsOverview>("api/v1/groups");
     if (mounted.current && request === sequence.current) setData(value);
     return value;
   }
@@ -392,6 +338,26 @@ export default function GroupsPage({
                   {item.protocols.join(", ") || "不限"}
                 </dd>
               </div>
+              {!!item.provider_regions?.length && (
+                <div>
+                  <dt className="muted inline">地区入组：</dt>
+                  <dd className="inline">
+                    {[
+                      ...new Set(
+                        item.provider_regions.map((rule) => rule.provider),
+                      ),
+                    ].map((id) => (
+                      <a
+                        key={id}
+                        className="mr-2 break-all text-console-accent-ink"
+                        href={`./provider-detail.html?id=${encodeURIComponent(id)}#provider-region-groups`}
+                      >
+                        {id}
+                      </a>
+                    ))}
+                  </dd>
+                </div>
+              )}
               <div>
                 <dt className="muted inline">固定：</dt>
                 <dd className="inline break-all">

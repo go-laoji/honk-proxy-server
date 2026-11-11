@@ -65,3 +65,70 @@ export const candidateReasons: Record<string, string> = {
   explicit_fallback: "显式回退",
   strategy: "按策略选择",
 };
+
+export type ProviderRegionRule = {
+  provider: string;
+  isp: string | null;
+  province: string | null;
+  city: string | null;
+};
+
+export type Group = {
+  id: string;
+  strategy: string;
+  include_all: boolean;
+  members: string[];
+  groups: string[];
+  score: {
+    latency_weight: number;
+    lifetime_weight: number;
+    priority_weight: number;
+    latency_ceiling_ms: number;
+    lifetime_target_secs: number;
+    missing_evidence_penalty: number;
+  };
+  providers: string[];
+  provider_regions?: ProviderRegionRule[];
+  tags: string[];
+  protocols: string[];
+  pinned_node: string | null;
+  fallback_nodes: string[];
+  weights: Record<string, number>;
+  session: { key: string; ttl_secs: number } | null;
+};
+export type Policy = {
+  groups: Group[];
+  default_group: string | null;
+  inbound_groups: Record<string, string>;
+  node_tags: Record<string, string[]>;
+  provider_tags: Record<string, string[]>;
+  max_sessions: number;
+};
+export type GroupsOverview = {
+  running_revision: number;
+  configuration: Policy;
+  recent_choices: Record<string, string>;
+  default_selection: SelectionDecision;
+};
+export const blankGroup: Group = {
+  id: "",
+  strategy: "round_robin",
+  include_all: false,
+  members: [],
+  groups: [],
+  score: {
+    latency_weight: 60,
+    lifetime_weight: 30,
+    priority_weight: 10,
+    latency_ceiling_ms: 2000,
+    lifetime_target_secs: 300,
+    missing_evidence_penalty: 250,
+  },
+  providers: [],
+  tags: [],
+  protocols: [],
+  pinned_node: null,
+  fallback_nodes: [],
+  weights: {},
+  session: null,
+};

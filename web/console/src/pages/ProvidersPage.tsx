@@ -5,6 +5,8 @@ import {
   providerPayload,
 } from "../components/config/sourceFields";
 import SubscriptionsPanel from "../components/SubscriptionsPanel";
+import ProviderRegionGroups from "../components/ProviderRegionGroups";
+import { nodeLocationLabel } from "../nodes";
 import { useEffect, useRef, useState } from "react";
 import {
   Box,
@@ -499,6 +501,9 @@ export default function ProvidersPage({
                     <RefreshCw size={15} />
                     刷新来源
                   </button>
+                  <a className="btn" href="#provider-region-groups">
+                    地区入组规则
+                  </a>
                 </div>
               </>
             )}
@@ -542,6 +547,19 @@ export default function ProvidersPage({
               busy={!!busy}
               onAction={(action) => void act(action, () => control(action))}
               onConfigure={openRefillSettings}
+            />
+          )}
+          {current && (
+            <ProviderRegionGroups
+              key={`${serviceEpoch}:${id}`}
+              provider={id}
+              leases={leases}
+              onSaved={async (previous, revision) => {
+                setEditorRevision((value) =>
+                  value === previous ? revision : value,
+                );
+                await Promise.all([load(), refreshService()]);
+              }}
             />
           )}
           <div className="panel overflow-hidden">
@@ -598,7 +616,16 @@ export default function ProvidersPage({
                           ? "expired"
                           : lease.state}
                         <p className="muted text-xs">
-                          {lease.region ?? "未知地域"}
+                          {lease.location
+                            ? [
+                                nodeLocationLabel(lease.location),
+                                lease.location.isp,
+                              ]
+                                .filter(Boolean)
+                                .join(" · ")
+                            : lease.region
+                              ? `供应商地区 ${lease.region}`
+                              : "端点地区未知"}
                         </p>
                       </td>
                       <td className="p-4 text-xs leading-6">
