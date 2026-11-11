@@ -89,6 +89,8 @@ def main():
     result = subprocess.run([str(binary), "--build-info"], env=environment, capture_output=True, text=True, check=True, timeout=20)
     desktop = json.loads(result.stdout)
     require(desktop["version"]["web_build_id"] == info["version"]["web_build_id"], "compiled Desktop embeds different Web bytes")
+    require(desktop.get("ip2region_version") and desktop["ip2region_version"] == info.get("ip2region_version"),
+            "Desktop and Daemon must embed the same ip2region snapshot from scripts/build-headless.sh")
     require(desktop["source_revision"] == revision and desktop["source_dirty"] == dirty, "compiled Desktop source metadata mismatch")
     bundles = []
     bundle_root = target_directory / mode / "bundle"

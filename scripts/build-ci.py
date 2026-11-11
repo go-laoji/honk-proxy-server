@@ -7,6 +7,7 @@ import os
 from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
+import sys
 import tarfile
 import tempfile
 import zipfile
@@ -109,12 +110,15 @@ def archive_headless(stage, destination, windows):
 
 
 def headless(target, revision, web, environment, release, destination):
+    subprocess.run([sys.executable, "-B", str(ROOT / "scripts/fetch-ip2region.py"),
+                    "--output", environment["HPS_IP2REGION_DIR"]], check=True)
     subprocess.run(["cargo", "build", "--locked", "--release", "--target", target,
                     "-p", "hps-cli", "-p", "hps-daemon"], cwd=ROOT, env=environment, check=True)
     suffix = TARGETS[target][1]
     binaries = {name: metadata(release / (name + suffix), name, target, revision, web, environment)
                 for name in ("hps", "hpsd")}
     require(binaries["hps"]["version"]["version"] == binaries["hpsd"]["version"]["version"], "CLI/Daemon version mismatch")
+    require(binaries["hpsd"].get("ip2region_version"), "Daemon is missing its packaged ip2region data")
     version = binaries["hpsd"]["version"]["version"]
     with tempfile.TemporaryDirectory(prefix="hps-ci-package-") as temporary:
         stage = Path(temporary) / f"hps-headless-{version}-{target}-ci"
@@ -126,6 +130,7 @@ def headless(target, revision, web, environment, release, destination):
         (stage / "config").mkdir()
         shutil.copyfile(ROOT / "packaging/templates/hps.toml", stage / "config/hps.toml")
         shutil.copyfile(ROOT / "docs/ci-builds-usage.md", stage / "README.md")
+        shutil.copyfile(ROOT / "packaging/licenses/ip2region.txt", stage / "ip2region-license.txt")
         write_json(stage / "web-manifest.json", web)
         report = manifest("headless", target, revision, web, binaries)
         write_json(stage / "manifest.json", report)
@@ -163,6 +168,8 @@ def desktop(target, revision, web, environment, release, destination):
                     "--bundles", bundles, "--", "--locked"], cwd=ROOT, env=environment, check=True)
     info = metadata(release / ("hps-desktop" + suffix), "hps-desktop", target, revision, web, environment)
     require(info["version"]["version"] == daemon_info["version"]["version"], "Desktop/Daemon version mismatch")
+    require(info.get("ip2region_version") and info["ip2region_version"] == daemon_info.get("ip2region_version"),
+            "Desktop and Daemon must embed the same ip2region snapshot")
     # Verify the uncompressed bundle's resource before publishing an installer.
     bundle_root = release / "bundle"
     if platform == "macos":
@@ -188,6 +195,7 @@ def desktop(target, revision, web, environment, release, destination):
 
 def build_environment(revision):
     environment = dict(os.environ, CARGO_TARGET_DIR=str(OUTPUT / "cargo"),
+                       HPS_IP2REGION_DIR=str(OUTPUT / "ip2region"),
                        HPS_WEB_ASSETS_DIR=str(ROOT / "dist"), HPS_SOURCE_REVISION=revision,
                        HPS_SOURCE_DIRTY="0", HPS_FORBID_HOST_NETWORK_CHANGES="1", CI="true")
     # --ci alone does not disable Tauri's Finder automation during DMG bundling.
