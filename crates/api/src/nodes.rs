@@ -1,18 +1,26 @@
 use super::*;
 use axum::extract::{DefaultBodyLimit, Query};
 use hps_domain::{
-    ConfigActivationResult, NodeActionInput, NodeActionResult, NodeImportInput, NodeImportPreview,
-    NodeQuery, NodesOverview,
+    ConfigActivationResult, Ip2RegionUpdate, NodeActionInput, NodeActionResult, NodeImportInput,
+    NodeImportPreview, NodeQuery, NodesOverview,
 };
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/api/v1/nodes", get(overview))
+        .route("/api/v1/nodes/ip2region/update", post(update_ip2region))
         .route("/api/v1/nodes/action", post(action))
         .route("/api/v1/nodes/import/preview", post(preview))
         .route("/api/v1/nodes/import/apply", post(import))
         .route("/api/v1/nodes/{id}", get(detail))
         .layer(DefaultBodyLimit::max(2 * 1024 * 1024))
+}
+async fn update_ip2region(State(state): State<Arc<AppState>>) -> ApiResult<Ip2RegionUpdate> {
+    application(&state)?
+        .update_ip2region()
+        .await
+        .map(Json)
+        .map_err(application_error)
 }
 fn application(state: &AppState) -> Result<&Arc<Supervisor>, (StatusCode, Json<ApiError>)> {
     state

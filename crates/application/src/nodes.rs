@@ -1,8 +1,8 @@
 use super::*;
 use hps_config::{GroupConfig, UpstreamConfig};
 use hps_domain::{
-    HealthVerdict, NodeActionInput, NodeActionResult, NodeOperationState, NodeQuery, NodeSummary,
-    NodeView, NodesOverview, RouteAction,
+    HealthVerdict, NodeActionInput, NodeActionResult, NodeLocation, NodeLocationSource,
+    NodeOperationState, NodeQuery, NodeSummary, NodeView, NodesOverview, RouteAction,
 };
 use hps_storage::{nodes::LeaseScope, provider::NodeInventoryLease};
 use std::collections::HashMap;
@@ -35,7 +35,8 @@ impl Supervisor {
                 .await?;
             tokio::task::spawn_blocking(move || {
                 let _permit = permit;
-                inventory(&current, leases, query, tasks)
+                let database = service.ip2region.read();
+                inventory(&current, leases, query, tasks, database.as_ref())
             })
             .await
             .map_err(|_| ApplicationError::Worker)?
@@ -296,6 +297,7 @@ fn inventory(
     mut leases: Vec<NodeInventoryLease>,
     q: NodeQuery,
     tasks: Vec<hps_domain::ExtractionTask>,
+    database: Option<&crate::ip2region::Database>,
 ) -> Result<NodesOverview, ApplicationError> {
     let truncated = leases.len() > 200000;
     leases.truncate(200000);
@@ -390,7 +392,26 @@ fn inventory(
             || (q.hide_deleted == Some(true) && node.operation.state == NodeOperationState::Deleted)
             || q.id.as_ref().is_some_and(|id| *id != node.id)
             || needle.as_ref().is_some_and(|s| {
-                !node.id.to_lowercase().contains(s) && !node.host.to_lowercase().contains(s)
+                !node.id.to_lowercase().contains(s)
+                    && !node.host.to_lowercase().contains(s)
+                    && !node
+                        .region
+                        .as_ref()
+                        .is_some_and(|region| region.to_lowercase().contains(s))
+                    && !database
+                        .and_then(|database| locate_node(database, &node))
+                        .is_some_and(|location| {
+                            [
+                                location.country,
+                                location.province,
+                                location.city,
+                                location.isp,
+                                location.country_code,
+                            ]
+                            .into_iter()
+                            .flatten()
+                            .any(|field| field.to_lowercase().contains(s))
+                        })
             })
             || q.provider.as_ref().is_some_and(|p| {
                 if p == "@static" {
@@ -448,6 +469,7 @@ fn inventory(
                 lease_now,
                 &fingerprints,
             );
+            node.location = database.and_then(|database| locate_node(database, &node));
             node.groups = current
                 .config
                 .proxy
@@ -463,6 +485,7 @@ fn inventory(
         })
         .collect();
     Ok(NodesOverview {
+        ip2region: Some(database.map_or_else(Default::default, |database| database.status())),
         running_revision: current.revision,
         evaluated_at_unix: now,
         summary,
@@ -489,6 +512,29 @@ fn inventory(
         nodes,
     })
 }
+
+fn locate_node(database: &crate::ip2region::Database, node: &NodeView) -> Option<NodeLocation> {
+    if let Some(ip) = node
+        .health_results
+        .iter()
+        .filter(|result| result.verdict == HealthVerdict::Healthy)
+        .filter_map(|result| {
+            result
+                .exit_ip
+                .map(|ip| (result.checked_at, ip.to_canonical()))
+        })
+        .filter(|(_, ip)| crate::ip2region::public_ip(*ip))
+        .max()
+        .map(|(_, ip)| ip)
+    {
+        return database.locate(ip, NodeLocationSource::ExitIp);
+    }
+    let ip = node.host.parse::<std::net::IpAddr>().ok()?.to_canonical();
+    crate::ip2region::public_ip(ip)
+        .then(|| database.locate(ip, NodeLocationSource::EndpointIp))
+        .flatten()
+}
+
 fn make_view(
     current: &RuntimeSnapshot,
     up: &UpstreamConfig,
@@ -653,6 +699,7 @@ fn make_view(
         remaining_secs: remaining,
         expiry_basis: lease.map(|l| l.expiry_basis.clone()),
         region: lease.and_then(|l| l.region.clone()),
+        location: None,
         lease_state,
         operation,
         published: plan.is_some(),

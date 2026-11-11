@@ -3,7 +3,7 @@
 
 fn main() {
     if std::env::args().skip(1).collect::<Vec<_>>() == ["--build-info"] {
-        let info = hps_domain::compiled_build_info(
+        let mut info = hps_domain::compiled_build_info(
             "hps-desktop",
             hps_domain::VersionInfo {
                 service: "honk-proxy-server".into(),
@@ -12,6 +12,7 @@ fn main() {
                 web_build_id: Some(hps_web_assets::BUILD_ID.into()),
             },
         );
+        info.ip2region_version = hps_application::bundled_ip2region_version();
         println!(
             "{}",
             serde_json::to_string(&info).expect("compiled metadata")

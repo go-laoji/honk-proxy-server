@@ -17,6 +17,11 @@ hps-engine.workspace = true
 hps-storage.workspace = true
 hps-provider.workspace = true
 hps-health.workspace = true
+ip2region = { git = "https://github.com/lionsoul2014/ip2region.git", rev = "92e6a788d17c3185c852ca983124c3fca280f992" }
+reqwest.workspace = true
+sha1 = "0.10"
+tempfile = "3"
+tracing.workspace = true
 tokio-util = { version = "0.7", features = ["rt"] }
 tokio.workspace = true
 uuid.workspace = true
@@ -31,7 +36,6 @@ ipnet = "2.12.2"
 hickory-proto = "0.26.3"
 axum.workspace = true
 rusqlite = "0.41"
-tempfile = "3"
 rcgen = "0.14"
 reqwest = { workspace = true, features = ["socks"] }
 bytes = "1"

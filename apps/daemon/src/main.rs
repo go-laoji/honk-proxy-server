@@ -28,13 +28,9 @@ struct Args {
 async fn main() -> Result<(), ServerError> {
     let args = Args::parse();
     if args.build_info {
-        println!(
-            "{}",
-            serde_json::to_string(&hps_domain::compiled_build_info(
-                "hpsd",
-                hps_api::build_version()
-            ))?
-        );
+        let mut info = hps_domain::compiled_build_info("hpsd", hps_api::build_version());
+        info.ip2region_version = hps_application::bundled_ip2region_version();
+        println!("{}", serde_json::to_string(&info)?);
         return Ok(());
     }
     let mut config = match args.config {

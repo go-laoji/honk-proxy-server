@@ -522,6 +522,7 @@ fn supported_action(path: &str) -> bool {
             | "api/v1/nodes/action"
             | "api/v1/nodes/import/preview"
             | "api/v1/nodes/import/apply"
+            | "api/v1/nodes/ip2region/update"
             | "api/v1/connections/disconnect"
             | "api/v1/connections/disconnect/preview"
             | "api/v1/connections/disconnect/confirm"
@@ -574,7 +575,11 @@ async fn api_post(
         subscriptions.validate_context(window.label(), context)?;
         target.clone()
     };
-    let timeout = if path == "api/v1/dns/resolve" { 65 } else { 10 };
+    let timeout = match path.as_str() {
+        "api/v1/dns/resolve" => 65,
+        "api/v1/nodes/ip2region/update" => 75,
+        _ => 10,
+    };
     let client = endpoint
         .client(Duration::from_secs(timeout))
         .map_err(NativeApiError::from)?;
@@ -938,6 +943,7 @@ mod tests {
         assert!(supported_api("api/v1/nodes?hide_deleted=true&limit=50"));
         assert!(!supported_api("api/v1/nodes?hide_expired=1"));
         assert!(supported_action("api/v1/nodes/import/apply"));
+        assert!(supported_action("api/v1/nodes/ip2region/update"));
         assert!(supported_api("api/v1/rules?revision=42"));
         assert!(!supported_api("api/v1/rules?revision=1&revision=2"));
         assert!(!supported_api("api/v1/rules?revision=0"));
