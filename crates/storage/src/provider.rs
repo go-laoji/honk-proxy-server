@@ -47,6 +47,7 @@ impl StoredLease {
                 self.state.clone()
             },
             region: self.candidate.region.clone(),
+            location: None,
         }
     }
 }

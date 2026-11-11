@@ -240,3 +240,199 @@ async fn updates_both_families_preserve_last_good_and_reuse_observed_exit_ip() {
     service.shutdown().await.unwrap();
     server.abort();
 }
+
+#[tokio::test]
+async fn extracted_leases_follow_provider_region_rules_and_database_updates() {
+    use hps_config::{
+        GroupConfig, ProviderConfig, ProviderKind, ProviderRegionRule, SelectionSave,
+    };
+    use hps_domain::{ExtractionInput, SelectionQuery};
+
+    let ipv4 = "1.2.3.4".parse().unwrap();
+    let ipv6 = "240e::1".parse().unwrap();
+    let (v4, v4_bytes) = fixture(ipv4, "中国|广东省|广州市|电信|CN");
+    let (v6, v6_bytes) = fixture(ipv6, "中国|江苏省|苏州市|联通|CN");
+    let (next_v4, next_v4_bytes) = fixture(ipv4, "中国|浙江省|杭州市|电信|CN");
+    let metadata = serde_json::json!([
+        {"name": V4_FILE, "size": next_v4.size, "sha": next_v4.sha},
+        {"name": V6_FILE, "size": v6.size, "sha": v6.sha},
+    ]);
+    let initial = Manifest { ipv4: v4, ipv6: v6 };
+    let next_v6_bytes = v6_bytes.clone();
+    let router = Router::new()
+        .route(
+            "/extract",
+            get(|| async { "1.2.3.4:8080\n[240e::1]:8080\n127.0.0.1:8080\n" }),
+        )
+        .route(
+            "/metadata",
+            get(move || {
+                let metadata = metadata.clone();
+                async { Json(metadata) }
+            }),
+        )
+        .route(
+            "/data/{name}",
+            get(move |RoutePath(name): RoutePath<String>| {
+                let bytes = if name == V4_FILE {
+                    next_v4_bytes.clone()
+                } else {
+                    next_v6_bytes.clone()
+                };
+                async { bytes }
+            }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    let mut config = hps_config::DaemonConfig::default();
+    config.health.enabled = false;
+    config.providers.push(ProviderConfig {
+        id: "vendor".into(),
+        enabled: true,
+        kind: ProviderKind::Text,
+        endpoint: format!("http://{address}/extract"),
+        count: 3,
+        ttl_secs: Some(300),
+        ..Default::default()
+    });
+    let group =
+        |id: &str, isp: Option<&str>, province: Option<&str>, city: Option<&str>| GroupConfig {
+            id: id.into(),
+            provider_regions: vec![ProviderRegionRule {
+                provider: "vendor".into(),
+                isp: isp.map(str::to_owned),
+                province: province.map(str::to_owned),
+                city: city.map(str::to_owned),
+            }],
+            ..Default::default()
+        };
+    config.proxy.selection.groups = vec![
+        group("guangzhou", Some("中国电信"), Some("广东"), Some("广州")),
+        group("unicom", Some("联通"), None, None),
+        GroupConfig {
+            id: "combined".into(),
+            groups: vec!["guangzhou".into(), "unicom".into()],
+            ..Default::default()
+        },
+    ];
+    let store = hps_storage::Store::open(None, config).unwrap();
+    let service = Supervisor::boot(store, Default::default()).await.unwrap();
+    service.confirm_startup().await.unwrap();
+    service
+        .ip2region
+        .install(initial, &v4_bytes, &v6_bytes, Ip2RegionSource::Updated)
+        .unwrap();
+    let task = service
+        .extract(
+            "vendor".into(),
+            ExtractionInput {
+                request_id: "test-provider-regions".into(),
+            },
+        )
+        .await
+        .unwrap();
+    let decision = |group: &str| {
+        service
+            .simulate_group(SelectionQuery {
+                group: Some(group.into()),
+                ..Default::default()
+            })
+            .unwrap()
+    };
+    tokio::time::timeout(Duration::from_secs(3), async {
+        while decision("combined").eligible != 2 {
+            assert_ne!(
+                service.extraction_task(task.id).await.unwrap().state,
+                "failed"
+            );
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let inventory = service
+        .nodes(NodeQuery {
+            group: Some("guangzhou".into()),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    assert_eq!(inventory.filtered_total, 1);
+    assert_eq!(inventory.nodes[0].host, "1.2.3.4");
+    assert_eq!(
+        decision("guangzhou").selected.as_deref(),
+        Some(inventory.nodes[0].id.as_str())
+    );
+    let leases = service
+        .provider_leases(Some("vendor".into()), None, 50)
+        .await
+        .unwrap();
+    assert_eq!(leases.len(), 3);
+    assert!(
+        leases
+            .iter()
+            .find(|lease| lease.host == "127.0.0.1")
+            .unwrap()
+            .location
+            .is_none()
+    );
+    assert_eq!(
+        leases
+            .iter()
+            .find(|lease| lease.host == "240e::1")
+            .unwrap()
+            .location
+            .as_ref()
+            .unwrap()
+            .city
+            .as_deref(),
+        Some("苏州市")
+    );
+
+    let before = service.groups_overview();
+    let mut configuration = before.configuration;
+    configuration
+        .groups
+        .push(group("hangzhou", None, None, Some("杭州")));
+    configuration.groups[1].provider_regions[0].province = Some("江苏省".into());
+    let activated = service
+        .edit_groups(SelectionSave {
+            configuration,
+            expected_revision: before.running_revision,
+        })
+        .await
+        .unwrap();
+    assert_eq!(activated.state, "applied");
+    assert_eq!(decision("unicom").eligible, 1);
+    assert_eq!(decision("hangzhou").eligible, 0);
+
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_secs(3))
+        .build()
+        .unwrap();
+    let update = service
+        .update_ip2region_from(
+            client,
+            &format!("http://{address}/metadata"),
+            &format!("http://{address}/data"),
+        )
+        .await
+        .unwrap();
+    assert!(update.updated);
+    assert_eq!(decision("guangzhou").eligible, 0);
+    assert_eq!(decision("hangzhou").eligible, 1);
+    assert_eq!(decision("combined").eligible, 1);
+    let moved = service
+        .nodes(NodeQuery {
+            group: Some("hangzhou".into()),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    assert_eq!(moved.nodes[0].id, inventory.nodes[0].id);
+    assert_eq!(service.extraction_task(task.id).await.unwrap().added, 3);
+    service.shutdown().await.unwrap();
+    server.abort();
+}

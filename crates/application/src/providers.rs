@@ -43,7 +43,7 @@ impl Supervisor {
         });
         let mut seen = HashSet::new();
         let mut counts = HashMap::<String, u32>::new();
-        let nodes = leases
+        let mut nodes = leases
             .into_iter()
             .filter(|lease| allowed.get(&lease.provider_id) == Some(&lease.fingerprint))
             .filter(|lease| {
@@ -85,13 +85,28 @@ impl Supervisor {
                         }
                     }),
                 upstream: lease.candidate.upstream,
+                location: None,
             })
             .collect::<Vec<_>>();
         let pool = current.engine.dynamic_pool();
-        tokio::task::spawn_blocking(move || pool.replace(nodes))
-            .await
-            .map_err(|_| ApplicationError::Worker)?
-            .map_err(|_| ApplicationError::Invalid)
+        let regions = self.ip2region.clone();
+        tokio::task::spawn_blocking(move || {
+            let database = regions.read();
+            if let Some(database) = database.as_ref() {
+                let mut locations = HashMap::new();
+                for node in &mut nodes {
+                    let host = &node.upstream.host;
+                    node.location = locations
+                        .entry(host)
+                        .or_insert_with(|| database.endpoint_location(host))
+                        .clone();
+                }
+            }
+            pool.replace(nodes)
+        })
+        .await
+        .map_err(|_| ApplicationError::Worker)?
+        .map_err(|_| ApplicationError::Invalid)
     }
     pub async fn providers(&self) -> Result<Vec<ProviderView<ProviderConfig>>, ApplicationError> {
         let current = self.current();
@@ -173,7 +188,18 @@ impl Supervisor {
                 _ => {}
             }
         }
-        Ok(leases)
+        let regions = self.ip2region.clone();
+        tokio::task::spawn_blocking(move || {
+            let database = regions.read();
+            if let Some(database) = database.as_ref() {
+                for lease in &mut leases {
+                    lease.location = database.endpoint_location(&lease.host);
+                }
+            }
+            leases
+        })
+        .await
+        .map_err(|_| ApplicationError::Worker)
     }
     pub async fn extraction_task(&self, id: i64) -> Result<ExtractionTask, ApplicationError> {
         Ok(self.store.extraction_task(id).await?)

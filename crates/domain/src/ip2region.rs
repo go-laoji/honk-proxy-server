@@ -8,7 +8,7 @@ pub enum NodeLocationSource {
     EndpointIp,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NodeLocation {
     pub ip: IpAddr,
     pub source: NodeLocationSource,

@@ -90,6 +90,10 @@ impl Selector {
             && (group.include_all
                 || self.compiled[&group.id].providers.contains(provider)
                 || group
+                    .provider_regions
+                    .iter()
+                    .any(|rule| rule.provider == provider)
+                || group
                     .groups
                     .iter()
                     .filter_map(|id| self.group(id))
@@ -175,7 +179,10 @@ impl Selector {
             let provider = up.source.as_ref().map(|(id, _)| id);
             let member = group.include_all
                 || compiled.members.contains(&up.config.id)
-                || provider.is_some_and(|id| compiled.providers.contains(id))
+                || provider.is_some_and(|id| {
+                    compiled.providers.contains(id)
+                        || group.includes_provider_region(id, up.location.as_ref())
+                })
                 || group.groups.iter().any(|id| {
                     cache
                         .get(id)
@@ -283,7 +290,10 @@ impl Selector {
             if let Some(group) = group {
                 let member = group.include_all
                     || members.contains(up.config.id.as_str())
-                    || provider.is_some_and(|id| self.compiled[&group.id].providers.contains(id))
+                    || provider.is_some_and(|id| {
+                        self.compiled[&group.id].providers.contains(id)
+                            || group.includes_provider_region(id, up.location.as_ref())
+                    })
                     || group.groups.iter().any(|id| {
                         nested
                             .get(id)

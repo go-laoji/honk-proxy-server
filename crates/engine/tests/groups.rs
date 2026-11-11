@@ -195,6 +195,7 @@ async fn dynamic_lease_identity_minimum_lifetime_provider_and_udp_are_rechecked(
         fingerprint: "v1".into(),
         upstream: node,
         min_remaining_secs: 10,
+        location: None,
     };
     pool.replace(vec![lease(node.clone())]).unwrap();
     assert_eq!(engine.selection(&SelectionQuery::default()).eligible, 0);
@@ -224,4 +225,78 @@ async fn dynamic_lease_identity_minimum_lifetime_provider_and_udp_are_rechecked(
     );
     assert_eq!(dialer.eligible_count(), 0);
     assert!(proxy.requests.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn provider_region_group_forwards_only_through_matching_lease() {
+    let origin = support::origin(None).await;
+    let matched = support::http_proxy(None, None, 200).await;
+    let other = support::http_proxy(None, None, 200).await;
+    let engine = Engine::new(ProxyConfig {
+        inbounds: vec![support::inbound("http", ProxyProtocol::Http, None)],
+        selection: SelectionConfig {
+            default_group: Some("guangzhou".into()),
+            groups: vec![GroupConfig {
+                id: "guangzhou".into(),
+                provider_regions: vec![hps_config::ProviderRegionRule {
+                    provider: "vendor".into(),
+                    isp: Some("电信".into()),
+                    province: None,
+                    city: Some("广州".into()),
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        },
+        ..Default::default()
+    })
+    .unwrap();
+    engine.set_provider_sources(std::collections::HashMap::from([(
+        "vendor".into(),
+        "v1".into(),
+    )]));
+    let pool = engine.dynamic_pool();
+    let expires = pool.logical_now() + 300;
+    let lease = |id: &str, address, city: &str| {
+        let mut upstream = support::upstream(address, ProxyProtocol::Http);
+        upstream.id = id.into();
+        upstream.expires_at_unix = Some(expires);
+        hps_engine::pool::PoolNode {
+            provider_id: "vendor".into(),
+            fingerprint: "v1".into(),
+            upstream,
+            min_remaining_secs: 0,
+            location: Some(hps_domain::NodeLocation {
+                ip: "1.2.3.4".parse().unwrap(),
+                source: hps_domain::NodeLocationSource::EndpointIp,
+                country: Some("中国".into()),
+                province: Some("广东省".into()),
+                city: Some(city.into()),
+                isp: Some("电信".into()),
+                country_code: Some("CN".into()),
+            }),
+        }
+    };
+    pool.replace(vec![
+        lease("lease:1", other.address, "深圳市"),
+        lease("lease:2", matched.address, "广州市"),
+    ])
+    .unwrap();
+    engine.start_enabled().await.unwrap();
+    let address = engine.status().inbounds[0].listen.clone().unwrap();
+    let client = reqwest::Client::builder()
+        .proxy(reqwest::Proxy::all(format!("http://{address}")).unwrap())
+        .timeout(Duration::from_secs(3))
+        .build()
+        .unwrap();
+    let response = client
+        .post(format!("http://{}/echo", origin.address))
+        .body("provider-region")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.text().await.unwrap(), "provider-region");
+    assert_eq!(matched.requests.lock().unwrap().len(), 1);
+    assert!(other.requests.lock().unwrap().is_empty());
+    engine.shutdown().await;
 }
