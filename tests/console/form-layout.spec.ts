@@ -7,7 +7,7 @@ test("node filters align their labels, fields and actions on one row", async ({
   await page.goto("/console/nodes.html");
   const filters = page.getByRole("form", { name: "节点筛选" });
   const controls = [
-    filters.getByRole("textbox", { name: "名称或端点" }),
+    filters.getByRole("textbox", { name: "名称、端点或地区" }),
     filters.getByRole("combobox", { name: "来源", exact: true }),
     filters.getByRole("combobox", { name: "状态", exact: true }),
     filters.getByRole("button", { name: "应用筛选" }),

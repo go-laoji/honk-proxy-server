@@ -327,3 +327,51 @@ port = 9
     });
   }
 });
+
+test("node inventory updates the IP database and keeps its version on failure", async ({
+  page,
+}) => {
+  let version = "old-v4/old-v6";
+  let calls = 0;
+  await page.route("**/api/v1/nodes?*", async (route) => {
+    const response = await route.fetch();
+    await route.fulfill({
+      response,
+      json: {
+        ...(await response.json()),
+        ip2region: { version, source: calls ? "updated" : "bundled" },
+      },
+    });
+  });
+  await page.route("**/api/v1/nodes/ip2region/update", async (route) => {
+    expect(route.request().method()).toBe("POST");
+    calls++;
+    if (calls === 3) {
+      await route.fulfill({
+        status: 502,
+        json: { code: "ip2region_update_failed" },
+      });
+      return;
+    }
+    version = "new-v4/new-v6";
+    await route.fulfill({
+      json: { database: { version, source: "updated" }, updated: calls === 1 },
+    });
+  });
+  await page.goto("/console/nodes.html");
+  const check = page.getByRole("button", {
+    name: "检查地区库更新",
+    exact: true,
+  });
+  await expect(page.getByText("old-v4/old-v6", { exact: true })).toBeVisible();
+  await check.click();
+  await expect(page.getByText("地区库已更新。", { exact: true })).toBeVisible();
+  await expect(page.getByText("new-v4/new-v6", { exact: true })).toBeVisible();
+  await check.click();
+  await expect(
+    page.getByText("当前已是最新版本。", { exact: true }),
+  ).toBeVisible();
+  await check.click();
+  await expect(page.getByText(/检查地区库更新失败/)).toBeVisible();
+  await expect(page.getByText("new-v4/new-v6", { exact: true })).toBeVisible();
+});

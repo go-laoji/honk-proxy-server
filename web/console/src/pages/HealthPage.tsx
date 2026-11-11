@@ -86,7 +86,7 @@ function Evidence({ result }: { result: ProbeResult }) {
           {result.target_ok === false ? " · 目标未接受" : ""}
         </dd>
         <dt className="muted">观察到的出口 IP</dt>
-        <dd>{result.exit_ip ?? "未知"} · 地域未知</dd>
+        <dd>{result.exit_ip ?? "未知"}</dd>
       </dl>
       {result.error_code && (
         <p className="mt-3 break-all rounded-lg bg-console-soft p-2 font-mono leading-5">

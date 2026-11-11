@@ -1,5 +1,12 @@
 import { Badge } from "./ui";
-import { nodeAddress, nodeReasons, nodeStates, type NodeView } from "../nodes";
+import {
+  nodeAddress,
+  nodeLocationLabel,
+  nodeLocationSource,
+  nodeReasons,
+  nodeStates,
+  type NodeView,
+} from "../nodes";
 
 const actions = [
   ["enable", "解除限制", "enabled"],
@@ -71,19 +78,21 @@ export default function NodeTable({
     >
       <table className="node-table" aria-label="节点列表">
         <colgroup>
-          <col className="w-[22%]" />
-          <col className="w-[12%]" />
-          <col className="w-[11%]" />
+          <col className="w-[19%]" />
           <col className="w-[10%]" />
-          <col className="w-[13%]" />
-          <col className="w-[6%]" />
-          <col className="w-[26%]" />
+          <col className="w-[14%]" />
+          <col className="w-[10%]" />
+          <col className="w-[8%]" />
+          <col className="w-[9%]" />
+          <col className="w-[5%]" />
+          <col className="w-[25%]" />
         </colgroup>
         <thead>
           <tr>
             {[
               "节点 / 端点",
               "来源",
+              "归属地",
               "有效期",
               "准入",
               "健康",
@@ -101,6 +110,17 @@ export default function NodeTable({
             const address = nodeAddress(node);
             const source = node.provider_id ?? "静态节点";
             const lease = nodeStates[node.lease_state] ?? node.lease_state;
+            const location = node.location;
+            const region = location
+              ? nodeLocationLabel(location)
+              : (node.region ?? "未知");
+            const regionSource = location
+              ? [nodeLocationSource(location), location.isp]
+                  .filter(Boolean)
+                  .join(" · ")
+              : node.region
+                ? "供应商"
+                : null;
             const reasons = node.admission_reasons.map(
               (reason) => nodeReasons[reason] ?? reason,
             );
@@ -127,6 +147,23 @@ export default function NodeTable({
                   </span>
                   {node.batch_id !== null && (
                     <span className="muted">批次 #{node.batch_id}</span>
+                  )}
+                </td>
+                <td>
+                  <span className="block truncate" title={region}>
+                    {region}
+                  </span>
+                  {regionSource && (
+                    <span
+                      className="muted block truncate"
+                      title={
+                        location
+                          ? `${regionSource} · ${location.ip}`
+                          : regionSource
+                      }
+                    >
+                      {regionSource}
+                    </span>
                   )}
                 </td>
                 <td className="tabular-nums">
