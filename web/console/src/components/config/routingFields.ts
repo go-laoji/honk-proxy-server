@@ -114,7 +114,7 @@ export function selectionFields(groups: { id: string }[]): Field[] {
 }
 
 const inboundProtocols = { ...protocols, transparent: "透明接管" };
-const action: Field[] = [
+const action = (groups?: string[]): Field[] => [
   select("kind", "流量动作", {
     default: "按入口与默认分组选点",
     node: "指定节点",
@@ -125,22 +125,47 @@ const action: Field[] = [
   {
     kind: "text",
     key: "id",
-    label: "目标节点或分组 ID",
+    label: "目标节点 ID",
     required: true,
-    when: (value) => value.kind === "node" || value.kind === "group",
+    when: (value) => value.kind === "node",
+  },
+  {
+    ...(groups
+      ? select(
+          "id",
+          "目标代理组",
+          Object.fromEntries(groups.map((id) => [id, id])),
+        )
+      : {
+          kind: "text" as const,
+          key: "id",
+          label: "目标分组 ID",
+          required: true,
+        }),
+    when: (value) => value.kind === "group",
   },
 ];
 
-export const routingFields: Field[] = [
+export const routingFields = (groups?: string[]): Field[] => [
   toggle("use_dns_observations", "使用 DNS 观测补充域名"),
-  { kind: "object", key: "default_action", label: "默认动作", fields: action },
+  {
+    kind: "object",
+    key: "default_action",
+    label: "默认动作",
+    fields: action(groups),
+  },
 ];
 
-export function ruleFields(readOnly: boolean): Field[] {
+export function ruleFields(readOnly: boolean, groups?: string[]): Field[] {
   return [
     identifier("规则 ID", readOnly),
     toggle("enabled", "启用此规则"),
-    { kind: "object", key: "action", label: "匹配后的动作", fields: action },
+    {
+      kind: "object",
+      key: "action",
+      label: "匹配后的动作",
+      fields: action(groups),
+    },
     {
       kind: "object",
       key: "conditions",

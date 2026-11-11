@@ -17,33 +17,22 @@ import {
 import { Badge } from "../components/ui";
 import ObservationPanel from "../components/ObservationPanel";
 import RuleImportPanel from "../components/RuleImportPanel";
+import QuickGroupRuleForm, {
+  type QuickGroupRule,
+} from "../components/QuickGroupRuleForm";
 import { getJson, postJson } from "../platform";
-import { candidateReasons, type SelectionDecision } from "../selection";
+import {
+  candidateReasons,
+  type GroupsOverview,
+  type SelectionDecision,
+} from "../selection";
+import {
+  readQuickRuleSeed,
+  type Action,
+  type Conditions,
+  type Rule,
+} from "../routing";
 
-type Action =
-  | { kind: "default" | "direct" | "reject" }
-  | { kind: "node" | "group"; id: string };
-type Conditions = {
-  domains?: string[];
-  domain_suffixes?: string[];
-  destination_cidrs?: string[];
-  destination_ports?: { start: number; end: number }[];
-  transports?: string[];
-  inbound_protocols?: string[];
-  inbounds?: string[];
-  source_cidrs?: string[];
-  process?: {
-    pid?: number | null;
-    command?: string | null;
-    cgroup_id?: number | null;
-  } | null;
-};
-type Rule = {
-  id: string;
-  enabled: boolean;
-  conditions: Conditions;
-  action: Action;
-};
 type Policy = {
   rules: Rule[];
   default_action: Action;
@@ -57,6 +46,7 @@ type Overview = {
   viewed_parent_revision: number | null;
   configuration: Policy;
   active_configuration: Policy;
+  available_groups?: string[];
   candidates: Revision[];
   changes: {
     path: string;
@@ -162,6 +152,23 @@ const defaultContext: RoutingContext = {
 const message = (cause: unknown) =>
   cause instanceof Error ? cause.message : "操作失败";
 
+async function readOverview(revision?: number, signal?: AbortSignal) {
+  const overview = await getJson<Overview>(
+    `api/v1/rules${revision ? `?revision=${revision}` : ""}`,
+    signal,
+  );
+  if (overview.available_groups !== undefined) return overview;
+  const groups = await getJson<GroupsOverview>("api/v1/groups", signal).catch(
+    () => undefined,
+  );
+  if (groups?.running_revision === overview.running_revision) {
+    overview.available_groups = groups.configuration.groups.map(
+      (group) => group.id,
+    );
+  }
+  return overview;
+}
+
 export default function RulesPage({
   refreshService,
 }: {
@@ -182,6 +189,10 @@ export default function RulesPage({
     )
   >();
   const [context, setContext] = useState(defaultContext);
+  const [quick, setQuick] = useState(() =>
+    readQuickRuleSeed(new URLSearchParams(location.search)),
+  );
+  const editing = Boolean(editor || quick);
   const [simulation, setSimulation] = useState<Simulation>();
   const mounted = useRef(true);
   const sequence = useRef(0);
@@ -199,10 +210,7 @@ export default function RulesPage({
         : undefined;
     if (raw && !revision)
       setError("规则版本必须是正整数，已读取当前运行版本。");
-    getJson<Overview>(
-      `api/v1/rules${revision ? `?revision=${revision}` : ""}`,
-      controller.signal,
-    )
+    readOverview(revision, controller.signal)
       .then((value) => {
         if (mounted.current && request === sequence.current) setData(value);
       })
@@ -220,19 +228,17 @@ export default function RulesPage({
     };
   }, []);
   useEffect(() => {
-    if (!editor) return;
+    if (!editing) return;
     const warn = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = "";
     };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
-  }, [editor]);
+  }, [editing]);
   async function load(revision?: number) {
     const request = ++sequence.current;
-    const value = await getJson<Overview>(
-      `api/v1/rules${revision ? `?revision=${revision}` : ""}`,
-    );
+    const value = await readOverview(revision);
     if (mounted.current && request === sequence.current) {
       setData(value);
       setPage((current) =>
@@ -261,10 +267,11 @@ export default function RulesPage({
       if (mounted.current) setBusy(false);
     }
   }
-  async function candidate(path: string, body: unknown) {
+  async function candidate(path: string, body: unknown, onSaved?: () => void) {
     const value = await postJson<Revision>(path, body);
     if (!mounted.current) return;
     setEditor(undefined);
+    onSaved?.();
     setInfo(`候选 r${value.id} 已保存，需要显式激活。`);
     await load(value.id);
   }
@@ -297,10 +304,18 @@ export default function RulesPage({
   async function save() {
     if (!editor) return;
     // Switching a tagged action can leave an earlier target in the draft.
-    const cleanAction = (action: Action): Action =>
-      action.kind === "node" || action.kind === "group"
+    const cleanAction = (action: Action): Action => {
+      if (
+        action.kind === "group" &&
+        data?.available_groups &&
+        !data.available_groups.includes(action.id)
+      ) {
+        throw new Error("请选择当前可用的目标代理组。");
+      }
+      return action.kind === "node" || action.kind === "group"
         ? action
         : { kind: action.kind };
+    };
     const value =
       editor.mode === "policy"
         ? {
@@ -314,6 +329,47 @@ export default function RulesPage({
         [editor.mode === "policy" ? "configuration" : "rule"]: value,
         expected_revision: editor.revision,
         base_revision: editor.base,
+      },
+    );
+  }
+  function closeQuick() {
+    setQuick(null);
+    const url = new URL(location.href);
+    if (url.searchParams.get("create") === "group-rule") {
+      for (const key of ["create", "target", "group", "port", "transport"]) {
+        url.searchParams.delete(key);
+      }
+      history.replaceState(null, "", url);
+    }
+  }
+  async function saveQuick(rule: QuickGroupRule) {
+    if (!data) return;
+    const base = `to-${rule.group.slice(0, 54)}`;
+    const used = new Set(data.configuration.rules.map((entry) => entry.id));
+    let id = base;
+    for (let suffix = 2; used.has(id); suffix++) id = `${base}-${suffix}`;
+    await candidate(
+      "api/v1/rules/upsert",
+      {
+        rule: {
+          id,
+          enabled: true,
+          conditions: rule.conditions,
+          action: { kind: "group", id: rule.group },
+        },
+        index: rule.first ? 0 : undefined,
+        expected_revision: data.running_revision,
+        base_revision: data.viewed_revision,
+      },
+      () => {
+        closeQuick();
+        setPage(0);
+        setContext({
+          ...defaultContext,
+          destination_host: rule.example.host,
+          destination_port: rule.example.port,
+          transport: rule.example.transport,
+        });
       },
     );
   }
@@ -354,14 +410,13 @@ export default function RulesPage({
     data.viewed_revision !== data.running_revision &&
     data.viewed_parent_revision !== data.running_revision,
   );
-  const canMutate = Boolean(
+  const editableRevision = Boolean(
     data &&
-    !busy &&
-    !editor &&
     !needsRebase &&
     !data.other_configuration_changes &&
     data.desired_revision === data.running_revision,
   );
+  const canMutate = editableRevision && !busy && !editing;
   const canApply =
     canMutate && data?.viewed_revision !== data?.running_revision;
   const knownViews = new Set(
@@ -402,6 +457,14 @@ export default function RulesPage({
             <button
               className="btn"
               disabled={!canMutate}
+              onClick={() => setQuick({})}
+            >
+              <Waypoints size={14} aria-hidden="true" />
+              按目标分流
+            </button>
+            <button
+              className="btn"
+              disabled={!canMutate}
               onClick={() => void action(() => edit("rule"))}
             >
               <Plus size={14} />
@@ -420,7 +483,7 @@ export default function RulesPage({
             </button>
             <button
               className="btn"
-              disabled={busy || Boolean(editor)}
+              disabled={busy || (editing && Boolean(data))}
               onClick={() =>
                 void action(async () => {
                   await load(data?.viewed_revision);
@@ -443,7 +506,7 @@ export default function RulesPage({
                 <select
                   className="field"
                   value={String(data.viewed_revision)}
-                  disabled={busy || Boolean(editor)}
+                  disabled={busy || editing}
                   onChange={(event) => {
                     const id = Number(event.target.value);
                     setPage(0);
@@ -510,7 +573,7 @@ export default function RulesPage({
                   className="btn"
                   disabled={
                     busy ||
-                    Boolean(editor) ||
+                    editing ||
                     data.desired_revision !== data.running_revision
                   }
                   onClick={() =>
@@ -553,6 +616,16 @@ export default function RulesPage({
           </>
         )}
       </section>
+      {quick && data && (
+        <QuickGroupRuleForm
+          seed={quick}
+          groups={data.available_groups ?? []}
+          disabled={busy || !editableRevision}
+          busy={busy}
+          onSave={(rule) => void action(() => saveQuick(rule))}
+          onCancel={closeQuick}
+        />
+      )}
       {editor && (
         <section className="panel panel-body space-y-4" aria-label="规则编辑器">
           <h2 className="font-semibold">
@@ -576,13 +649,16 @@ export default function RulesPage({
           >
             {editor.mode === "policy" ? (
               <ConfigFields
-                fields={routingFields}
+                fields={routingFields(data?.available_groups)}
                 value={editor.value}
                 onChange={(value) => setEditor({ ...editor, value })}
               />
             ) : (
               <ConfigFields
-                fields={ruleFields(Boolean(editor.original))}
+                fields={ruleFields(
+                  Boolean(editor.original),
+                  data?.available_groups,
+                )}
                 value={editor.value}
                 onChange={(value) => setEditor({ ...editor, value })}
               />
@@ -638,7 +714,18 @@ export default function RulesPage({
                     <h3 className="break-all font-semibold">
                       {index + 1}. {rule.id}
                     </h3>
-                    <p className="mt-2 text-sm">{actionName(rule.action)}</p>
+                    <p className="mt-2 text-sm">
+                      {rule.action.kind === "group" ? (
+                        <a
+                          className="text-console-accent-ink"
+                          href={`./group-detail.html?id=${encodeURIComponent(rule.action.id)}`}
+                        >
+                          {actionName(rule.action)}
+                        </a>
+                      ) : (
+                        actionName(rule.action)
+                      )}
+                    </p>
                   </div>
                   <Badge active={rule.enabled}>
                     {rule.enabled ? "已启用" : "已停用"}
@@ -761,7 +848,7 @@ export default function RulesPage({
         <ConfigForm
           label="规则模拟条件"
           onSave={() => {
-            if (!busy && data && !editor) void action(simulate);
+            if (!busy && data && !editing) void action(simulate);
           }}
         >
           <ConfigFields
@@ -772,7 +859,7 @@ export default function RulesPage({
           <button
             className="btn-primary"
             type="submit"
-            disabled={busy || !data || Boolean(editor)}
+            disabled={busy || !data || editing}
           >
             执行规则模拟
           </button>
@@ -870,7 +957,7 @@ export default function RulesPage({
         <RuleImportPanel
           key={data.running_revision}
           revision={data.running_revision}
-          locked={busy}
+          locked={busy || editing}
           viewed={data.viewed_revision}
           onImport={(document, checksum) =>
             candidate("api/v1/rules/import/apply", {

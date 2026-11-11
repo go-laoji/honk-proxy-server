@@ -16,6 +16,7 @@ import { useEffect, useRef, useState } from "react";
 import { Layers3, Plus, RefreshCw, Search, Settings2 } from "lucide-react";
 import { Badge } from "../components/ui";
 import { getJson, postJson } from "../platform";
+import { quickRuleHref } from "../routing";
 
 const message = (cause: unknown) =>
   cause instanceof Error ? cause.message : "操作失败";
@@ -390,6 +391,9 @@ export default function GroupsPage({
               >
                 选择此组
               </button>
+              <a className="btn" href={quickRuleHref({ group: item.id })}>
+                配置分流
+              </a>
               <button
                 className="btn"
                 disabled={busy}
