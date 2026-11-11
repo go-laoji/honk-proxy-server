@@ -204,6 +204,7 @@ export interface LeaseInfo {
   expiry_basis: string;
   state: string;
   region: string | null;
+  location?: NodeLocation;
 }
 export interface ProviderDetail {
   provider: ProviderView;
@@ -381,3 +382,4 @@ export interface LinuxPreflight {
   datapath_ready: boolean;
   scope: string;
 }
+import type { NodeLocation } from "./nodes";

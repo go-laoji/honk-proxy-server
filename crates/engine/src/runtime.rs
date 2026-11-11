@@ -677,6 +677,7 @@ mod readiness_tests {
                 provider_id: "vendor".into(),
                 fingerprint: "same-fingerprint".into(),
                 min_remaining_secs: 0,
+                location: None,
                 upstream: hps_config::UpstreamConfig {
                     id: "lease:1".into(),
                     protocol: ProxyProtocol::Socks5,

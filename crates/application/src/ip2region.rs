@@ -142,6 +142,14 @@ impl Database {
         }
     }
 
+    pub(super) fn endpoint_location(&self, host: &str) -> Option<NodeLocation> {
+        let ip = host.parse::<IpAddr>().ok()?.to_canonical();
+        if !public_ip(ip) {
+            return None;
+        }
+        self.locate(ip, NodeLocationSource::EndpointIp)
+    }
+
     pub(super) fn locate(&self, ip: IpAddr, source: NodeLocationSource) -> Option<NodeLocation> {
         let record = match ip {
             IpAddr::V4(ip) => self.ipv4.search(ip),
@@ -474,12 +482,19 @@ impl Supervisor {
                 _ = service.provider_cancel.cancelled() => return Err(hps_engine::runtime::EngineError::ShuttingDown.into()),
                 result = files => result?,
             };
+            let _permit = permit;
+            let _operation = service.operation.lock().await;
+            if service.closed.load(std::sync::atomic::Ordering::Acquire) {
+                return Err(hps_engine::runtime::EngineError::ShuttingDown.into());
+            }
+            let regions = service.ip2region.clone();
+            let pool = service.current().engine.dynamic_pool();
             tokio::task::spawn_blocking(move || {
-                let _permit = permit;
-                let database =
-                    service
-                        .ip2region
-                        .install(manifest, &v4, &v6, Ip2RegionSource::Updated)?;
+                let database = regions.install(manifest, &v4, &v6, Ip2RegionSource::Updated)?;
+                let current = regions.read();
+                if let Some(current) = current.as_ref() {
+                    pool.reclassify(|host| current.endpoint_location(host));
+                }
                 Ok(Ip2RegionUpdate {
                     database,
                     updated: true,

@@ -12,6 +12,7 @@ pub struct PoolNode {
     pub fingerprint: String,
     pub upstream: UpstreamConfig,
     pub min_remaining_secs: u64,
+    pub location: Option<hps_domain::NodeLocation>,
 }
 #[derive(Default)]
 pub struct DynamicPool {
@@ -57,6 +58,29 @@ impl DynamicPool {
     pub(crate) fn snapshot(&self) -> Arc<Vec<Arc<Upstream>>> {
         self.nodes.read().unwrap().clone()
     }
+    /// Refresh derived metadata while retaining prepared TLS, identity and lease deadlines.
+    pub fn reclassify(&self, mut locate: impl FnMut(&str) -> Option<hps_domain::NodeLocation>) {
+        loop {
+            let previous = self.snapshot();
+            let nodes = previous
+                .iter()
+                .map(|upstream| {
+                    let location = locate(&upstream.config.host);
+                    if location == upstream.location {
+                        return upstream.clone();
+                    }
+                    let mut updated = (**upstream).clone();
+                    updated.location = location;
+                    Arc::new(updated)
+                })
+                .collect();
+            let mut current = self.nodes.write().unwrap();
+            if Arc::ptr_eq(&previous, &current) {
+                *current = Arc::new(nodes);
+                break;
+            }
+        }
+    }
     /// Prepare before replacing. Re-publishing a lease never extends its monotonic deadline.
     pub fn replace(&self, nodes: Vec<PoolNode>) -> Result<(), ProxyError> {
         if nodes.len() > 100000 {
@@ -75,6 +99,7 @@ impl DynamicPool {
                 let mut upstream = Upstream::prepare(node.upstream)?;
                 upstream.source = Some((node.provider_id, node.fingerprint));
                 upstream.minimum_lifetime = node.min_remaining_secs;
+                upstream.location = node.location;
                 upstream.deadline = upstream.config.expires_at_unix.map(|expiry| {
                     instant
                         + Duration::from_secs(expiry)
@@ -100,6 +125,7 @@ mod tests {
             provider_id: "vendor".into(),
             fingerprint: "f".into(),
             min_remaining_secs: 0,
+            location: None,
             upstream: UpstreamConfig {
                 id: "lease-1".into(),
                 protocol: hps_config::ProxyProtocol::Http,

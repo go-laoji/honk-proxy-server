@@ -430,6 +430,8 @@ pub struct LeaseInfo {
     pub expiry_basis: String,
     pub state: String,
     pub region: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location: Option<NodeLocation>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExtractionInput {

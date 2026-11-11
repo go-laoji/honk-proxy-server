@@ -422,7 +422,15 @@ fn inventory(
             })
             || q.group.is_some()
                 && !requested_group.is_some_and(|g| {
-                    group_matches(&current.config.proxy.selection, g, up, lease, &node.tags, 0)
+                    group_matches(
+                        &current.config.proxy.selection,
+                        g,
+                        up,
+                        lease,
+                        &node.tags,
+                        plan.and_then(|p| p.endpoint_location()),
+                        0,
+                    )
                 })
             || q.protocol.as_ref().is_some_and(|p| *p != node.protocol)
             || q.capability.as_ref().is_some_and(|c| match c.as_str() {
@@ -477,7 +485,15 @@ fn inventory(
                 .groups
                 .iter()
                 .filter(|g| {
-                    group_matches(&current.config.proxy.selection, g, up, lease, &node.tags, 0)
+                    group_matches(
+                        &current.config.proxy.selection,
+                        g,
+                        up,
+                        lease,
+                        &node.tags,
+                        plans.get(&up.id).and_then(|p| p.endpoint_location()),
+                        0,
+                    )
                 })
                 .map(|g| g.id.clone())
                 .collect();
@@ -529,10 +545,7 @@ fn locate_node(database: &crate::ip2region::Database, node: &NodeView) -> Option
     {
         return database.locate(ip, NodeLocationSource::ExitIp);
     }
-    let ip = node.host.parse::<std::net::IpAddr>().ok()?.to_canonical();
-    crate::ip2region::public_ip(ip)
-        .then(|| database.locate(ip, NodeLocationSource::EndpointIp))
-        .flatten()
+    database.endpoint_location(&node.host)
 }
 
 fn make_view(
@@ -720,6 +733,7 @@ fn group_matches(
     up: &UpstreamConfig,
     lease: Option<&NodeInventoryLease>,
     tags: &[String],
+    location: Option<&NodeLocation>,
     depth: usize,
 ) -> bool {
     depth < 8
@@ -728,8 +742,11 @@ fn group_matches(
             || g.groups
                 .iter()
                 .filter_map(|id| selection.groups.iter().find(|child| child.id == *id))
-                .any(|child| group_matches(selection, child, up, lease, tags, depth + 1))
-            || lease.is_some_and(|l| g.providers.contains(&l.provider_id))
+                .any(|child| group_matches(selection, child, up, lease, tags, location, depth + 1))
+            || lease.is_some_and(|l| {
+                g.providers.contains(&l.provider_id)
+                    || g.includes_provider_region(&l.provider_id, location)
+            })
             || up
                 .id
                 .strip_prefix("sub:")

@@ -523,6 +523,7 @@ mod tests {
                 provider_id: "fixture".into(),
                 fingerprint: "v1".into(),
                 min_remaining_secs: 0,
+                location: None,
                 upstream: hps_config::UpstreamConfig {
                     id: "lease:42".into(),
                     protocol: hps_config::ProxyProtocol::Http,

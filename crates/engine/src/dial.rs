@@ -19,6 +19,7 @@ use tokio_rustls::{
 mod datagram;
 pub use datagram::DatagramConnection;
 
+#[derive(Clone)]
 pub(crate) struct Upstream {
     pub(crate) config: UpstreamConfig,
     pub(crate) identity: String,
@@ -26,6 +27,7 @@ pub(crate) struct Upstream {
     pub(crate) source: Option<(String, String)>,
     pub(crate) deadline: Option<std::time::Instant>,
     pub(crate) minimum_lifetime: u64,
+    pub(crate) location: Option<hps_domain::NodeLocation>,
 }
 impl Upstream {
     pub(crate) fn prepare(config: UpstreamConfig) -> Result<Self, ProxyError> {
@@ -60,6 +62,7 @@ impl Upstream {
             source: None,
             deadline,
             minimum_lifetime: 0,
+            location: None,
         })
     }
 }
@@ -127,6 +130,9 @@ impl ProbePlan {
     }
     pub fn provider_id(&self) -> Option<&str> {
         self.upstream.source.as_ref().map(|(id, _)| id.as_str())
+    }
+    pub fn endpoint_location(&self) -> Option<&hps_domain::NodeLocation> {
+        self.upstream.location.as_ref()
     }
     pub fn minimum_lifetime(&self) -> u64 {
         self.dialer.minimum_lifetime(&self.upstream)

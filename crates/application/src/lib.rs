@@ -182,7 +182,7 @@ pub struct Supervisor {
     provider_slots: Arc<tokio::sync::Semaphore>,
     rule_diagnostics: Arc<tokio::sync::Semaphore>,
     node_operations: Arc<tokio::sync::Semaphore>,
-    ip2region: ip2region::Ip2Region,
+    ip2region: Arc<ip2region::Ip2Region>,
     observations: connections::ConnectionRuntime,
     work_slots: Arc<tokio::sync::Semaphore>,
     event_stream_slots: Arc<tokio::sync::Semaphore>,
@@ -274,7 +274,7 @@ impl Supervisor {
             provider_slots: Arc::new(tokio::sync::Semaphore::new(8)),
             rule_diagnostics: Arc::new(tokio::sync::Semaphore::new(4)),
             node_operations: Arc::new(tokio::sync::Semaphore::new(4)),
-            ip2region,
+            ip2region: Arc::new(ip2region),
             observations: Default::default(),
             work_slots: Arc::new(tokio::sync::Semaphore::new(16)),
             event_stream_slots: Arc::new(tokio::sync::Semaphore::new(16)),
@@ -1149,6 +1149,7 @@ fn prepare_proxy_engine(
                     fingerprint: hps_provider::subscription::fingerprint(source),
                     upstream,
                     min_remaining_secs: 0,
+                    location: None,
                 })
         })
         .collect();

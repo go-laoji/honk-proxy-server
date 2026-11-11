@@ -35,12 +35,82 @@ pub struct GroupConfig {
     pub groups: Vec<String>,
     pub score: ScoreConfig,
     pub providers: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub provider_regions: Vec<ProviderRegionRule>,
     pub tags: Vec<String>,
     pub protocols: Vec<ProxyProtocol>,
     pub pinned_node: Option<String>,
     pub fallback_nodes: Vec<String>,
     pub weights: BTreeMap<String, u16>,
     pub session: Option<GroupSession>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProviderRegionRule {
+    pub provider: String,
+    pub isp: Option<String>,
+    pub province: Option<String>,
+    pub city: Option<String>,
+}
+
+impl ProviderRegionRule {
+    fn valid(&self) -> bool {
+        let fields = [&self.isp, &self.province, &self.city];
+        crate::valid_id(&self.provider)
+            && fields.iter().any(|value| value.is_some())
+            && fields.into_iter().flatten().all(|value| {
+                !value.trim().is_empty()
+                    && value.len() <= 96
+                    && !value.chars().any(char::is_control)
+            })
+    }
+
+    pub fn matches(&self, provider: &str, location: &hps_domain::NodeLocation) -> bool {
+        let matches =
+            |expected: &Option<String>, actual: &Option<String>, normalize: fn(&str) -> &str| {
+                expected.as_ref().is_none_or(|expected| {
+                    actual.as_ref().is_some_and(|actual| {
+                        normalize(expected.trim()).eq_ignore_ascii_case(normalize(actual.trim()))
+                    })
+                })
+            };
+        self.provider == provider
+            && matches(&self.isp, &location.isp, |value| {
+                value.strip_prefix("中国").unwrap_or(value)
+            })
+            && matches(&self.province, &location.province, province_name)
+            && matches(&self.city, &location.city, |value| {
+                value.strip_suffix('市').unwrap_or(value)
+            })
+    }
+}
+
+fn province_name(value: &str) -> &str {
+    match value {
+        "广西壮族自治区" => "广西",
+        "宁夏回族自治区" => "宁夏",
+        "新疆维吾尔自治区" => "新疆",
+        _ => value
+            .strip_suffix("自治区")
+            .or_else(|| value.strip_suffix("特别行政区"))
+            .or_else(|| value.strip_suffix(['省', '市']))
+            .unwrap_or(value),
+    }
+}
+
+impl GroupConfig {
+    pub fn includes_provider_region(
+        &self,
+        provider: &str,
+        location: Option<&hps_domain::NodeLocation>,
+    ) -> bool {
+        location.is_some_and(|location| {
+            self.provider_regions
+                .iter()
+                .any(|rule| rule.matches(provider, location))
+        })
+    }
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -115,6 +185,12 @@ impl SelectionConfig {
                 > 100000
             || self.node_tags.len() > 100000
             || self.provider_tags.len() > 64
+            || self
+                .groups
+                .iter()
+                .map(|g| g.provider_regions.len())
+                .sum::<usize>()
+                > 1024
             || !(1..=100000).contains(&self.max_sessions)
             || self.inbound_groups.len() > 64
         {
@@ -155,6 +231,10 @@ impl SelectionConfig {
                 || !(1..=60000).contains(&group.score.latency_ceiling_ms)
                 || !(1..=86400).contains(&group.score.lifetime_target_secs)
                 || group.providers.len() > 64
+                || group.provider_regions.len() > 64
+                || !group.provider_regions.iter().all(ProviderRegionRule::valid)
+                || group.provider_regions.iter().collect::<HashSet<_>>().len()
+                    != group.provider_regions.len()
                 || group.protocols.len() > 3
                 || group.fallback_nodes.len() > 1000
                 || group.weights.len() > 10000
@@ -234,6 +314,16 @@ impl SelectionConfig {
         providers: &[crate::ProviderConfig],
         subscriptions: &[crate::SubscriptionConfig],
     ) -> Result<(), ConfigError> {
+        if self
+            .groups
+            .iter()
+            .flat_map(|g| &g.provider_regions)
+            .any(|rule| !providers.iter().any(|p| p.id == rule.provider))
+        {
+            return Err(ConfigError::Invalid(
+                "group region rule references an unknown provider".into(),
+            ));
+        }
         if self
             .groups
             .iter()
