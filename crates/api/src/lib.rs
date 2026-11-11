@@ -420,6 +420,10 @@ fn application_error(error: ApplicationError) -> (StatusCode, Json<ApiError>) {
         ApplicationError::NodeCapacity => {
             (StatusCode::TOO_MANY_REQUESTS, "node_operation_capacity")
         }
+        ApplicationError::Ip2RegionBusy => (StatusCode::CONFLICT, "ip2region_update_busy"),
+        ApplicationError::Ip2RegionUpdate(_) => {
+            (StatusCode::BAD_GATEWAY, "ip2region_update_failed")
+        }
         ApplicationError::NodeReferenced(_) => (StatusCode::CONFLICT, "node_referenced"),
         ApplicationError::ClockRollback => (StatusCode::CONFLICT, "clock_rollback"),
         ApplicationError::Storage(StorageError::PoolFull) => {

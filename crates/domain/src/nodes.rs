@@ -74,6 +74,8 @@ pub struct NodeView {
     pub remaining_secs: Option<u64>,
     pub expiry_basis: Option<String>,
     pub region: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location: Option<crate::NodeLocation>,
     pub lease_state: String,
     pub operation: NodeControl,
     pub published: bool,
@@ -101,6 +103,8 @@ pub struct NodeSummary {
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodesOverview {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ip2region: Option<crate::Ip2RegionStatus>,
     pub running_revision: i64,
     pub evaluated_at_unix: i64,
     pub summary: NodeSummary,

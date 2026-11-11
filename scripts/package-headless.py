@@ -122,6 +122,7 @@ def main():
         cli_info = build_info(compiled / "hps", False)
         info = build_info(compiled / "hpsd", True)
         if not args.allow_dirty:
+            require(info.get("ip2region_version"), "rebuild the daemon with scripts/build-headless.sh to embed ip2region")
             for built in (cli_info,info):
                 require(built.get("source_revision")==compiled_revision and built.get("source_dirty") is False,"compiled source revision is stale or unknown; rebuild the clean source using the release build script")
         require(cli_info['version']['version'] == info['version']['version'] == version, 'invalid compiled package metadata')
@@ -145,6 +146,7 @@ def main():
         shutil.copyfile(ROOT / "packaging/templates/hps.toml", stage / "config/hps.toml")
         (stage / "share/docs").mkdir(parents=True)
         shutil.copyfile(ROOT / "README.md", stage / "share/docs/README.md")
+        shutil.copyfile(ROOT / "packaging/licenses/ip2region.txt", stage / "share/docs/ip2region-license.txt")
         documentation = subprocess.check_output(["git", "-c", "safe.directory=" + str(ROOT), "ls-files", "docs/*-usage.md"], cwd=ROOT, text=True).splitlines()
         for relative in documentation:
             source=ROOT / relative

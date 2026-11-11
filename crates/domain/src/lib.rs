@@ -9,6 +9,8 @@ mod routing;
 pub use routing::*;
 mod nodes;
 pub use nodes::*;
+mod ip2region;
+pub use ip2region::*;
 mod connections;
 pub use connections::*;
 mod linux;
@@ -67,6 +69,8 @@ pub struct CompiledBuildInfo {
     pub platform: String,
     pub source_revision: Option<String>,
     pub source_dirty: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ip2region_version: Option<String>,
     pub version: VersionInfo,
 }
 pub fn compiled_build_info(binary: &str, version: VersionInfo) -> CompiledBuildInfo {
@@ -77,6 +81,7 @@ pub fn compiled_build_info(binary: &str, version: VersionInfo) -> CompiledBuildI
         platform: std::env::consts::OS.into(),
         source_revision: option_env!("HPS_SOURCE_REVISION").map(str::to_owned),
         source_dirty: option_env!("HPS_SOURCE_DIRTY") != Some("0"),
+        ip2region_version: None,
         version,
     }
 }

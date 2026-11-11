@@ -706,8 +706,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1aa79e62e7697b8e29b513a68abacf485adcd1fe8284a4316c5ae868e6633327"
 dependencies = [
  "iana-time-zone",
+ "js-sys",
  "num-traits",
  "serde",
+ "wasm-bindgen",
  "windows-link",
 ]
 
@@ -1201,6 +1203,12 @@ name = "ego-tree"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7bd50d24b1b75aa817bb0339cb9f2e0e664bdfab1e160a69a0fda9145b77fab2"
+
+[[package]]
+name = "either"
+version = "1.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e9c71c2167ca323c882b99918929403426e2373ea17242ff5653e0d5e1058be"
 
 [[package]]
 name = "embed-resource"
@@ -1924,15 +1932,20 @@ dependencies = [
  "hps-provider",
  "hps-storage",
  "if-addrs",
+ "ip2region",
  "ipnet",
  "libc",
+ "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "sha1",
  "sha2",
+ "tempfile",
  "thiserror 2.0.21",
  "tokio",
  "tokio-util",
  "toml 0.9.12+spec-1.1.0",
+ "tracing",
  "tracing-subscriber",
  "uuid",
 ]
@@ -2505,6 +2518,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ip2region"
+version = "0.2.1"
+source = "git+https://github.com/lionsoul2014/ip2region.git?rev=92e6a788d17c3185c852ca983124c3fca280f992#92e6a788d17c3185c852ca983124c3fca280f992"
+dependencies = [
+ "maker",
+ "thiserror 2.0.21",
+ "tracing",
+]
+
+[[package]]
 name = "ipnet"
 version = "2.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2534,6 +2557,15 @@ name = "is_terminal_polyfill"
 version = "1.70.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695"
+
+[[package]]
+name = "itertools"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
+dependencies = [
+ "either",
+]
 
 [[package]]
 name = "itoa"
@@ -2858,6 +2890,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "maker"
+version = "0.2.0"
+source = "git+https://github.com/lionsoul2014/ip2region.git?rev=92e6a788d17c3185c852ca983124c3fca280f992#92e6a788d17c3185c852ca983124c3fca280f992"
+dependencies = [
+ "bytes",
+ "chrono",
+ "clap",
+ "itertools",
+ "num-derive",
+ "num-traits",
+ "thiserror 2.0.21",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "markup5ever"
 version = "0.39.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3075,6 +3123,17 @@ name = "num-conv"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "521739c6d2bac4aa25192232afe6841231376b2b26d4d9fae5ecf8ca5772e441"
+
+[[package]]
+name = "num-derive"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ed3955f1a9c7c0c15e092f9c887db08b1fc683305fdf6eb6684f22555355e202"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
 
 [[package]]
 name = "num-integer"

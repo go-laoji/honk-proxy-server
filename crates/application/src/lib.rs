@@ -7,6 +7,8 @@ mod dns_capture;
 pub use dns::DnsOverview;
 mod groups;
 mod health;
+mod ip2region;
+pub use ip2region::bundled_version as bundled_ip2region_version;
 mod node_import;
 mod nodes;
 mod observability;
@@ -78,6 +80,10 @@ pub enum ApplicationError {
     ConnectionScope,
     #[error("too many concurrent node inventory operations")]
     NodeCapacity,
+    #[error("an ip2region database update is already in progress")]
+    Ip2RegionBusy,
+    #[error(transparent)]
+    Ip2RegionUpdate(#[from] ip2region::UpdateError),
     #[error("node is still used by {0}")]
     NodeReferenced(String),
     #[error("rule not found")]
@@ -176,6 +182,7 @@ pub struct Supervisor {
     provider_slots: Arc<tokio::sync::Semaphore>,
     rule_diagnostics: Arc<tokio::sync::Semaphore>,
     node_operations: Arc<tokio::sync::Semaphore>,
+    ip2region: ip2region::Ip2Region,
     observations: connections::ConnectionRuntime,
     work_slots: Arc<tokio::sync::Semaphore>,
     event_stream_slots: Arc<tokio::sync::Semaphore>,
@@ -210,13 +217,21 @@ impl Supervisor {
         overrides: StartupOverrides,
     ) -> Result<Arc<Self>, ApplicationError> {
         let workspace = store.workspace().await?;
+        let ip2region_dir = store
+            .database_path
+            .as_deref()
+            .and_then(std::path::Path::parent)
+            .map(|dir| dir.join("ip2region"));
         let base_config = workspace.desired.config;
         let mut config = base_config.clone();
         overrides.apply(&mut config);
         let preparing = config.clone();
-        let prepared = tokio::task::spawn_blocking(move || prepare_engine(&preparing, None))
-            .await
-            .map_err(|_| ApplicationError::Worker)??;
+        let (prepared, ip2region) = tokio::task::spawn_blocking(move || {
+            let prepared = prepare_engine(&preparing, None)?;
+            Ok::<_, ApplicationError>((prepared, ip2region::Ip2Region::new(ip2region_dir)))
+        })
+        .await
+        .map_err(|_| ApplicationError::Worker)??;
         let engine = prepared.engine;
         engine.set_generation(workspace.desired.revision.id);
         for control in store.node_controls().await? {
@@ -259,6 +274,7 @@ impl Supervisor {
             provider_slots: Arc::new(tokio::sync::Semaphore::new(8)),
             rule_diagnostics: Arc::new(tokio::sync::Semaphore::new(4)),
             node_operations: Arc::new(tokio::sync::Semaphore::new(4)),
+            ip2region,
             observations: Default::default(),
             work_slots: Arc::new(tokio::sync::Semaphore::new(16)),
             event_stream_slots: Arc::new(tokio::sync::Semaphore::new(16)),

@@ -19,12 +19,15 @@ import HealthHistoryPanel from "../components/HealthHistoryPanel";
 import ManualNodePanel from "../components/ManualNodePanel";
 import {
   nodeAddress,
+  nodeLocationLabel,
+  nodeLocationSource,
   nodeReasons,
   nodeStates,
   type NodesOverview,
   type NodeView,
   type ImportRequest,
   type ImportPreview,
+  type Ip2RegionUpdate,
 } from "../nodes";
 
 const message = (cause: unknown) =>
@@ -89,6 +92,9 @@ export default function NodesPage() {
   const [loadError, setLoadError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const [updatingRegion, setUpdatingRegion] = useState(false);
+  const [regionNotice, setRegionNotice] = useState("");
+  const [regionError, setRegionError] = useState("");
   const [deletion, setDeletion] = useState<{
     node: NodeView;
     kind: "delete" | "remove";
@@ -190,6 +196,30 @@ export default function NodesPage() {
     const next = new URLSearchParams(query);
     next.set("offset", String(offset));
     navigate(next);
+  }
+  async function updateRegionDatabase() {
+    setUpdatingRegion(true);
+    setRegionNotice("");
+    setRegionError("");
+    try {
+      const result = await postJson<Ip2RegionUpdate>(
+        "api/v1/nodes/ip2region/update",
+      );
+      setValue((current) =>
+        current ? { ...current, ip2region: result.database } : current,
+      );
+      setRegionNotice(result.updated ? "地区库已更新。" : "当前已是最新版本。");
+      if (result.updated) setReload((n) => n + 1);
+    } catch (cause) {
+      setRegionError(
+        cause instanceof ApiRequestError &&
+          cause.code === "ip2region_update_busy"
+          ? "地区库正在更新，请稍后再试。"
+          : `检查地区库更新失败。${message(cause)}`,
+      );
+    } finally {
+      setUpdatingRegion(false);
+    }
   }
   function changed() {
     setPreview(null);
@@ -383,6 +413,32 @@ export default function NodesPage() {
               </button>
             </div>
           </div>
+          {value?.ip2region && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+              <span className="muted">
+                IP 地区库{" "}
+                {value.ip2region.version ? (
+                  <code>{value.ip2region.version}</code>
+                ) : (
+                  "未安装"
+                )}
+              </span>
+              <button
+                type="button"
+                className="btn min-h-7 px-2 py-0.5 text-xs"
+                disabled={updatingRegion}
+                onClick={() => void updateRegionDatabase()}
+              >
+                {updatingRegion ? "正在检查更新…" : "检查地区库更新"}
+              </button>
+              {regionNotice && <span role="status">{regionNotice}</span>}
+              {regionError && (
+                <span role="alert" className="text-console-danger">
+                  {regionError}
+                </span>
+              )}
+            </div>
+          )}
           {value && (
             <dl
               aria-label="节点库存摘要"
@@ -411,7 +467,7 @@ export default function NodesPage() {
           >
             <div className="grid grid-cols-2 items-end gap-2 xl:grid-cols-[minmax(10rem,1.5fr)_minmax(8rem,1fr)_minmax(8rem,1fr)_auto]">
               <label className="form-field col-span-2 sm:col-span-1">
-                名称或端点
+                名称、端点或地区
                 <input
                   className="field"
                   name="search"
@@ -764,6 +820,21 @@ export default function NodesPage() {
                     nodeStates[selected.health_state] ?? selected.health_state,
                   ],
                   ["人工状态", nodeStates[selected.operation.state]],
+                  [
+                    "IP 归属地",
+                    selected.location
+                      ? [
+                          nodeLocationLabel(selected.location),
+                          selected.location.isp,
+                          `${nodeLocationSource(selected.location)} ${selected.location.ip}`,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")
+                      : "未知",
+                  ],
+                  ...(selected.region
+                    ? [["供应商地区", selected.region] as [string, string]]
+                    : []),
                   ...(selected.admission_reasons.length > 0
                     ? [
                         [

@@ -199,7 +199,7 @@ export default function HealthHistoryPanel({ node }: { node?: string }) {
                       {run.result?.exit_ip ?? "未知"}
                       <br />
                       {run.result?.exit_ip
-                        ? "配置的纯 IP 探测响应；地域未知"
+                        ? "配置的纯 IP 探测响应"
                         : "未获得出口观察"}
                     </td>
                   </tr>

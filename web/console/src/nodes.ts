@@ -1,4 +1,28 @@
 import type { ProbeResult } from "./types";
+export type NodeLocation = {
+  ip: string;
+  source: "exit_ip" | "endpoint_ip";
+  country: string | null;
+  province: string | null;
+  city: string | null;
+  isp: string | null;
+  country_code: string | null;
+};
+export type Ip2RegionStatus = {
+  version: string | null;
+  source: "bundled" | "updated" | null;
+};
+export type Ip2RegionUpdate = {
+  database: Ip2RegionStatus;
+  updated: boolean;
+};
+export const nodeLocationLabel = (location: NodeLocation) =>
+  [...new Set([location.country, location.province, location.city])]
+    .filter(Boolean)
+    .join(" · ");
+export const nodeLocationSource = (location: NodeLocation) =>
+  location.source === "exit_ip" ? "出口 IP" : "端点 IP";
+
 export type NodeControl = {
   node_id: string;
   state: "enabled" | "disabled" | "draining" | "deleted";
@@ -21,6 +45,7 @@ export type NodeView = {
   remaining_secs: number | null;
   expiry_basis: string | null;
   region: string | null;
+  location?: NodeLocation;
   lease_state: string;
   operation: NodeControl;
   published: boolean;
@@ -45,6 +70,7 @@ export type NodeSummary = {
   active_connections: number;
 };
 export type NodesOverview = {
+  ip2region?: Ip2RegionStatus;
   running_revision: number;
   evaluated_at_unix: number;
   summary: NodeSummary;
