@@ -43,7 +43,7 @@ impl Store {
             check_head(&tx, expected_revision)?;
             if let Some(scope) = lease {
                 if node_id != format!("lease:{}",scope.id) { return Err(StorageError::Invalid); }
-                let matches: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM provider_leases WHERE id=?1 AND batch_id=?2 AND provider_id=?3)", params![scope.id,scope.batch_id,scope.provider_id], |r| r.get(0))?;
+                let matches: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM provider_leases WHERE id=?1 AND batch_id=?2 AND provider_id=?3 AND expires_at>?4)", params![scope.id,scope.batch_id,scope.provider_id,unix_now()], |r| r.get(0))?;
                 if !matches { return Err(StorageError::NotFound); }
             } else if node_id.starts_with("lease:") {
                 return Err(StorageError::Invalid);

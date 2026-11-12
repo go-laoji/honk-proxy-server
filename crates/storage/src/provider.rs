@@ -96,8 +96,26 @@ fn lease(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredLease> {
         state: row.get(6)?,
     })
 }
-fn prune_history(c: &Connection, now: i64) -> Result<(), StorageError> {
-    c.execute("DELETE FROM provider_leases WHERE expires_at<?1 OR id IN (SELECT id FROM provider_leases WHERE state!='active' OR expires_at<=?2 ORDER BY id DESC LIMIT -1 OFFSET 100000)",params![now-30*86400,now])?;
+// Constrain the leading column of provider_leases_pool to use its expiry ranges.
+const EXPIRED_LEASE_IDS: &str = "SELECT id FROM provider_leases WHERE state IN ('active','revoked','clock_rollback') AND expires_at<=?1";
+
+/// The caller owns the transaction so lease and control deletion commit together.
+pub(super) fn delete_expired_leases(c: &Connection, now: i64) -> Result<usize, StorageError> {
+    c.execute(
+        &format!("DELETE FROM node_controls WHERE node_id IN (SELECT 'lease:' || id FROM ({EXPIRED_LEASE_IDS}))"),
+        [now],
+    )?;
+    let removed = c.execute(
+        &format!("DELETE FROM provider_leases WHERE id IN ({EXPIRED_LEASE_IDS})"),
+        [now],
+    )?;
+    if removed != 0 {
+        prune_task_history(c)?;
+    }
+    Ok(removed)
+}
+
+fn prune_task_history(c: &Connection) -> Result<(), StorageError> {
     c.execute(
         "DELETE FROM provider_batches WHERE task_id NOT IN (SELECT batch_id FROM provider_leases)",
         [],
@@ -105,7 +123,29 @@ fn prune_history(c: &Connection, now: i64) -> Result<(), StorageError> {
     c.execute("DELETE FROM provider_tasks WHERE id NOT IN (SELECT task_id FROM provider_batches) AND state NOT IN ('accepted','requesting') AND id NOT IN (SELECT id FROM provider_tasks ORDER BY id DESC LIMIT 10000)",[])?;
     Ok(())
 }
+
+fn prune_history(c: &Connection, now: i64) -> Result<(), StorageError> {
+    c.execute("DELETE FROM provider_leases WHERE id IN (SELECT id FROM provider_leases WHERE state!='active' AND expires_at>?1 ORDER BY id DESC LIMIT -1 OFFSET 100000)",[now])?;
+    prune_task_history(c)
+}
+
 impl Store {
+    pub async fn purge_expired_leases(&self, now: i64) -> Result<usize, StorageError> {
+        self.call(move |c| {
+            let expired = c
+                .prepare_cached(&format!("SELECT EXISTS({EXPIRED_LEASE_IDS})"))?
+                .query_row([now], |row| row.get::<_, bool>(0))?;
+            if !expired {
+                return Ok(0);
+            }
+            let tx = c.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+            let removed = delete_expired_leases(&tx, now)?;
+            tx.commit()?;
+            Ok(removed)
+        })
+        .await
+    }
+
     pub async fn observe_lease_clock(&self, now: i64) -> Result<(), StorageError> {
         self.call(move |c| {
             c.execute(
@@ -262,9 +302,9 @@ impl Store {
     pub async fn active_leases(&self) -> Result<Vec<StoredLease>, StorageError> {
         self.call(move|c|Ok(c.prepare("SELECT id,batch_id,provider_id,fingerprint,document,received_at,state FROM provider_leases WHERE state='active' AND expires_at>?1 ORDER BY id DESC LIMIT 100000")?.query_map([unix_now()],lease)?.collect::<Result<Vec<_>,_>>()?)).await
     }
-    /// Live inventory first, then bounded retired history. Raw documents stay inside Rust.
+    /// Active leases first, then bounded, unexpired retired leases. Raw documents stay inside Rust.
     pub async fn node_inventory_leases(&self) -> Result<Vec<NodeInventoryLease>, StorageError> {
-        self.call(|c| Ok(c.prepare("SELECT id,batch_id,provider_id,fingerprint,received_at,state,expires_at,json_extract(document,'$.upstream.protocol'),json_extract(document,'$.upstream.host'),json_extract(document,'$.upstream.port'),json_extract(document,'$.upstream.enabled'),coalesce(json_type(document,'$.upstream.credentials')='object',0),substr(json_extract(document,'$.expiry_basis'),1,128),substr(json_extract(document,'$.region'),1,256) FROM provider_leases ORDER BY CASE WHEN state='active' AND expires_at>?1 THEN 0 ELSE 1 END,id DESC LIMIT 200001")?.query_map([unix_now()],|r| {
+        self.call(|c| Ok(c.prepare("SELECT id,batch_id,provider_id,fingerprint,received_at,state,expires_at,json_extract(document,'$.upstream.protocol'),json_extract(document,'$.upstream.host'),json_extract(document,'$.upstream.port'),json_extract(document,'$.upstream.enabled'),coalesce(json_type(document,'$.upstream.credentials')='object',0),substr(json_extract(document,'$.expiry_basis'),1,128),substr(json_extract(document,'$.region'),1,256) FROM provider_leases WHERE expires_at>?1 ORDER BY CASE WHEN state='active' THEN 0 ELSE 1 END,id DESC LIMIT 200001")?.query_map([unix_now()],|r| {
             let protocol:String=r.get(7)?;
             let protocol=match protocol.as_str(){"http"=>hps_config::ProxyProtocol::Http,"https"=>hps_config::ProxyProtocol::Https,"socks5"=>hps_config::ProxyProtocol::Socks5,_=>return Err(rusqlite::Error::InvalidQuery)};
             let id:i64=r.get(0)?;
@@ -276,7 +316,7 @@ impl Store {
         })?.collect::<Result<Vec<_>,_>>()?)).await
     }
     pub async fn node_lease(&self, id: i64) -> Result<StoredLease, StorageError> {
-        self.call(move |c| c.query_row("SELECT id,batch_id,provider_id,fingerprint,document,received_at,state FROM provider_leases WHERE id=?1",[id],lease).optional()?.ok_or(StorageError::NotFound)).await
+        self.call(move |c| c.query_row("SELECT id,batch_id,provider_id,fingerprint,document,received_at,state FROM provider_leases WHERE id=?1 AND expires_at>?2",params![id,unix_now()],lease).optional()?.ok_or(StorageError::NotFound)).await
     }
     pub async fn provider_leases(
         &self,
@@ -284,7 +324,7 @@ impl Store {
         before: Option<i64>,
         limit: u32,
     ) -> Result<Vec<LeaseInfo>, StorageError> {
-        self.call(move|c| {let now=unix_now();let rows=c.prepare("SELECT id,batch_id,provider_id,fingerprint,document,received_at,state FROM provider_leases WHERE (?1 IS NULL OR provider_id=?1) AND (?2 IS NULL OR id<?2) ORDER BY id DESC LIMIT ?3")?.query_map(params![provider_id,before,limit.clamp(1,200)],lease)?.collect::<Result<Vec<_>,_>>()?;Ok(rows.iter().map(|r|r.info(now)).collect())}).await
+        self.call(move|c| {let now=unix_now();let rows=c.prepare("SELECT id,batch_id,provider_id,fingerprint,document,received_at,state FROM provider_leases WHERE (?1 IS NULL OR provider_id=?1) AND (?2 IS NULL OR id<?2) AND expires_at>?4 ORDER BY id DESC LIMIT ?3")?.query_map(params![provider_id,before,limit.clamp(1,200),now],lease)?.collect::<Result<Vec<_>,_>>()?;Ok(rows.iter().map(|r|r.info(now)).collect())}).await
     }
 }
 
@@ -527,6 +567,67 @@ mod tests {
             restored.provider_leases(None, None, 10).await.unwrap()[0].state,
             "revoked"
         );
+        restored.close().await.unwrap();
+    }
+    #[tokio::test]
+    async fn reopening_deletes_expired_lease_rows_and_controls_but_keeps_live_leases_and_tasks() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = config();
+        let store = Store::open(Some(dir.path()), DaemonConfig::default()).unwrap();
+        let expired_batch = next(&store, &c, "expired").await;
+        store
+            .finish_extraction(expired_batch.id, c.clone(), nodes(1), true)
+            .await
+            .unwrap();
+        let expired = store.active_leases().await.unwrap().remove(0);
+        store
+            .set_node_control(
+                expired.candidate.upstream.id.clone(),
+                hps_domain::NodeOperationState::Disabled,
+                0,
+                1,
+                Some(crate::nodes::LeaseScope {
+                    id: expired.id,
+                    batch_id: expired.batch_id,
+                    provider_id: expired.provider_id,
+                }),
+            )
+            .await
+            .unwrap();
+        let live_batch = next(&store, &c, "live").await;
+        store
+            .finish_extraction(live_batch.id, c, nodes(1), true)
+            .await
+            .unwrap();
+        store.close().await.unwrap();
+        let db = Connection::open(dir.path().join("hps.sqlite3")).unwrap();
+        db.execute(
+            "UPDATE provider_leases SET received_at=?2-300,expires_at=?2,state='revoked',document=json_set(document,'$.expires_at',?2,'$.upstream.expires_at_unix',?2) WHERE id=?1",
+            params![expired.id, unix_now()],
+        )
+        .unwrap();
+        drop(db);
+
+        let restored = Store::open(Some(dir.path()), DaemonConfig::default()).unwrap();
+        let leases = restored.provider_leases(None, None, 10).await.unwrap();
+        assert_eq!(leases.len(), 1);
+        assert_eq!(leases[0].batch_id, live_batch.id);
+        assert_eq!(restored.node_inventory_leases().await.unwrap().len(), 1);
+        assert!(restored.node_controls().await.unwrap().is_empty());
+        let history = restored.extraction_task(expired_batch.id).await.unwrap();
+        assert_eq!(history.state, "succeeded");
+        assert_eq!(history.added, 1);
+        let rows = restored
+            .call(|db| {
+                Ok(db.query_row(
+                    "SELECT (SELECT count(*) FROM provider_leases), (SELECT count(*) FROM provider_batches)",
+                    [],
+                    |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
+                )?)
+            })
+            .await
+            .unwrap();
+        assert_eq!(rows, (1, 1));
         restored.close().await.unwrap();
     }
     #[tokio::test]

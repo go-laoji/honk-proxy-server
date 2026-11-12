@@ -497,6 +497,7 @@ fn migrate(connection: &mut Connection, bootstrap: &str, epoch: &str) -> Result<
             [],
         )?;
     }
+    provider::delete_expired_leases(&transaction, unix_now())?;
     transaction.execute("INSERT INTO provider_clock(singleton,observed_at,clean_shutdown) VALUES(1,?1,0) ON CONFLICT(singleton) DO UPDATE SET observed_at=max(observed_at,excluded.observed_at),clean_shutdown=0",[unix_now()])?;
     let count: i64 =
         transaction.query_row("SELECT count(*) FROM config_head", [], |row| row.get(0))?;
