@@ -4,6 +4,25 @@ use hps_domain::{ExtractionInput, ExtractionTask, LeaseInfo, ProviderDetail, Pro
 use hps_provider::{FetchError, ProviderClient};
 use std::collections::{HashMap, HashSet};
 impl Supervisor {
+    pub(crate) async fn purge_expired_provider_leases(&self) -> Result<(), ApplicationError> {
+        let _operation = self.operation.lock().await;
+        if self.closed.load(std::sync::atomic::Ordering::Acquire) {
+            return Ok(());
+        }
+        let current = self.current();
+        let now = current
+            .engine
+            .dynamic_pool()
+            .logical_now()
+            .min(i64::MAX as u64) as i64;
+        if self.store.purge_expired_leases(now).await? != 0 {
+            let controls = self.store.node_controls().await?;
+            current.engine.node_registry().reconcile(controls);
+            self.refresh_pool().await?;
+        }
+        Ok(())
+    }
+
     pub(crate) async fn refresh_pool(&self) -> Result<(), ApplicationError> {
         let current = self.current();
         let allowed: HashMap<_, _> = current
@@ -170,6 +189,12 @@ impl Supervisor {
     ) -> Result<Vec<LeaseInfo>, ApplicationError> {
         let mut leases = self.store.provider_leases(id, before, limit).await?;
         let current = self.current();
+        let now = current
+            .engine
+            .dynamic_pool()
+            .logical_now()
+            .min(i64::MAX as u64) as i64;
+        leases.retain(|lease| lease.expires_at > now);
         for lease in &mut leases {
             if lease.state != "active" {
                 continue;
