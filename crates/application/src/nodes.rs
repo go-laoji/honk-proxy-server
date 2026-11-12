@@ -371,6 +371,9 @@ fn inventory(
         let lease = *lease;
         let plan = plans.get(&up.id);
         let node = make_view(current, up, lease, plan, now, lease_now, &fingerprints);
+        if lease.is_some() && node.remaining_secs == Some(0) {
+            continue;
+        }
         summary.inventory += 1;
         summary.published += usize::from(node.published);
         summary.eligible += usize::from(node.eligible);

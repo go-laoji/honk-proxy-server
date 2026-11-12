@@ -21,6 +21,9 @@ impl Supervisor {
                 let Some(service) = weak.upgrade() else {
                     break;
                 };
+                if let Err(error) = service.purge_expired_provider_leases().await {
+                    tracing::warn!(%error, "could not clean up expired provider leases");
+                }
                 let ids = service
                     .current()
                     .config

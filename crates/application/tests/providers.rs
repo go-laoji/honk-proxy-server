@@ -83,6 +83,71 @@ async fn finished(app: &Arc<Supervisor>, id: i64) -> ExtractionTask {
     .unwrap()
 }
 #[tokio::test]
+async fn running_daemon_deletes_expired_lease_without_another_extraction() {
+    let directory = tempfile::tempdir().unwrap();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let upstream = support::http_proxy(None, None, 200).await;
+    let extraction = extraction_server(upstream.address, None, calls.clone()).await;
+    let mut configuration = config(extraction.address);
+    configuration.providers[0].ttl_secs = Some(5);
+    configuration.providers[0].min_remaining_secs = 0;
+    let app = Supervisor::boot(
+        Store::open(Some(directory.path()), configuration).unwrap(),
+        StartupOverrides::default(),
+    )
+    .await
+    .unwrap();
+    app.confirm_startup().await.unwrap();
+    let task = app
+        .extract(
+            "vendor".into(),
+            ExtractionInput {
+                request_id: "expires-in-running-daemon".into(),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(finished(&app, task.id).await.state, "succeeded");
+    let before = app.provider_detail("vendor").await.unwrap();
+    assert_eq!(before.leases.len(), 1);
+    let node = format!("lease:{}", before.leases[0].id);
+    assert_eq!(app.node(node.clone()).await.unwrap().filtered_total, 1);
+
+    let database = rusqlite::Connection::open_with_flags(
+        directory.path().join("hps.sqlite3"),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .unwrap();
+    let lease_count = || {
+        database
+            .query_row("SELECT count(*) FROM provider_leases", [], |row| {
+                row.get::<_, i64>(0)
+            })
+            .unwrap()
+    };
+    assert_eq!(lease_count(), 1);
+    tokio::time::timeout(Duration::from_secs(8), async {
+        while lease_count() != 0 {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(matches!(
+        app.node(node).await,
+        Err(hps_application::ApplicationError::Storage(
+            hps_storage::StorageError::NotFound
+        ))
+    ));
+    let after = app.provider_detail("vendor").await.unwrap();
+    assert!(after.leases.is_empty());
+    assert_eq!(after.tasks[0].id, task.id);
+    assert_eq!(after.tasks[0].added, 1);
+    assert_eq!(calls.load(Ordering::Relaxed), 1);
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
 async fn extracted_authenticated_upstream_is_live_without_restart_and_disable_revokes_new_admission()
  {
     let upstream = support::http_proxy(None, Some("Basic dmVuZG9yOnByaXZhdGU="), 200).await;
