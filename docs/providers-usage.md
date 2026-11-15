@@ -25,9 +25,17 @@ hps provider show yun-free
 
 `query_valid_time=true` 在提取后调用 [剩余时长接口](https://www.kuaidaili.com/doc/api/getdpsvalidtime/)，失败时不会将未知期限节点放入池。部分订单不支持此接口，需要显式配置订单保证的保守 ttl_secs，并将 query_valid_time 设为 false。TTL 从请求开始计算，读取响应和重启不会续期；相同 IP 的新提取也是独立租约。接口的 HTTP/HTTPS 目标能力通过 HTTP CONNECT 使用；快代理此适配器的出站协议选择 http 或 socks5，不把支持 HTTPS 目标当成 TLS 代理端口。
 
-[云代理示例](../configs/providers/yun-free.example.toml) 读取用户指定的 [免费页面](http://www.ip3366.net/free/?stype=1)，支持实际页面的 GBK 字符编码。表格的 HTTP/HTTPS 标签解析为 HTTP/CONNECT 代理。页面没有供应商寿命保证，ttl_secs 仅作为本地缓存退休上限，抓取成功不表示健康可用。
+[云代理示例](../configs/providers/yun-free.example.toml) 读取用户指定的 [免费页面](http://www.ip3366.net/free/?stype=1)，支持实际页面的 GBK 字符编码。表格的 HTTP/HTTPS 标签解析为 HTTP/CONNECT 代理。页面没有供应商寿命保证，ttl_secs 仅作为本地缓存退休上限，抓取成功不表示健康可用。已验证公开页面的获取和解析。
 
-快代理没有采购账号，本阶段以官方契约、固定签名向量和故障测试服务验收，**没有验证付费账号提取、余额或白名单真实返回**。云代理已实际获取/解析；未向这些公开端点转发用户业务。
+### 本地模拟提取和换 IP
+
+[模拟配置](../configs/hps.kuaidaili.mock.toml) 使用假订单密钥、一个代理库存和按需补池。运行以下命令会自动启动本地提取接口、剩余时长接口、故障代理、替代代理和目标服务，并使用临时存储验收：
+
+```sh
+HPS_FORBID_HOST_NETWORK_CHANGES=1 cargo test -p hps-application --test kuaidaili_failover
+```
+
+测试覆盖 `proxy_list` 入池、代理故障后撤销租约、补到其他端点并重试原请求，也检查预算耗尽、目标站错误透传和 POST 不重放。模拟的 HTTP 提取接口仅允许直接访问数字回环地址；实际供应商仍使用 HTTPS。本地模拟不验证付费订单、余额或白名单。
 
 ## 提取与结果不确定
 
@@ -50,6 +58,8 @@ HTTP 库禁用重试和重定向。传输中断、响应丢失、超大或损坏
 默认 append_leases 保留旧有效批次；不会因为新批次没有某个 IP 就删除旧租约，也不会按重复端点延长旧租约。动态池按来源和端点去重，保留独立批次记录。replace_snapshot 必须显式设置 full_snapshot=true，minimum_snapshot_percent 默认 50，按已有不同端点数量保护异常缩减。空结果或损坏响应始终保留旧池；主动大幅缩减需要显式调整阈值。
 
 后台结果只有在来源仍启用且提取配置指纹一致时才能发布。来源删除、停用或密钥/接口变化后的旧请求结果标为 discarded。现存连接使用原拨号结果，新连接不选择已禁用、过期或寿命不足的来源。健康默认启用，eligible 同时要求新鲜的 TCP 可达证据；新批次先等待检测，详见 [健康准入](health-usage.md)。
+
+业务流量遇到代理端点连接失败、代理握手失败，或快代理明确返回的 [端点失效与转发错误](https://www.kuaidaili.com/doc/dev/dpshttpresponse/) 时，会立即停止使用失败租约，并在后台撤销同一来源下该端点的有效租约。撤销记录到期前仍可查看，已建立的连接自然结束。启用来源的 `[refill]` 后，控制器按原水位、预算、冷却和健康要求补池。请求会在原路由下尝试另一个端点；无可用替代时最多等待 5 秒，且不超过 `connect_timeout_ms`。整个请求最多重试一次。已经发给上游的明文 HTTP 请求仅在无请求体的 GET 或 HEAD 时重试。目标站正常返回的 403、429、503 等响应会原样转发；已建立的隧道不会重放。
 
 内存中使用单调时钟限制期限，重复发布不会延长同一租约。正常退出记录逻辑时钟；正常重启保留未过期租约且期限不变。检测到时钟回拨会退休旧租约；崩溃后无法证明经过时间的旧租约保守撤销，需要重新提取，不推测新的到期时刻。中断的 requesting 任务恢复为 outcome_unknown，尚未发出的 accepted 恢复为 failed。
 

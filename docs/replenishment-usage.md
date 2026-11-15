@@ -1,6 +1,6 @@
 # 自动补池、水位和预算
 
-对应 [T07 / Issue #12](https://github.com/go-laoji/honk-proxy-server/issues/12)。每来源一个控制器，由 Daemon 后台循环驱动，代理请求不会同步等待供应商 API。全部可达使用者可查看和操作，不要求账号。
+对应 [T07 / Issue #12](https://github.com/go-laoji/honk-proxy-server/issues/12)。每来源一个控制器，由 Daemon 后台循环驱动。代理请求不直接调用供应商 API；发生[租约故障](providers-usage.md#池发布快照与恢复)时，可以短时间等待后台发布替代节点。全部可达使用者可查看和操作，不要求账号。
 
 ## 配置与语义
 
