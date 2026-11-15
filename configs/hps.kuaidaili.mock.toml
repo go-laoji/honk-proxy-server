@@ -1,0 +1,47 @@
+# Fixture for the kuaidaili_failover integration test. The test replaces the
+# extraction port with its local mock's ephemeral port. Use only dummy keys.
+instance_name = "kuaidaili-local-test"
+
+[health]
+enabled = false
+
+[proxy.limits]
+connect_timeout_ms = 3000
+min_remaining_lifetime_secs = 0
+
+[[proxy.inbounds]]
+id = "test-http"
+protocol = "http"
+listen = "127.0.0.1:0"
+enabled = true
+
+[[providers]]
+id = "kuaidaili-mock"
+name = "快代理本地模拟"
+enabled = true
+kind = "kuaidaili"
+endpoint = "http://127.0.0.1:18081/api/getdps"
+protocol = "http"
+count = 1
+query_valid_time = true
+min_remaining_secs = 0
+min_interval_secs = 1
+timeout_ms = 1000
+
+[providers.auth]
+type = "hmac_sha1"
+secret_id = "mock-order"
+secret_key = "mock-key"
+
+[providers.refill]
+enabled = true
+mode = "on_demand"
+min_nodes = 1
+target_nodes = 1
+max_nodes = 1
+batch_size = 1
+retire_before_secs = 0
+forecast_secs = 0
+idle_timeout_secs = 10
+daily_request_budget = 2
+daily_node_budget = 2

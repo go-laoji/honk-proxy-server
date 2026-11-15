@@ -180,8 +180,16 @@ impl ProviderConfig {
         {
             return Err(invalid());
         }
+        // Local simulators may serve the real vendor contract over loopback.
+        // Never send a plaintext vendor request through a configured fetch proxy.
+        let local_mock = self.fetch_proxy.is_none()
+            && match url.host() {
+                Some(url::Host::Ipv4(ip)) => ip.is_loopback(),
+                Some(url::Host::Ipv6(ip)) => ip.is_loopback(),
+                _ => false,
+            };
         if self.kind == ProviderKind::Kuaidaili
-            && (url.scheme() != "https"
+            && ((url.scheme() != "https" && !local_mock)
                 || self.method != FetchMethod::Get
                 || matches!(self.auth, ProviderAuth::None)
                 || (!self.query_valid_time && self.ttl_secs.is_none())
