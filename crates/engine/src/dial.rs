@@ -1,4 +1,4 @@
-use crate::{BoxIo, ProxyError, target::Target, tls};
+use crate::{BoxIo, ProxyError, pool::FailedLease, target::Target, tls};
 use base64::Engine;
 use hps_config::{ProxyConfig, ProxyProtocol, UpstreamConfig};
 use hps_domain::ProbePhase;
@@ -30,6 +30,18 @@ pub(crate) struct Upstream {
     pub(crate) location: Option<hps_domain::NodeLocation>,
 }
 impl Upstream {
+    pub(crate) fn lease_id(&self) -> Option<i64> {
+        self.config.id.strip_prefix("lease:")?.parse().ok()
+    }
+    fn lease(&self) -> Option<FailedLease> {
+        let (provider_id, fingerprint) = self.source.as_ref()?;
+        Some(FailedLease {
+            id: self.lease_id()?,
+            provider_id: provider_id.clone(),
+            fingerprint: fingerprint.clone(),
+            identity: self.identity.clone(),
+        })
+    }
     pub(crate) fn prepare(config: UpstreamConfig) -> Result<Self, ProxyError> {
         let (tls, ca_fingerprint) = if config.protocol == ProxyProtocol::Https {
             let (tls, fp) = tls::client_with_fingerprint(&config)?;
@@ -77,6 +89,8 @@ pub struct Dialer {
     sources: std::sync::RwLock<std::collections::HashMap<String, String>>,
     source_protocols: std::sync::RwLock<std::collections::HashMap<String, ProxyProtocol>>,
     source_lifetimes: std::sync::RwLock<std::collections::HashMap<String, u64>>,
+    kuaidaili_sources: std::sync::RwLock<std::collections::HashSet<String>>,
+    auto_refill_sources: std::sync::RwLock<std::collections::HashSet<String>>,
     refill_fingerprint: String,
     selector: crate::selection::Selector,
     router: crate::routing::Router,
@@ -199,6 +213,24 @@ pub struct Connected {
     pub proxy_authorization: Option<HeaderValue>,
     pub routing: Option<hps_domain::RouteDecision>,
     pub observation: Option<crate::connections::ConnectionGuard>,
+    pub(crate) lease: Option<FailedLease>,
+}
+
+#[derive(Default)]
+pub(crate) struct LeaseRetry {
+    failed: Option<FailedLease>,
+    retried: bool,
+}
+impl LeaseRetry {
+    pub fn can_retry(&self) -> bool {
+        self.failed.is_some() && !self.retried
+    }
+    fn excluded_identity(&self) -> Option<&str> {
+        self.failed
+            .as_ref()
+            .filter(|_| self.retried)
+            .map(|lease| lease.identity.as_str())
+    }
 }
 impl Dialer {
     pub(crate) fn preserve_static_deadlines(&mut self, previous: &Self) {
@@ -266,6 +298,8 @@ impl Dialer {
             sources: std::sync::RwLock::new(std::collections::HashMap::new()),
             source_protocols: Default::default(),
             source_lifetimes: Default::default(),
+            kuaidaili_sources: Default::default(),
+            auto_refill_sources: Default::default(),
             refill_fingerprint,
             selector: crate::selection::Selector::new(config.selection.clone()),
             router,
@@ -284,6 +318,42 @@ impl Dialer {
     }
     pub(crate) fn set_source_lifetimes(&self, values: std::collections::HashMap<String, u64>) {
         *self.source_lifetimes.write().unwrap() = values;
+    }
+    pub(crate) fn configure_provider_failover(
+        &self,
+        kuaidaili: std::collections::HashSet<String>,
+        auto_refill: std::collections::HashSet<String>,
+    ) {
+        *self.kuaidaili_sources.write().unwrap() = kuaidaili;
+        *self.auto_refill_sources.write().unwrap() = auto_refill;
+    }
+    fn kuaidaili_failure(&self, lease: &FailedLease, status: u16) -> bool {
+        matches!(status, 453 | 454 | 460 | 515..=517)
+            && self
+                .kuaidaili_sources
+                .read()
+                .unwrap()
+                .contains(&lease.provider_id)
+    }
+    pub(crate) fn report_http_failure(
+        &self,
+        lease: Option<&FailedLease>,
+        status: Option<u16>,
+        retry: &mut LeaseRetry,
+    ) -> bool {
+        lease.is_some_and(|lease| {
+            status.is_none_or(|code| code == 407 || self.kuaidaili_failure(lease, code))
+                && self.report_lease_failure(lease, retry)
+        })
+    }
+    fn report_lease_failure(&self, lease: &FailedLease, retry: &mut LeaseRetry) -> bool {
+        if !self.pool.report_failure(lease) {
+            return false;
+        }
+        if !retry.retried {
+            retry.failed = Some(lease.clone());
+        }
+        true
     }
     fn minimum_lifetime(&self, upstream: &Upstream) -> u64 {
         let configured = upstream
@@ -485,12 +555,13 @@ impl Dialer {
             })
     }
     pub fn selection(&self, query: &hps_domain::SelectionQuery) -> hps_domain::SelectionDecision {
-        self.select(query, false).0
+        self.select(query, false, None).0
     }
     fn select(
         &self,
         query: &hps_domain::SelectionQuery,
         commit: bool,
+        excluded_identity: Option<&str>,
     ) -> (hps_domain::SelectionDecision, Option<Arc<Upstream>>) {
         let dynamic = self.pool.snapshot();
         let subscriptions = self.subscription_pool.get().cloned().unwrap_or_default();
@@ -520,6 +591,11 @@ impl Dialer {
                 }
                 if let Some(reason) = self.nodes.blocking_reason(&upstream.config.id) {
                     reasons.push(reason.into());
+                }
+                if self.pool.is_failed(upstream)
+                    || excluded_identity == Some(upstream.identity.as_str())
+                {
+                    reasons.push("failed_lease".into());
                 }
                 if upstream
                     .source
@@ -556,7 +632,7 @@ impl Dialer {
             .collect();
         self.selector.decide(choices, query, commit)
     }
-    /// Select exactly once. Neither failed handshakes nor business data are retried.
+    /// A failed supplier lease can be replaced before any business data is sent.
     pub async fn connect(
         &self,
         target: &Target,
@@ -580,12 +656,70 @@ impl Dialer {
         http_forward: bool,
         context: &hps_domain::RoutingContext,
     ) -> Result<Connected, ProxyError> {
+        self.connect_with_retry(target, http_forward, context, &mut LeaseRetry::default())
+            .await
+    }
+    pub(crate) async fn connect_with_retry(
+        &self,
+        target: &Target,
+        http_forward: bool,
+        context: &hps_domain::RoutingContext,
+        retry: &mut LeaseRetry,
+    ) -> Result<Connected, ProxyError> {
         if context.destination_host != target.host || context.destination_port != target.port {
             return Err(ProxyError::InvalidTarget);
         }
         let decision = self
             .router
             .evaluate(context, self.revision.load(Ordering::Acquire), false);
+        let mut first_error = None;
+        if retry.failed.is_none() {
+            match self
+                .connect_once(target, http_forward, context, &decision, retry)
+                .await
+            {
+                Ok(result) => return Ok(result),
+                Err(error) if retry.failed.is_none() => return Err(error),
+                Err(error) => first_error = Some(error),
+            }
+        }
+        retry.retried = true;
+        let query = Self::route_query(target, context, &decision);
+        let sources = self.refill_sources(&query);
+        let can_refill = {
+            let enabled = self.auto_refill_sources.read().unwrap();
+            sources.iter().any(|(id, _)| enabled.contains(id))
+        };
+        let _demand = self.demand.begin(sources);
+        let mut pool_changes = self.pool.changes();
+        let excluded = retry.excluded_identity();
+        let available = async {
+            loop {
+                if self.select(&query, false, excluded).1.is_some() {
+                    return true;
+                }
+                if !can_refill || pool_changes.changed().await.is_err() {
+                    return false;
+                }
+            }
+        };
+        if !tokio::time::timeout(self.timeout.min(Duration::from_secs(5)), available)
+            .await
+            .unwrap_or(false)
+        {
+            return Err(first_error.unwrap_or(ProxyError::NoUpstream));
+        }
+        self.connect_once(target, http_forward, context, &decision, retry)
+            .await
+    }
+    async fn connect_once(
+        &self,
+        target: &Target,
+        http_forward: bool,
+        context: &hps_domain::RoutingContext,
+        decision: &hps_domain::RouteDecision,
+        retry: &mut LeaseRetry,
+    ) -> Result<Connected, ProxyError> {
         let observation = self
             .nodes
             .observe(context.clone(), decision.clone())
@@ -593,7 +727,7 @@ impl Dialer {
         let cancelled = observation.cancellation();
         let outcome = tokio::select! {biased;
             _=cancelled.cancelled()=>Err(ProxyError::Disconnected),
-            result=self.connect_decided(target,http_forward,context,&decision,&observation)=>result,
+            result=self.connect_decided(target,http_forward,context,decision,&observation,retry)=>result,
         };
         match outcome {
             Ok(mut connected) => {
@@ -639,6 +773,7 @@ impl Dialer {
         context: &hps_domain::RoutingContext,
         decision: &hps_domain::RouteDecision,
         observation: &crate::connections::ConnectionGuard,
+        retry: &mut LeaseRetry,
     ) -> Result<Connected, ProxyError> {
         if decision.action == hps_domain::RouteAction::Reject {
             return Err(ProxyError::Rejected);
@@ -649,7 +784,13 @@ impl Dialer {
         if decision.action == hps_domain::RouteAction::Direct {
             return self.connect_direct(target, decision.clone()).await;
         }
-        let (upstream, demand) = self.admit_route(target, context, decision, observation)?;
+        let (upstream, demand) = self.admit_route_excluding(
+            target,
+            context,
+            decision,
+            observation,
+            retry.excluded_identity(),
+        )?;
         let progress = Progress::new();
         let outcome = tokio::time::timeout(
             self.timeout,
@@ -659,6 +800,11 @@ impl Dialer {
         .unwrap_or(Err(ProxyError::Timeout));
         if let Err(error) = &outcome {
             self.record_attempt_failure(&upstream, &progress, error);
+            if let Some(lease) = upstream.lease()
+                && self.should_retire_lease(&lease, &progress, error)
+            {
+                self.report_lease_failure(&lease, retry);
+            }
         }
         if let Ok(connected) = &outcome {
             self.traffic_feedback(
@@ -682,6 +828,31 @@ impl Dialer {
             connected.routing = Some(decision.clone());
             connected
         })
+    }
+    fn should_retire_lease(
+        &self,
+        lease: &FailedLease,
+        progress: &Progress,
+        error: &ProxyError,
+    ) -> bool {
+        match error {
+            ProxyError::Endpoint
+            | ProxyError::UpstreamTls
+            | ProxyError::Authentication
+            | ProxyError::Upstream => true,
+            ProxyError::Policy(code) => {
+                matches!(code, 502..=504) || self.kuaidaili_failure(lease, *code)
+            }
+            ProxyError::Timeout => *progress.phase.lock().unwrap() != ProbePhase::Local,
+            ProxyError::Io(error) => matches!(
+                error.kind(),
+                std::io::ErrorKind::UnexpectedEof
+                    | std::io::ErrorKind::BrokenPipe
+                    | std::io::ErrorKind::ConnectionReset
+                    | std::io::ErrorKind::ConnectionAborted
+            ),
+            _ => false,
+        }
     }
     fn record_attempt_failure(&self, upstream: &Upstream, progress: &Progress, error: &ProxyError) {
         let phase = *progress.phase.lock().unwrap();
@@ -713,6 +884,13 @@ impl Dialer {
         decision: &hps_domain::RouteDecision,
         observation: &crate::connections::ConnectionGuard,
     ) -> Result<(Arc<Upstream>, crate::demand::DemandGuard), ProxyError> {
+        self.admit_route_excluding(target, context, decision, observation, None)
+    }
+    fn route_query(
+        target: &Target,
+        context: &hps_domain::RoutingContext,
+        decision: &hps_domain::RouteDecision,
+    ) -> hps_domain::SelectionQuery {
         let mut query = hps_domain::SelectionQuery {
             inbound: context.inbound.clone(),
             source_ip: context.source_ip,
@@ -727,29 +905,40 @@ impl Dialer {
             hps_domain::RouteAction::Group { id } => query.group = Some(id.clone()),
             _ => {}
         }
-        let refill_sources = {
-            let sources = self.sources.read().unwrap();
-            let protocols = self.source_protocols.read().unwrap();
-            sources
-                .iter()
-                .filter(|(id, _)| {
-                    self.selector
-                        .allows_refill(&query, id, protocols.get(*id).copied())
-                })
-                .map(|(id, fp)| {
-                    (
-                        id.clone(),
-                        format!(
-                            "{fp}:{}:{}",
-                            self.refill_fingerprint,
-                            query.inbound.as_deref().unwrap_or("@unbound")
-                        ),
-                    )
-                })
-                .collect()
-        };
-        let demand = self.demand.begin(refill_sources);
-        let (selection, upstream) = self.select(&query, true);
+        query
+    }
+    fn refill_sources(&self, query: &hps_domain::SelectionQuery) -> Vec<(String, String)> {
+        let sources = self.sources.read().unwrap();
+        let protocols = self.source_protocols.read().unwrap();
+        sources
+            .iter()
+            .filter(|(id, _)| {
+                self.selector
+                    .allows_refill(query, id, protocols.get(*id).copied())
+            })
+            .map(|(id, fp)| {
+                (
+                    id.clone(),
+                    format!(
+                        "{fp}:{}:{}",
+                        self.refill_fingerprint,
+                        query.inbound.as_deref().unwrap_or("@unbound")
+                    ),
+                )
+            })
+            .collect()
+    }
+    fn admit_route_excluding(
+        &self,
+        target: &Target,
+        context: &hps_domain::RoutingContext,
+        decision: &hps_domain::RouteDecision,
+        observation: &crate::connections::ConnectionGuard,
+        excluded: Option<&str>,
+    ) -> Result<(Arc<Upstream>, crate::demand::DemandGuard), ProxyError> {
+        let query = Self::route_query(target, context, decision);
+        let demand = self.demand.begin(self.refill_sources(&query));
+        let (selection, upstream) = self.select(&query, true, excluded);
         observation.selection(&selection);
         let upstream = upstream.ok_or(ProxyError::NoUpstream)?;
         if !observation.select(hps_domain::ConnectionChoice {
@@ -765,8 +954,9 @@ impl Dialer {
             observation.fail("admission", "node_admission_changed", false);
             return Err(ProxyError::NoUpstream);
         }
-        if remaining(&upstream)
-            .is_some_and(|r| r <= Duration::from_secs(self.minimum_lifetime(&upstream)))
+        if !self.pool.lease_is_current(&upstream)
+            || remaining(&upstream)
+                .is_some_and(|r| r <= Duration::from_secs(self.minimum_lifetime(&upstream)))
             || !self.health_usable(
                 &upstream.identity,
                 query
@@ -831,6 +1021,7 @@ impl Dialer {
             proxy_authorization: None,
             routing: Some(decision),
             observation: None,
+            lease: None,
         })
     }
 
@@ -976,6 +1167,7 @@ impl Dialer {
             proxy_authorization: auth,
             routing: None,
             observation: None,
+            lease: upstream.lease(),
         })
     }
 }

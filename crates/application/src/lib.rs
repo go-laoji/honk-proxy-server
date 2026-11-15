@@ -1384,5 +1384,19 @@ fn prepare_network(
             .map(|p| (p.id.clone(), p.protocol))
             .collect(),
     );
+    engine.configure_provider_failover(
+        config
+            .providers
+            .iter()
+            .filter(|p| p.enabled && p.kind == hps_config::ProviderKind::Kuaidaili)
+            .map(|p| p.id.clone())
+            .collect(),
+        config
+            .providers
+            .iter()
+            .filter(|p| p.enabled && p.refill.enabled)
+            .map(|p| p.id.clone())
+            .collect(),
+    );
     Ok(health_profiles)
 }

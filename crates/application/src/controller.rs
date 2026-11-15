@@ -13,15 +13,29 @@ impl Supervisor {
         }
         let weak = Arc::downgrade(self);
         let cancel = self.provider_cancel.clone();
+        let pool = self.current().engine.dynamic_pool();
+        pool.enable_failure_reporting();
         self.provider_tasks.spawn(async move {
             let mut timer = tokio::time::interval(Duration::from_secs(1));
             timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             loop {
-                tokio::select! {biased;_=cancel.cancelled()=>break,_=timer.tick()=>{}}
+                let tick = tokio::select! {
+                    biased;
+                    _ = cancel.cancelled() => break,
+                    _ = timer.tick() => true,
+                    _ = pool.failure_ready() => false,
+                };
                 let Some(service) = weak.upgrade() else {
                     break;
                 };
-                if let Err(error) = service.purge_expired_provider_leases().await {
+                let sources = match service.revoke_failed_provider_leases().await {
+                    Ok(sources) => sources,
+                    Err(error) => {
+                        tracing::warn!(%error, "could not retire failed provider leases");
+                        HashSet::new()
+                    }
+                };
+                if tick && let Err(error) = service.purge_expired_provider_leases().await {
                     tracing::warn!(%error, "could not clean up expired provider leases");
                 }
                 let ids = service
@@ -29,7 +43,7 @@ impl Supervisor {
                     .config
                     .providers
                     .iter()
-                    .filter(|p| p.enabled && p.refill.enabled)
+                    .filter(|p| p.enabled && p.refill.enabled && (tick || sources.contains(&p.id)))
                     .map(|p| p.id.clone())
                     .collect::<Vec<_>>();
                 for id in ids {

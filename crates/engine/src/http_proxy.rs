@@ -1,5 +1,6 @@
 use crate::{
     BoxIo, ProxyError,
+    dial::{Connected, LeaseRetry},
     runtime::Session,
     target::Target,
     traffic::{ActiveIo, Budget, relay},
@@ -7,7 +8,10 @@ use crate::{
 use bytes::Bytes;
 use http::{HeaderMap, HeaderValue, Method, Request, Response, StatusCode, Uri, header};
 use http_body_util::{BodyExt, Full, StreamBody, combinators::UnsyncBoxBody};
-use hyper::{body::Incoming, service::service_fn};
+use hyper::{
+    body::{Body as _, Incoming},
+    service::service_fn,
+};
 use hyper_util::rt::{TokioIo, TokioTimer};
 use std::convert::Infallible;
 
@@ -149,17 +153,47 @@ async fn handle(mut request: Request<Incoming>, session: Session) -> Response<Bo
         Ok(target) => target,
         Err(_) => return error(StatusCode::BAD_REQUEST, "Invalid destination\n"),
     };
-    let connected = match session
+    let replayable = matches!(*request.method(), Method::GET | Method::HEAD)
+        && request.body().is_end_stream()
+        && !request.headers().contains_key(header::EXPECT);
+    let context = session
         .dialer
-        .connect_context(&target, true, &session.selection_context)
-        .await
-    {
-        Ok(connected) => connected,
-        Err(e) => {
-            session.failed();
-            return gateway(e);
+        .routing_context(&target, &session.selection_context);
+    let (parts, body) = request.into_parts();
+    let mut body = Some(body);
+    let mut retry = LeaseRetry::default();
+    let result = loop {
+        let connected = match session
+            .dialer
+            .connect_with_retry(&target, true, &context, &mut retry)
+            .await
+        {
+            Ok(connected) => connected,
+            Err(e) => break Err(e),
+        };
+        let request = Request::from_parts(parts.clone(), body.take());
+        let result = forward(
+            request, &target, &session, connected, replayable, &mut retry,
+        )
+        .await;
+        if result.is_ok() || !replayable || !retry.can_retry() {
+            break result;
         }
     };
+    result.unwrap_or_else(|error| {
+        session.failed();
+        gateway(error)
+    })
+}
+
+async fn forward(
+    mut request: Request<Option<Incoming>>,
+    target: &Target,
+    session: &Session,
+    connected: Connected,
+    replayable: bool,
+    retry: &mut LeaseRetry,
+) -> Result<Response<Body>, ProxyError> {
     strip_hop(request.headers_mut());
     let observation = connected.observation.clone();
     if let Some(observation) = &observation {
@@ -192,6 +226,7 @@ async fn handle(mut request: Request<Incoming>, session: Session) -> Response<Bo
     let upstream_id = connected.upstream_id;
     let identity = connected.identity;
     let absolute_form = connected.absolute_form;
+    let lease = connected.lease.as_ref().filter(|_| absolute_form);
     let io = ActiveIo::new(connected.io, session.activity.clone());
     let (mut sender, connection) = match hyper::client::conn::http1::Builder::new()
         .max_buf_size(session.limits.max_header_bytes)
@@ -203,27 +238,30 @@ async fn handle(mut request: Request<Incoming>, session: Session) -> Response<Bo
             if let Some(observation) = &observation {
                 observation.fail("http_exchange", "upstream_http_handshake_failed", false);
             }
-            session.failed();
-            return gateway(ProxyError::Upstream);
+            return Err(ProxyError::Upstream);
         }
     };
     let exchange = session.cancel.child_token();
     let cancelled = exchange.clone();
+    let exchange_guard = exchange.drop_guard();
     session.tracker.spawn(async move {
         tokio::select! { biased; _=cancelled.cancelled()=>{}, _=connection=>{} }
     });
-    let request = request.map(|incoming| {
-        limited(
+    let request = request.map(|incoming| match incoming {
+        Some(incoming) => limited(
             incoming,
             session.budget.clone(),
             session.limits.buffer_bytes,
             None,
             observation.clone(),
             "request_body_failed",
-        )
+        ),
+        None => Full::new(Bytes::new())
+            .map_err(|e: Infallible| match e {})
+            .boxed_unsync(),
     });
     let response = sender.send_request(request).await;
-    if response.is_err() {
+    if let Err(error) = &response {
         if let Some(observation) = &observation {
             observation.fail("target_http", "upstream_response_failed", false);
         }
@@ -234,11 +272,23 @@ async fn handle(mut request: Request<Incoming>, session: Session) -> Response<Bo
             "upstream_response_failed",
             false,
         );
+        // The client provided no body that could have caused a send error.
+        if replayable && (error.is_incomplete_message() || error.is_parse()) {
+            session.dialer.report_http_failure(lease, None, retry);
+        }
     }
+    let mut proxy_failed = false;
     if let Ok(response) = &response {
-        let auth = absolute_form && response.status() == StatusCode::PROXY_AUTHENTICATION_REQUIRED;
+        let status = response.status().as_u16();
+        let auth = absolute_form && status == 407;
+        proxy_failed = session
+            .dialer
+            .report_http_failure(lease, Some(status), retry);
         if let Some(observation) = &observation {
-            observation.http_status(response.status().as_u16(), auth);
+            observation.http_status(status, auth);
+            if proxy_failed && !auth {
+                observation.fail("target_http", "proxy_forwarding_failed", false);
+            }
         }
         session.dialer.traffic_feedback(
             &upstream_id,
@@ -250,7 +300,9 @@ async fn handle(mut request: Request<Incoming>, session: Session) -> Response<Bo
             },
             if auth {
                 "upstream_authentication_failed"
-            } else if matches!(response.status().as_u16(), 403 | 429) {
+            } else if proxy_failed {
+                "proxy_forwarding_failed"
+            } else if matches!(status, 403 | 429) {
                 "target_rejected"
             } else {
                 "target_response"
@@ -260,28 +312,25 @@ async fn handle(mut request: Request<Incoming>, session: Session) -> Response<Bo
     }
     let mut response = match response {
         Ok(response)
-            if response.status() != StatusCode::PROXY_AUTHENTICATION_REQUIRED
+            if !proxy_failed
+                && response.status() != StatusCode::PROXY_AUTHENTICATION_REQUIRED
                 && response.status() != StatusCode::SWITCHING_PROTOCOLS =>
         {
             response
         }
-        _ => {
-            exchange.cancel();
-            session.failed();
-            return gateway(ProxyError::Upstream);
-        }
+        _ => return Err(ProxyError::Upstream),
     };
     strip_hop(response.headers_mut());
-    response.map(|incoming| {
+    Ok(response.map(|incoming| {
         limited(
             incoming,
-            session.budget,
+            session.budget.clone(),
             session.limits.buffer_bytes,
-            Some(exchange.drop_guard()),
+            Some(exchange_guard),
             observation,
             "response_body_failed",
         )
-    })
+    }))
 }
 
 fn strip_hop(headers: &mut HeaderMap) {

@@ -333,6 +333,14 @@ impl Engine {
     ) {
         self.dialer.set_source_protocols(protocols);
     }
+    pub fn configure_provider_failover(
+        &self,
+        kuaidaili: std::collections::HashSet<String>,
+        auto_refill: std::collections::HashSet<String>,
+    ) {
+        self.dialer
+            .configure_provider_failover(kuaidaili, auto_refill);
+    }
     /// Called only while preparing a new generation, before it can accept traffic.
     /// This pool is never inherited from a prior engine or updated by lease refills.
     pub fn prepare_subscription_nodes(
