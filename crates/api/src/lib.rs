@@ -370,6 +370,7 @@ fn application_error(error: ApplicationError) -> (StatusCode, Json<ApiError>) {
             (StatusCode::NOT_FOUND, "revision_not_found")
         }
         ApplicationError::Invalid
+        | ApplicationError::ProviderConfiguration(_)
         | ApplicationError::Storage(StorageError::Invalid)
         | ApplicationError::Engine(
             EngineError::Tls | EngineError::Configuration | EngineError::Routing,

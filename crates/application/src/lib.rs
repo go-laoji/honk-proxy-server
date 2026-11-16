@@ -118,6 +118,8 @@ pub enum ApplicationError {
     ClockRollback,
     #[error("provider operation failed: {0}")]
     Provider(#[from] hps_provider::FetchError),
+    #[error("invalid provider configuration: {0}")]
+    ProviderConfiguration(hps_config::ConfigError),
     #[error(transparent)]
     Dns(#[from] hps_dns::DnsError),
     #[error("Linux capture could not be prepared: {0}")]

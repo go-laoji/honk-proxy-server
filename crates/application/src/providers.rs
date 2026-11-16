@@ -439,7 +439,7 @@ impl Supervisor {
             }
             provider
                 .restore_redacted(config.providers.iter().find(|p| p.id == id))
-                .map_err(|_| ApplicationError::Invalid)?;
+                .map_err(ApplicationError::ProviderConfiguration)?;
             config.providers.retain(|p| p.id != id);
             config.providers.push(provider);
         } else {
