@@ -35,6 +35,29 @@ const message = (cause: unknown) =>
 const date = (value: number | null) =>
   value === null ? "未提供" : new Date(value * 1000).toLocaleString("zh-CN");
 const defaultSort = "expiry_desc";
+const refreshIntervalMs = 5000;
+
+function inventoryParams(query: string) {
+  const params = new URLSearchParams(query);
+  params.delete("hide_expired");
+  params.delete("hide_deleted");
+  if (!params.has("id")) {
+    if (!params.has("sort")) params.set("sort", defaultSort);
+    const state = params.get("state");
+    if (state !== "expired" && state !== "deleted") {
+      params.set("hide_expired", "true");
+    }
+    if (state !== "deleted") params.set("hide_deleted", "true");
+  }
+  return params;
+}
+
+function filterOptions(options: string[] = [], selected: string) {
+  return selected && !options.includes(selected)
+    ? [...options, selected]
+    : options;
+}
+
 async function loadInventory(
   params: URLSearchParams,
   signal: AbortSignal,
@@ -118,6 +141,10 @@ export default function NodesPage() {
     .filter((n) => Number.isInteger(n) && n >= 1 && n <= 200)
     .sort((a, b) => a - b);
   const selectedId = params.get("id");
+  const providerFilter = params.get("provider") ?? "";
+  const groupFilter = params.get("group") ?? "";
+  const refreshPaused =
+    busy || editing || adding || !!deletion || updatingRegion;
   useEffect(() => {
     const pop = () => setQuery(window.location.search);
     window.addEventListener("popstate", pop);
@@ -128,24 +155,7 @@ export default function NodesPage() {
     const request = ++generation.current;
     setLoading(true);
     setLoadError("");
-    const requestParams = new URLSearchParams(query);
-    if (!requestParams.has("sort") && !requestParams.has("id")) {
-      requestParams.set("sort", defaultSort);
-    }
-    requestParams.delete("hide_expired");
-    requestParams.delete("hide_deleted");
-    const state = requestParams.get("state");
-    if (
-      !requestParams.has("id") &&
-      state !== "expired" &&
-      state !== "deleted"
-    ) {
-      requestParams.set("hide_expired", "true");
-    }
-    if (!requestParams.has("id") && state !== "deleted") {
-      requestParams.set("hide_deleted", "true");
-    }
-    void loadInventory(requestParams, controller.signal)
+    void loadInventory(inventoryParams(query), controller.signal)
       .then((result) => {
         if (!controller.signal.aborted && generation.current === request) {
           setValue(result.data);
@@ -164,6 +174,61 @@ export default function NodesPage() {
       });
     return () => controller.abort();
   }, [query, reload]);
+  useEffect(() => {
+    if (selectedId || refreshPaused || loading) return;
+    let timer: number | undefined;
+    let pending: AbortController | null = null;
+    const request = generation.current;
+
+    function stop() {
+      window.clearTimeout(timer);
+      pending?.abort();
+      pending = null;
+    }
+    function schedule() {
+      if (!window.document.hidden) {
+        timer = window.setTimeout(() => void refresh(), refreshIntervalMs);
+      }
+    }
+    async function refresh() {
+      if (window.document.hidden) return;
+      const controller = new AbortController();
+      pending = controller;
+      try {
+        const result = await loadInventory(
+          inventoryParams(query),
+          controller.signal,
+        );
+        if (!controller.signal.aborted && generation.current === request) {
+          setValue(result.data);
+          setLegacy(result.legacy);
+          setLoadError("");
+        }
+      } catch (cause) {
+        if (!controller.signal.aborted && generation.current === request) {
+          setLoadError(`自动刷新失败，稍后重试。${message(cause)}`);
+        }
+      } finally {
+        if (pending === controller) {
+          pending = null;
+          schedule();
+        }
+      }
+    }
+    function visibilityChanged() {
+      stop();
+      schedule();
+    }
+    schedule();
+    window.document.addEventListener("visibilitychange", visibilityChanged);
+    return () => {
+      stop();
+      window.document.removeEventListener(
+        "visibilitychange",
+        visibilityChanged,
+      );
+    };
+  }, [query, reload, selectedId, loading, refreshPaused]);
   useEffect(() => {
     if (!document) return;
     const warn = (event: BeforeUnloadEvent) => {
@@ -374,10 +439,15 @@ export default function NodesPage() {
       {!selectedId && (
         <section className="panel panel-body space-y-2.5">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="flex items-center gap-2 text-sm font-semibold">
-              <Globe2 size={16} aria-hidden="true" />
-              节点库存
-            </h2>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <h2 className="flex items-center gap-2 text-sm font-semibold">
+                <Globe2 size={16} aria-hidden="true" />
+                节点库存
+              </h2>
+              <span className="muted text-xs">
+                {refreshPaused ? "自动刷新暂缓" : "每 5 秒自动刷新"}
+              </span>
+            </div>
             <div className="flex flex-wrap gap-2">
               <button
                 className="btn-primary"
@@ -460,7 +530,7 @@ export default function NodesPage() {
             </dl>
           )}
           <form
-            key={`${query}:${value?.providers.join(",") ?? ""}:${value?.groups.join(",") ?? ""}`}
+            key={query}
             onSubmit={filter}
             className="space-y-2"
             aria-label="节点筛选"
@@ -479,11 +549,14 @@ export default function NodesPage() {
                 <select
                   className="field"
                   name="provider"
-                  defaultValue={params.get("provider") ?? ""}
+                  defaultValue={providerFilter}
                 >
                   <option value="">全部来源</option>
                   <option value="@static">静态节点</option>
-                  {value?.providers.map((id) => (
+                  {filterOptions(
+                    value?.providers,
+                    providerFilter === "@static" ? "" : providerFilter,
+                  ).map((id) => (
                     <option key={id}>{id}</option>
                   ))}
                 </select>
@@ -554,10 +627,10 @@ export default function NodesPage() {
                   <select
                     className="field"
                     name="group"
-                    defaultValue={params.get("group") ?? ""}
+                    defaultValue={groupFilter}
                   >
                     <option value="">全部分组</option>
-                    {value?.groups.map((id) => (
+                    {filterOptions(value?.groups, groupFilter).map((id) => (
                       <option key={id}>{id}</option>
                     ))}
                   </select>
