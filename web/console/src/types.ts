@@ -166,6 +166,22 @@ export interface ExtractionTask {
   error_code: string | null;
   retry_after_secs: number | null;
 }
+export interface ProviderRefillConfig {
+  enabled: boolean;
+  mode: "on_demand" | "maintain";
+  min_nodes: number;
+  target_nodes: number;
+  max_nodes: number;
+  batch_size: number;
+  retire_before_secs: number;
+  forecast_secs: number;
+  idle_timeout_secs: number;
+  daily_request_budget: number;
+  daily_node_budget: number;
+  backoff_initial_secs: number;
+  backoff_max_secs: number;
+  failure_limit: number;
+}
 export interface ProviderConfig {
   id: string;
   name: string;
@@ -174,9 +190,12 @@ export interface ProviderConfig {
   endpoint: string;
   protocol: "http" | "https" | "socks5";
   count: number;
+  count_parameter?: string | null;
   ttl_secs: number | null;
   min_interval_secs: number;
+  min_remaining_secs?: number;
   query_valid_time: boolean;
+  refill?: ProviderRefillConfig;
   auth?: {
     type: "none" | "token" | "hmac_sha1";
     secret_id?: string;

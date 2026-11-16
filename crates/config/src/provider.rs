@@ -471,8 +471,6 @@ impl RefillConfig {
         minimum_lifetime: u64,
     ) -> Result<(), ConfigError> {
         if self.min_nodes == 0
-            || self.target_nodes < self.min_nodes
-            || self.max_nodes < self.target_nodes
             || self.max_nodes > 100000
             || !(1..=1000).contains(&self.batch_size)
             || !(1..=86400).contains(&self.idle_timeout_secs)
@@ -481,22 +479,63 @@ impl RefillConfig {
             || !(1..=1000000).contains(&self.daily_request_budget)
             || !(1..=1000000000).contains(&self.daily_node_budget)
             || !(1..=86400).contains(&self.backoff_initial_secs)
-            || self.backoff_max_secs < self.backoff_initial_secs
             || self.backoff_max_secs > 86400
             || !(1..=100).contains(&self.failure_limit)
-            || (self.enabled
-                && (self.batch_size > max_batch
-                    || ttl.is_some_and(|ttl| {
-                        ttl <= self
-                            .retire_before_secs
-                            .max(minimum_lifetime)
-                            .saturating_add(self.forecast_secs)
-                    })))
         {
             return Err(ConfigError::Invalid(
-                "invalid refill watermarks, batch, lifetime, budget or backoff limits".into(),
+                "refill settings are outside the allowed limits for watermarks, batch, lifetime, budget or backoff".into(),
             ));
         }
+        if self.min_nodes > self.target_nodes || self.target_nodes > self.max_nodes {
+            return Err(ConfigError::Invalid(format!(
+                "refill requires min_nodes <= target_nodes <= max_nodes (got {}, {}, {})",
+                self.min_nodes, self.target_nodes, self.max_nodes
+            )));
+        }
+        if self.backoff_initial_secs > self.backoff_max_secs {
+            return Err(ConfigError::Invalid(format!(
+                "refill.backoff_max_secs ({}) must be at least refill.backoff_initial_secs ({})",
+                self.backoff_max_secs, self.backoff_initial_secs
+            )));
+        }
+        if self.enabled {
+            if self.batch_size > max_batch {
+                return Err(ConfigError::Invalid(format!(
+                    "refill.batch_size ({}) must not exceed count ({})",
+                    self.batch_size, max_batch
+                )));
+            }
+            let window = self
+                .retire_before_secs
+                .max(minimum_lifetime)
+                .saturating_add(self.forecast_secs);
+            if let Some(ttl) = ttl
+                && ttl <= window
+            {
+                return Err(ConfigError::Invalid(format!(
+                    "ttl_secs ({ttl}) must exceed the refill lifetime window ({window} seconds)"
+                )));
+            }
+        }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod refill_tests {
+    use super::*;
+
+    #[test]
+    fn enabled_refill_rejects_a_batch_larger_than_the_extraction_limit() {
+        let mut refill = RefillConfig {
+            batch_size: 2,
+            ..Default::default()
+        };
+        assert!(refill.validate(1, Some(180), 30).is_ok());
+        refill.enabled = true;
+        let error = refill.validate(1, Some(180), 30).unwrap_err().to_string();
+        assert!(error.contains("refill.batch_size (2) must not exceed count (1)"));
+        refill.batch_size = 1;
+        assert!(refill.validate(1, Some(180), 30).is_ok());
     }
 }
