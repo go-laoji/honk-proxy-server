@@ -1,8 +1,13 @@
 import { useId, useState, type ReactNode } from "react";
 import { Minus, Plus } from "lucide-react";
+import {
+  ReferenceList,
+  ReferenceSelect,
+  type Catalog,
+  type Choices,
+} from "../ReferencePicker";
 
 type RecordValue = Record<string, unknown>;
-type Choices = Readonly<Record<string, string>>;
 type NamedField = {
   key: string;
   label: string;
@@ -23,6 +28,8 @@ type MapField = NamedField & {
   keyLabel: string;
   valueLabel: string;
   valueKind?: "text" | "password" | "number" | "list";
+  keyCatalog?: Catalog;
+  valueCatalog?: Catalog;
   min?: number;
   max?: number;
 };
@@ -34,7 +41,19 @@ export type Field =
       max?: number;
       optional?: boolean;
     })
-  | (NamedField & { kind: "select"; choices: Choices; optional?: boolean })
+  | (NamedField & {
+      kind: "select";
+      choices: Choices;
+      optional?: boolean;
+      resetKeys?: readonly string[];
+    })
+  | (NamedField & { kind: "reference"; catalog: Catalog; required?: boolean })
+  | (NamedField & {
+      kind: "references";
+      catalog: Catalog;
+      ordered?: boolean;
+      exclude?: readonly string[];
+    })
   | (NamedField & { kind: "boolean" | "list" })
   | (NamedField & { kind: "choices"; choices: Choices })
   | (NamedField & { kind: "section"; fields: readonly Field[] })
@@ -144,7 +163,17 @@ export function ConfigFields<T extends object>({
                 onChange(
                   field.kind === "section"
                     ? (next as T)
-                    : { ...value, [field.key]: next },
+                    : {
+                        ...value,
+                        ...(field.kind === "select" &&
+                        field.resetKeys &&
+                        next !== record[field.key]
+                          ? Object.fromEntries(
+                              field.resetKeys.map((key) => [key, undefined]),
+                            )
+                          : {}),
+                        [field.key]: next,
+                      },
                 )
               }
             />
@@ -300,6 +329,27 @@ function FieldInput({
           <LineInput value={value} update={update} describedBy={describedBy} />
           {help}
         </label>
+      );
+    case "reference":
+      return (
+        <ReferenceSelect
+          label={field.label}
+          catalog={field.catalog}
+          value={String(value ?? "")}
+          required={field.required}
+          onChange={(next) => update(next || null)}
+        />
+      );
+    case "references":
+      return (
+        <ReferenceList
+          label={field.label}
+          catalog={field.catalog}
+          values={Array.isArray(value) ? value : []}
+          ordered={field.ordered}
+          exclude={field.exclude}
+          onChange={update}
+        />
       );
     case "select":
       return (
@@ -473,9 +523,17 @@ function MapRows({
   const seen = new Set<string>();
   const duplicates = new Set<string>();
   for (const [key] of rows) {
-    if (seen.has(key)) duplicates.add(key);
+    if (key && seen.has(key)) duplicates.add(key);
     seen.add(key);
   }
+  const canAdd =
+    (!field.keyCatalog ||
+      (!seen.has("") &&
+        (field.keyCatalog.search ||
+          Object.keys(field.keyCatalog.choices).some(
+            (key) => !seen.has(key),
+          )))) &&
+    (!field.valueCatalog || Object.keys(field.valueCatalog.choices).length > 0);
   function change(next: Row[]) {
     const record = Object.fromEntries(next);
     setDraft({ record, rows: next });
@@ -485,6 +543,13 @@ function MapRows({
     <fieldset className="min-w-0 space-y-2 rounded-lg border border-console-border p-3 sm:col-span-2">
       <legend className="px-1 text-sm font-medium">{field.label}</legend>
       {field.help && <p className="muted text-xs">{field.help}</p>}
+      {!rows.length && !canAdd && (
+        <p className="muted text-xs">
+          {field.keyCatalog?.notice ??
+            field.valueCatalog?.notice ??
+            "暂无可选项。"}
+        </p>
+      )}
       {rows.map(([key, value], index) => {
         const duplicate = duplicates.has(key);
         const errorId = ids + index;
@@ -495,27 +560,50 @@ function MapRows({
             className="grid items-start gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
             key={index}
           >
-            <label className="form-field">
-              {field.keyLabel}
-              <input
-                className="field"
-                required
+            {field.keyCatalog ? (
+              <ReferenceSelect
+                label={field.keyLabel}
+                catalog={field.keyCatalog}
                 value={key}
-                onChange={(e) => replace([e.target.value, value])}
-                spellCheck={false}
-                aria-invalid={duplicate}
-                aria-describedby={duplicate ? errorId : undefined}
-                ref={(input) =>
-                  input?.setCustomValidity(duplicate ? "名称已存在" : "")
-                }
+                required
+                invalid={duplicate}
+                exclude={seen}
+                inputRef={(input) => {
+                  input?.setCustomValidity(duplicate ? "该项已添加" : "");
+                }}
+                onChange={(next) => replace([next, value])}
               />
-              {duplicate && (
-                <span id={errorId} className="text-console-danger">
-                  名称已存在
-                </span>
-              )}
-            </label>
-            {field.valueKind === "list" ? (
+            ) : (
+              <label className="form-field">
+                {field.keyLabel}
+                <input
+                  className="field"
+                  required
+                  value={key}
+                  onChange={(e) => replace([e.target.value, value])}
+                  spellCheck={false}
+                  aria-invalid={duplicate}
+                  aria-describedby={duplicate ? errorId : undefined}
+                  ref={(input) =>
+                    input?.setCustomValidity(duplicate ? "名称已存在" : "")
+                  }
+                />
+                {duplicate && (
+                  <span id={errorId} className="text-console-danger">
+                    名称已存在
+                  </span>
+                )}
+              </label>
+            )}
+            {field.valueCatalog ? (
+              <ReferenceSelect
+                label={field.valueLabel}
+                catalog={field.valueCatalog}
+                value={String(value ?? "")}
+                required
+                onChange={(next) => replace([key, next])}
+              />
+            ) : field.valueKind === "list" ? (
               <label className="form-field">
                 {field.valueLabel}
                 <LineInput
@@ -565,6 +653,7 @@ function MapRows({
       <button
         type="button"
         className="btn"
+        disabled={!canAdd}
         onClick={() =>
           change([...rows, ["", field.valueKind === "list" ? [] : ""]])
         }

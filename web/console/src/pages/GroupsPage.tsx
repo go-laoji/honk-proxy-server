@@ -15,6 +15,12 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { Layers3, Plus, RefreshCw, Search, Settings2 } from "lucide-react";
 import { Badge } from "../components/ui";
+import {
+  idChoices,
+  ReferenceList,
+  ReferenceSelect,
+  useReferenceCatalog,
+} from "../components/ReferencePicker";
 import { getJson, postJson } from "../platform";
 import { quickRuleHref } from "../routing";
 
@@ -48,7 +54,7 @@ export default function GroupsPage({
   const [port, setPort] = useState("");
   const [transport, setTransport] = useState("tcp");
   const [pin, setPin] = useState("");
-  const [fallback, setFallback] = useState("");
+  const [fallback, setFallback] = useState<string[]>([]);
   const [decision, setDecision] = useState<Decision>();
   const [lastQuery, setLastQuery] = useState<Record<string, unknown>>();
   const mounted = useRef(true);
@@ -63,7 +69,7 @@ export default function GroupsPage({
           setData(value);
           const linked = value.configuration.groups.find((g) => g.id === group);
           setPin(linked?.pinned_node ?? "");
-          setFallback(linked?.fallback_nodes.join(", ") ?? "");
+          setFallback(linked?.fallback_nodes ?? []);
         }
       })
       .catch((cause) => {
@@ -132,12 +138,14 @@ export default function GroupsPage({
       `${label} · ${result.state} · 运行版本 r${result.running_revision}`,
     );
     const [value] = await Promise.all([refresh(), refreshService()]);
-    if (
-      mounted.current &&
-      group &&
-      !value.configuration.groups.some((g) => g.id === group)
-    )
-      chooseGroup("");
+    if (mounted.current && group) {
+      const currentGroup = value.configuration.groups.find(
+        (item) => item.id === group,
+      );
+      if (!currentGroup) setGroup("");
+      setPin(currentGroup?.pinned_node ?? "");
+      setFallback(currentGroup?.fallback_nodes ?? []);
+    }
   }
   async function save() {
     if (!editor) return;
@@ -170,11 +178,27 @@ export default function GroupsPage({
     }
   }
   const selectedGroup = data?.configuration.groups.find((g) => g.id === group);
+  const references = {
+    groups: idChoices(
+      excludeCycles(
+        data?.configuration.groups ?? [],
+        editor?.mode === "group" ? editor.original : null,
+      ),
+    ),
+    nodes: useReferenceCatalog("nodes", editor?.revision),
+    sources: useReferenceCatalog("sources", editor?.revision),
+    inbounds: useReferenceCatalog("inbounds", data?.running_revision),
+  };
+  const pinNodes = useReferenceCatalog(
+    "nodes",
+    selectedGroup ? data?.running_revision : undefined,
+    selectedGroup?.id,
+  );
   function chooseGroup(id: string) {
     const selected = data?.configuration.groups.find((g) => g.id === id);
     setGroup(id);
     setPin(selected?.pinned_node ?? "");
-    setFallback(selected?.fallback_nodes.join(", ") ?? "");
+    setFallback(selected?.fallback_nodes ?? []);
     setDecision(undefined);
   }
   return (
@@ -289,13 +313,17 @@ export default function GroupsPage({
           >
             {editor.mode === "policy" ? (
               <ConfigFields
-                fields={selectionFields(editor.value.groups)}
+                fields={selectionFields(editor.value.groups, references)}
                 value={editor.value}
                 onChange={(value) => setEditor({ ...editor, value })}
               />
             ) : (
               <ConfigFields
-                fields={groupFields(Boolean(editor.original))}
+                fields={groupFields(
+                  Boolean(editor.original),
+                  editor.value,
+                  references,
+                )}
                 value={editor.value}
                 onChange={(value) => setEditor({ ...editor, value })}
               />
@@ -438,30 +466,22 @@ export default function GroupsPage({
           候选与只读模拟
         </h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <label className="form-field">
-            分组
-            <select
-              className="field"
-              value={group}
-              onChange={(event) => {
-                chooseGroup(event.target.value);
-              }}
-            >
-              <option value="">默认 / 按入口绑定</option>
-              {data?.configuration.groups.map((g) => (
-                <option key={g.id}>{g.id}</option>
-              ))}
-            </select>
-          </label>
-          <label className="form-field">
-            入口 ID
-            <input
-              className="field"
-              value={inbound}
-              onChange={(event) => setInbound(event.target.value)}
-              placeholder="可选"
-            />
-          </label>
+          <ReferenceSelect
+            label="分组"
+            value={group}
+            catalog={idChoices(
+              data?.configuration.groups.map((item) => item.id) ?? [],
+            )}
+            placeholder="默认 / 按入口绑定"
+            onChange={chooseGroup}
+          />
+          <ReferenceSelect
+            label="入口"
+            value={inbound}
+            catalog={references.inbounds}
+            placeholder="不指定入口"
+            onChange={setInbound}
+          />
           <label className="form-field">
             源 IP
             <input
@@ -629,22 +649,27 @@ export default function GroupsPage({
         <section className="panel panel-body space-y-4" aria-label="手动固定">
           <h2 className="font-semibold">手动固定 · {selectedGroup.id}</h2>
           <div className="grid gap-4 sm:grid-cols-2">
-            <label className="form-field">
-              固定节点 ID
-              <input
-                className="field"
-                value={pin}
-                onChange={(event) => setPin(event.target.value)}
-              />
-            </label>
-            <label className="form-field">
-              允许回退节点（逗号分隔）
-              <input
-                className="field"
-                value={fallback}
-                onChange={(event) => setFallback(event.target.value)}
-              />
-            </label>
+            <ReferenceSelect
+              label="固定节点"
+              catalog={pinNodes}
+              value={pin}
+              disabled={busy}
+              onChange={(node) => {
+                setPin(node);
+                setFallback((current) =>
+                  node ? current.filter((item) => item !== node) : [],
+                );
+              }}
+            />
+            <ReferenceList
+              label="允许回退节点"
+              catalog={pinNodes}
+              values={fallback}
+              ordered
+              disabled={busy || !pin}
+              exclude={pin ? [pin] : []}
+              onChange={setFallback}
+            />
           </div>
           <p className="muted text-xs leading-6">
             回退节点必须仍属于本组且满足准入。取消固定会清除回退列表；fixed
@@ -660,11 +685,8 @@ export default function GroupsPage({
                     "api/v1/groups/pin",
                     {
                       group_id: selectedGroup.id,
-                      node_id: pin.trim(),
-                      fallback_nodes: fallback
-                        .split(",")
-                        .map((v) => v.trim())
-                        .filter(Boolean),
+                      node_id: pin,
+                      fallback_nodes: fallback,
                       expected_revision: data.running_revision,
                     },
                     "固定已更新",
@@ -699,4 +721,20 @@ export default function GroupsPage({
       )}
     </div>
   );
+}
+
+function excludeCycles(groups: Group[], current: string | null) {
+  const blocked = new Set(current ? [current] : []);
+  const parents = new Map<string, string[]>();
+  for (const group of groups)
+    for (const child of group.groups) {
+      const entries = parents.get(child) ?? [];
+      entries.push(group.id);
+      parents.set(child, entries);
+    }
+  for (const id of blocked)
+    for (const parent of parents.get(id) ?? []) blocked.add(parent);
+  return groups
+    .filter((group) => !blocked.has(group.id))
+    .map((group) => group.id);
 }
