@@ -663,8 +663,11 @@ fn make_view(
         "unknown"
     }
     .to_owned();
-    if current.config.health.enabled && !healthy {
+    if lease.is_none() && current.config.health.enabled && !healthy {
         reasons.push("health_unavailable".into());
+    }
+    if lease.is_some_and(|lease| current.engine.dynamic_pool().failed_lease(lease.id)) {
+        reasons.push("failed_lease".into());
     }
     if plan.is_none() {
         reasons.push("not_published".into());

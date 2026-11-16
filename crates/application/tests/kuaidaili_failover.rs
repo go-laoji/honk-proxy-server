@@ -227,16 +227,84 @@ async fn expired_proxy_is_replaced_before_accepting_connect_tunnel() {
     let target = support::echo(false).await;
     let fixture = Fixture::boot(vec![old.address, replacement.address], |_| {}).await;
 
+    assert_connect_tunnel(&fixture, target.address).await;
+    fixture
+        .assert_replaced(old.address, replacement.address)
+        .await;
+    fixture.app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn a_failed_probe_keeps_the_lease_eligible_until_a_real_connect_fails() {
+    let old = support::http_proxy(None, None, 407).await;
+    let replacement = support::http_proxy(None, None, 200).await;
+    let probe_target = support::origin(None).await;
+    let target = support::echo(false).await;
+    let fixture = Fixture::boot(vec![old.address, replacement.address], |config| {
+        config.health = hps_config::HealthConfig {
+            profiles: vec![hps_config::ProbeProfile {
+                url: format!("http://{}/health", probe_target.address),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+    })
+    .await;
+    let lease = fixture.leases().await.remove(0);
+    until(async || {
+        fixture
+            .app
+            .node(lease.upstream_id.clone())
+            .await
+            .unwrap()
+            .nodes[0]
+            .health_results
+            .iter()
+            .any(|result| result.error_code.as_deref() == Some("upstream_authentication_failed"))
+    })
+    .await;
+    let node = fixture
+        .app
+        .node(lease.upstream_id.clone())
+        .await
+        .unwrap()
+        .nodes
+        .remove(0);
+    assert_eq!(node.health_state, "unhealthy");
+    assert!(node.published && node.eligible);
+    let health = fixture.app.health_overview(None, 20).await.unwrap();
+    assert!(
+        health
+            .nodes
+            .iter()
+            .any(|node| node.node_id == lease.upstream_id && node.eligible)
+    );
+    let control = fixture.app.provider_controller(SOURCE).await.unwrap();
+    assert_eq!(control.current_inventory, 1);
+    assert_eq!(control.decision, "idle");
+    assert_eq!(control.used_requests, 1);
+
+    assert_connect_tunnel(&fixture, target.address).await;
+    let received_client_target = |proxy: &support::Server| {
+        proxy.requests.lock().unwrap().iter().any(|request| {
+            request.starts_with(format!("CONNECT {} HTTP/1.1", target.address).as_bytes())
+        })
+    };
+    assert!(received_client_target(&old));
+    assert!(received_client_target(&replacement));
+    fixture
+        .assert_replaced(old.address, replacement.address)
+        .await;
+    fixture.app.shutdown().await.unwrap();
+}
+
+async fn assert_connect_tunnel(fixture: &Fixture, target: SocketAddr) {
     tokio::time::timeout(Duration::from_secs(6), async {
         let mut tunnel: hps_engine::BoxIo =
             Box::new(TcpStream::connect(fixture.address()).await.unwrap());
         tunnel
             .write_all(
-                format!(
-                    "CONNECT {} HTTP/1.1\r\nHost: {}\r\n\r\n",
-                    target.address, target.address
-                )
-                .as_bytes(),
+                format!("CONNECT {} HTTP/1.1\r\nHost: {}\r\n\r\n", target, target).as_bytes(),
             )
             .await
             .unwrap();
@@ -253,11 +321,6 @@ async fn expired_proxy_is_replaced_before_accepting_connect_tunnel() {
     })
     .await
     .unwrap();
-
-    fixture
-        .assert_replaced(old.address, replacement.address)
-        .await;
-    fixture.app.shutdown().await.unwrap();
 }
 
 #[tokio::test]

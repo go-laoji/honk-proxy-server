@@ -87,18 +87,11 @@ impl Supervisor {
         let cutoff = now.saturating_add(retirement.min(i64::MAX as u64) as i64);
         let future = cutoff.saturating_add(config.refill.forecast_secs as i64);
         let mut seen = HashSet::new();
-        let plans = current
-            .engine
-            .probe_plans()
-            .into_iter()
-            .map(|p| (p.config().id.clone(), p))
-            .collect::<std::collections::HashMap<_, _>>();
-        let mut pending_health = 0u32;
-        let mut projected_pending = 0u32;
-        let mut health_source_blocked = false;
+        let pool = current.engine.dynamic_pool();
         let deadlines = leases
             .iter()
             .filter(|l| config.enabled && l.fingerprint == fp && l.candidate.expires_at > cutoff)
+            .filter(|l| l.candidate.upstream.enabled && !pool.failed_lease(l.id))
             .filter(|l| {
                 current
                     .engine
@@ -113,24 +106,7 @@ impl Supervisor {
                     l.candidate.upstream.port,
                 ))
             })
-            .filter_map(|l| {
-                let (ready, pending, blocked) = plans.get(&l.candidate.upstream.id).map_or(
-                    (
-                        !current.config.health.enabled,
-                        current.config.health.enabled,
-                        false,
-                    ),
-                    |plan| self.plan_health(plan, &current),
-                );
-                health_source_blocked |= blocked;
-                if pending {
-                    pending_health += 1;
-                    if l.candidate.expires_at > future {
-                        projected_pending += 1;
-                    }
-                }
-                (ready || pending).then_some(l.candidate.expires_at)
-            })
+            .map(|l| l.candidate.expires_at)
             .take(if config.refill.enabled {
                 config.refill.max_nodes as usize
             } else {
@@ -150,37 +126,14 @@ impl Supervisor {
             inflight: record.inflight.as_ref().map_or(0, |t| t.requested_count),
             demand_active,
         };
-        let health_block = if config.enabled && config.refill.enabled {
-            self.health_purchase_block()
-                .await?
-                .or(if health_source_blocked {
-                    Some("health_source_configuration")
-                } else {
-                    None
-                })
-        } else {
-            None
-        };
         let state = ControlState {
             refilling: record.refilling,
-            paused: record.paused_reason.is_some() || clock_wrong || health_block.is_some(),
+            paused: record.paused_reason.is_some() || clock_wrong,
             next_allowed_at: record.next_allowed_at,
             used_requests: record.used_requests,
             reserved_nodes: record.reserved_nodes,
         };
         let mut decision = hps_provider::policy::decide(&config, &inventory, &state, now, force);
-        if let Some(reason) = health_block {
-            decision.reason = reason;
-        }
-        if pending_health > 0
-            && decision.count == 0
-            && health_block.is_none()
-            && !clock_wrong
-            && ["target_satisfied", "above_minimum", "watermark_capacity"]
-                .contains(&decision.reason)
-        {
-            decision.reason = "health_pending";
-        }
         if clock_wrong {
             decision.reason = "clock_rollback";
         }
@@ -195,9 +148,9 @@ impl Supervisor {
             min_nodes: config.refill.min_nodes,
             target_nodes: config.refill.target_nodes,
             max_nodes: config.refill.max_nodes,
-            current_inventory: inventory.current.saturating_sub(pending_health),
-            pending_health_nodes: pending_health,
-            projected_inventory: inventory.projected.saturating_sub(projected_pending),
+            current_inventory: inventory.current,
+            pending_health_nodes: 0,
+            projected_inventory: inventory.projected,
             inflight_nodes: inventory.inflight,
             demand_active,
             refilling: record.refilling,

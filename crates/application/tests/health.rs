@@ -60,7 +60,7 @@ async fn boot(config: DaemonConfig) -> Arc<Supervisor> {
 }
 
 #[tokio::test]
-async fn auto_remove_waits_for_two_connection_failures_and_only_removes_leases() {
+async fn repeated_probe_failures_leave_leases_eligible_even_with_legacy_cleanup_setting() {
     let target = support::origin(None).await;
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let failed_address = listener.local_addr().unwrap();
@@ -134,23 +134,29 @@ async fn auto_remove_waits_for_two_connection_failures_and_only_removes_leases()
             .any(|result| result.verdict == HealthVerdict::Failed)
     })
     .await;
-    assert_eq!(
-        app.node(lease_id.clone()).await.unwrap().nodes[0]
-            .operation
-            .state,
-        hps_domain::NodeOperationState::Enabled
-    );
+    let first_check =
+        app.node(lease_id.clone()).await.unwrap().nodes[0].health_results[0].checked_at;
     until(async || {
         app.node(lease_id.clone()).await.unwrap().nodes[0]
-            .operation
-            .state
-            == hps_domain::NodeOperationState::Deleted
+            .health_results
+            .iter()
+            .any(|result| {
+                result.verdict == HealthVerdict::Failed && result.checked_at > first_check
+            })
     })
     .await;
+    let lease = app.node(lease_id).await.unwrap().nodes.remove(0);
+    assert_eq!(lease.lease_state, "active");
+    assert!(lease.eligible);
+    let manual = app
+        .node("keep-manual".into())
+        .await
+        .unwrap()
+        .nodes
+        .remove(0);
+    assert!(!manual.eligible);
     assert_eq!(
-        app.node("keep-manual".into()).await.unwrap().nodes[0]
-            .operation
-            .state,
+        manual.operation.state,
         hps_domain::NodeOperationState::Enabled
     );
     app.shutdown().await.unwrap();
@@ -352,7 +358,7 @@ async fn old_generation_probe_cannot_promote_changed_credentials() {
 }
 
 #[tokio::test]
-async fn pending_admission_reserves_inventory_and_batch_coalesces_without_repurchase() {
+async fn leases_fill_inventory_while_diagnostic_probes_are_pending() {
     use axum::{Json, Router, routing::get};
     let (target, gate, arrivals) = gated_origin().await;
     let proxies = [
@@ -408,8 +414,9 @@ async fn pending_admission_reserves_inventory_and_batch_coalesces_without_repurc
     let app = boot(cfg).await;
     until(async || arrivals.load(Ordering::SeqCst) == 2).await;
     let controller = app.provider_controller("vendor").await.unwrap();
-    assert_eq!(controller.current_inventory, 0);
-    assert_eq!(controller.pending_health_nodes, 2);
+    assert_eq!(controller.current_inventory, 2);
+    assert_eq!(controller.decision, "target_satisfied");
+    assert!(app.current().engine.ready());
     assert_eq!(controller.used_requests, 1);
     let before = app.health_overview(None, 20).await.unwrap();
     let task = app
@@ -432,15 +439,7 @@ async fn pending_admission_reserves_inventory_and_batch_coalesces_without_repurc
     assert_eq!(calls.load(Ordering::SeqCst), 1);
     assert!(app.current().engine.demand_age().is_none());
     gate.add_permits(2);
-    until(async || {
-        app.provider_controller("vendor")
-            .await
-            .unwrap()
-            .current_inventory
-            == 2
-    })
-    .await;
-    assert_eq!(app.health_task(task.id).await.unwrap().healthy, 2);
+    until(async || app.health_task(task.id).await.unwrap().healthy == 2).await;
     assert_eq!(calls.load(Ordering::SeqCst), 1);
     app.shutdown().await.unwrap();
     server.abort();

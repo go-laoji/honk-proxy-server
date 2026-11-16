@@ -110,9 +110,9 @@ impl DynamicPool {
         true
     }
     pub(crate) fn is_failed(&self, upstream: &Upstream) -> bool {
-        let Some(id) = upstream.lease_id() else {
-            return false;
-        };
+        upstream.lease_id().is_some_and(|id| self.failed_lease(id))
+    }
+    pub fn failed_lease(&self, id: i64) -> bool {
         self.failures.lock().unwrap().contains_key(&id)
     }
     pub(crate) fn lease_is_current(&self, upstream: &Upstream) -> bool {
