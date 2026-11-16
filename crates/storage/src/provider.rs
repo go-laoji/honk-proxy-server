@@ -215,6 +215,35 @@ impl Store {
     ) -> Result<Vec<StoredLease>, StorageError> {
         self.call(move|c|Ok(c.prepare("SELECT id,batch_id,provider_id,fingerprint,document,received_at,state FROM provider_leases WHERE provider_id=?1 AND state='active' AND expires_at>?2 ORDER BY expires_at DESC,id DESC LIMIT 100000")?.query_map(params![provider_id,unix_now()],lease)?.collect::<Result<Vec<_>,_>>()?)).await
     }
+    /// Retire the failed endpoint within its source, including overlapping leases.
+    /// The immutable lease identifies the endpoint; other sources are unaffected.
+    pub async fn revoke_failed_lease(
+        &self,
+        id: i64,
+        provider_id: String,
+        fingerprint: String,
+        now: i64,
+    ) -> Result<usize, StorageError> {
+        self.call(move |c| {
+            Ok(c.execute(
+                "WITH failed AS MATERIALIZED (
+                    SELECT json_extract(document,'$.upstream.protocol') AS protocol,
+                           json_extract(document,'$.upstream.host') AS host,
+                           json_extract(document,'$.upstream.port') AS port
+                    FROM provider_leases
+                    WHERE id=?1 AND provider_id=?2 AND fingerprint=?3
+                          AND state='active' AND expires_at>?4
+                 )
+                 UPDATE provider_leases SET state='revoked'
+                 WHERE provider_id=?2 AND fingerprint=?3 AND state='active' AND expires_at>?4
+                   AND (json_extract(document,'$.upstream.protocol'),
+                        json_extract(document,'$.upstream.host'),
+                        json_extract(document,'$.upstream.port')) = (SELECT protocol,host,port FROM failed)",
+                params![id, provider_id, fingerprint, now],
+            )?)
+        })
+        .await
+    }
     pub async fn extraction_requesting(&self, id: i64) -> Result<(), StorageError> {
         self.call(move |c| {
             if c.execute(
@@ -426,6 +455,65 @@ mod tests {
         assert!(!text.contains("credentials"));
         store.close().await.unwrap();
     }
+    #[tokio::test]
+    async fn failed_endpoint_revokes_duplicates_without_touching_other_sources_or_endpoints() {
+        let store = Store::open(None, DaemonConfig::default()).unwrap();
+        let c = config();
+        let other = ProviderConfig {
+            id: "other-source".into(),
+            ..c.clone()
+        };
+        for (source, key, count) in [(&c, "a", 2), (&c, "b", 1), (&other, "c", 1)] {
+            let task = next(&store, source, key).await;
+            store
+                .finish_extraction(task.id, source.clone(), nodes(count), true)
+                .await
+                .unwrap();
+        }
+        let before = store.active_source_leases(c.id.clone()).await.unwrap();
+        let failed = before
+            .iter()
+            .find(|row| row.candidate.upstream.host == "192.0.2.1")
+            .unwrap();
+        assert_eq!(
+            store
+                .revoke_failed_lease(
+                    failed.id,
+                    c.id.clone(),
+                    "stale-fingerprint".into(),
+                    unix_now()
+                )
+                .await
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            store
+                .revoke_failed_lease(
+                    failed.id,
+                    c.id.clone(),
+                    failed.fingerprint.clone(),
+                    unix_now()
+                )
+                .await
+                .unwrap(),
+            2
+        );
+        let active = store.active_leases().await.unwrap();
+        assert_eq!(active.len(), 2);
+        assert!(
+            active
+                .iter()
+                .any(|row| row.provider_id == c.id && row.candidate.upstream.host == "192.0.2.2")
+        );
+        assert!(
+            active.iter().any(
+                |row| row.provider_id == other.id && row.candidate.upstream.host == "192.0.2.1"
+            )
+        );
+        store.close().await.unwrap();
+    }
+
     #[tokio::test]
     async fn snapshot_shrink_and_stale_source_are_safe_and_inflight_merges() {
         let store = Store::open(None, DaemonConfig::default()).unwrap();

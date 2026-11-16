@@ -3,9 +3,23 @@ use crate::{ProxyError, dial::Upstream};
 use hps_config::UpstreamConfig;
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex, RwLock},
+    sync::{
+        Arc, Mutex, RwLock,
+        atomic::{AtomicBool, Ordering},
+    },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
+use tokio::sync::{Notify, watch};
+
+const FAILURE_BATCH_SIZE: usize = 128;
+
+#[derive(Clone)]
+pub struct FailedLease {
+    pub id: i64,
+    pub provider_id: String,
+    pub fingerprint: String,
+    pub(crate) identity: String,
+}
 #[derive(Debug, Clone)]
 pub struct PoolNode {
     pub provider_id: String,
@@ -18,6 +32,10 @@ pub struct PoolNode {
 pub struct DynamicPool {
     nodes: RwLock<Arc<Vec<Arc<Upstream>>>>,
     clock: Mutex<LeaseClock>,
+    track_failures: AtomicBool,
+    failures: Mutex<HashMap<i64, FailedLease>>,
+    failure_ready: Notify,
+    changed: watch::Sender<()>,
 }
 struct LeaseClock {
     wall: Duration,
@@ -52,6 +70,70 @@ impl LeaseClock {
     }
 }
 impl DynamicPool {
+    pub fn enable_failure_reporting(&self) {
+        self.track_failures.store(true, Ordering::Release);
+    }
+    pub async fn failure_ready(&self) {
+        self.failure_ready.notified().await;
+    }
+    pub fn failed_leases(&self) -> Vec<FailedLease> {
+        self.failures
+            .lock()
+            .unwrap()
+            .values()
+            .take(FAILURE_BATCH_SIZE)
+            .cloned()
+            .collect()
+    }
+    pub fn complete_failures(&self, ids: Vec<i64>) {
+        let mut failures = self.failures.lock().unwrap();
+        for id in ids {
+            failures.remove(&id);
+        }
+        if failures.len() >= FAILURE_BATCH_SIZE {
+            self.failure_ready.notify_one();
+        }
+    }
+    pub(crate) fn report_failure(&self, lease: &FailedLease) -> bool {
+        if !self.track_failures.load(Ordering::Acquire) {
+            return false;
+        }
+        let mut failures = self.failures.lock().unwrap();
+        if failures.contains_key(&lease.id) {
+            return true;
+        }
+        if failures.len() >= 100000 {
+            return false;
+        }
+        failures.insert(lease.id, lease.clone());
+        self.failure_ready.notify_one();
+        true
+    }
+    pub(crate) fn is_failed(&self, upstream: &Upstream) -> bool {
+        let Some(id) = upstream.lease_id() else {
+            return false;
+        };
+        self.failures.lock().unwrap().contains_key(&id)
+    }
+    pub(crate) fn lease_is_current(&self, upstream: &Upstream) -> bool {
+        let Some(id) = upstream.lease_id() else {
+            return true;
+        };
+        let pending = self.failures.lock().unwrap();
+        !pending.contains_key(&id)
+            && self
+                .nodes
+                .read()
+                .unwrap()
+                .iter()
+                .any(|node| node.config.id == upstream.config.id)
+    }
+    pub fn notify_change(&self) {
+        self.changed.send_replace(());
+    }
+    pub(crate) fn changes(&self) -> watch::Receiver<()> {
+        self.changed.subscribe()
+    }
     pub fn logical_now(&self) -> u64 {
         self.clock.lock().unwrap().now().as_secs()
     }
@@ -113,6 +195,7 @@ impl DynamicPool {
             })
             .collect::<Result<Vec<_>, ProxyError>>()?;
         *self.nodes.write().unwrap() = Arc::new(prepared);
+        self.notify_change();
         Ok(())
     }
 }

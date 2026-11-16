@@ -391,6 +391,7 @@ impl Supervisor {
                 .engine
                 .health_registry()
                 .publish(result.clone(), current.config.health.max_staleness_secs);
+            current.engine.dynamic_pool().notify_change();
             {
                 let mut states = self.health.states.lock().unwrap();
                 if states.len() >= 400000 {

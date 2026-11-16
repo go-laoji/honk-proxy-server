@@ -4,6 +4,56 @@ use hps_domain::{ExtractionInput, ExtractionTask, LeaseInfo, ProviderDetail, Pro
 use hps_provider::{FetchError, ProviderClient};
 use std::collections::{HashMap, HashSet};
 impl Supervisor {
+    pub(crate) async fn revoke_failed_provider_leases(
+        &self,
+    ) -> Result<HashSet<String>, ApplicationError> {
+        let pool = self.current().engine.dynamic_pool();
+        let failures = pool.failed_leases();
+        if failures.is_empty() {
+            return Ok(HashSet::new());
+        }
+        let _operation = self.operation.lock().await;
+        if self.closed.load(std::sync::atomic::Ordering::Acquire) {
+            return Ok(HashSet::new());
+        }
+        let now = pool.logical_now().min(i64::MAX as u64) as i64;
+        let mut sources = HashSet::new();
+        let mut processed = Vec::new();
+        for failure in failures {
+            match self
+                .store
+                .revoke_failed_lease(
+                    failure.id,
+                    failure.provider_id.clone(),
+                    failure.fingerprint,
+                    now,
+                )
+                .await
+            {
+                Ok(removed) => {
+                    if removed != 0 {
+                        tracing::info!(
+                            provider_id = failure.provider_id,
+                            lease_id = failure.id,
+                            removed,
+                            "retired provider endpoint after a traffic failure"
+                        );
+                    }
+                    sources.insert(failure.provider_id);
+                    processed.push(failure.id);
+                }
+                Err(error) => {
+                    tracing::warn!(%error, lease_id = failure.id, "lease retirement failed")
+                }
+            }
+        }
+        if !processed.is_empty() {
+            self.refresh_pool().await?;
+            pool.complete_failures(processed);
+        }
+        Ok(sources)
+    }
+
     pub(crate) async fn purge_expired_provider_leases(&self) -> Result<(), ApplicationError> {
         let _operation = self.operation.lock().await;
         if self.closed.load(std::sync::atomic::Ordering::Acquire) {
