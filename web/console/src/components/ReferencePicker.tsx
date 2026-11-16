@@ -30,8 +30,12 @@ async function readNodes(
     limit: "50",
     hide_expired: "true",
     hide_deleted: "true",
+    hide_retired: "true",
   });
-  if (group) query.set("group", group);
+  if (group) {
+    query.set("group", group);
+    query.set("ignore_group_pin", "true");
+  }
   if (search) query.set("search", search);
   const data = await getJson<NodesOverview>(`api/v1/nodes?${query}`, signal);
   return {

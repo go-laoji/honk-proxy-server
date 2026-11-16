@@ -20,6 +20,7 @@ import RuleImportPanel from "../components/RuleImportPanel";
 import QuickGroupRuleForm, {
   type QuickGroupRule,
 } from "../components/QuickGroupRuleForm";
+import { idChoices, useReferenceCatalog } from "../components/ReferencePicker";
 import { getJson, postJson } from "../platform";
 import {
   candidateReasons,
@@ -193,6 +194,14 @@ export default function RulesPage({
     readQuickRuleSeed(new URLSearchParams(location.search)),
   );
   const editing = Boolean(editor || quick);
+  const inbounds = useReferenceCatalog("inbounds", data?.running_revision);
+  const references = {
+    inbounds,
+    nodes: useReferenceCatalog("nodes", editor?.revision),
+    groups: data?.available_groups
+      ? idChoices(data.available_groups)
+      : { choices: {}, notice: "分组列表读取失败，请刷新规则。" },
+  };
   const [simulation, setSimulation] = useState<Simulation>();
   const mounted = useRef(true);
   const sequence = useRef(0);
@@ -649,16 +658,13 @@ export default function RulesPage({
           >
             {editor.mode === "policy" ? (
               <ConfigFields
-                fields={routingFields(data?.available_groups)}
+                fields={routingFields(references)}
                 value={editor.value}
                 onChange={(value) => setEditor({ ...editor, value })}
               />
             ) : (
               <ConfigFields
-                fields={ruleFields(
-                  Boolean(editor.original),
-                  data?.available_groups,
-                )}
+                fields={ruleFields(Boolean(editor.original), references)}
                 value={editor.value}
                 onChange={(value) => setEditor({ ...editor, value })}
               />
@@ -852,7 +858,7 @@ export default function RulesPage({
           }}
         >
           <ConfigFields
-            fields={simulationFields}
+            fields={simulationFields(inbounds)}
             value={context}
             onChange={setContext}
           />

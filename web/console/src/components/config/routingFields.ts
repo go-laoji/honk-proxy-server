@@ -1,4 +1,5 @@
-import { strategyLabels } from "../../selection";
+import { strategyLabels, type Group } from "../../selection";
+import { idChoices, type Catalog } from "../ReferencePicker";
 import {
   identifier,
   list,
@@ -12,17 +13,32 @@ import {
   type Field,
 } from "./ConfigFields";
 
-export function groupFields(readOnly: boolean): Field[] {
+type RoutingReferences = { groups: Catalog; nodes: Catalog; inbounds: Catalog };
+type SelectionReferences = RoutingReferences & { sources: Catalog };
+
+export function groupFields(
+  readOnly: boolean,
+  group: Group,
+  { nodes, sources, groups }: SelectionReferences,
+): Field[] {
   return [
     identifier("分组 ID", readOnly),
     select("strategy", "选点策略", strategyLabels),
     toggle("include_all", "包含全部节点"),
-    list("members", "成员节点 ID"),
+    { kind: "references", key: "members", label: "成员节点", catalog: nodes },
     {
-      ...list("providers", "来源 ID"),
-      help: "订阅来源填写 subscription:订阅ID。",
+      kind: "references",
+      key: "providers",
+      label: "供应商或订阅",
+      catalog: sources,
     },
-    list("groups", "子分组 ID"),
+    {
+      kind: "references",
+      key: "groups",
+      label: "子分组",
+      catalog: groups,
+      exclude: [group.id],
+    },
     list("tags", "筛选标签"),
     {
       kind: "choices",
@@ -30,8 +46,21 @@ export function groupFields(readOnly: boolean): Field[] {
       label: "协议（不选匹配全部）",
       choices: protocols,
     },
-    optionalText("pinned_node", "固定节点 ID"),
-    list("fallback_nodes", "回退节点 ID"),
+    {
+      kind: "reference",
+      key: "pinned_node",
+      label: "固定节点",
+      catalog: nodes,
+      required: group.strategy === "fixed" || group.fallback_nodes.length > 0,
+    },
+    {
+      kind: "references",
+      key: "fallback_nodes",
+      label: "回退节点",
+      catalog: nodes,
+      ordered: true,
+      exclude: group.pinned_node ? [group.pinned_node] : [],
+    },
     {
       kind: "section",
       key: "advanced",
@@ -41,7 +70,8 @@ export function groupFields(readOnly: boolean): Field[] {
           kind: "map",
           key: "weights",
           label: "节点权重",
-          keyLabel: "节点 ID",
+          keyLabel: "节点",
+          keyCatalog: nodes,
           valueLabel: "权重",
           valueKind: "number",
           min: 1,
@@ -78,27 +108,34 @@ export function groupFields(readOnly: boolean): Field[] {
   ];
 }
 
-export function selectionFields(groups: { id: string }[]): Field[] {
+export function selectionFields(
+  groups: { id: string }[],
+  { nodes, sources, inbounds }: SelectionReferences,
+): Field[] {
+  const groupCatalog = idChoices(groups.map(({ id }) => id));
   return [
-    select(
-      "default_group",
-      "默认分组",
-      Object.fromEntries(groups.map(({ id }) => [id, id])),
-      true,
-    ),
+    {
+      kind: "reference",
+      key: "default_group",
+      label: "默认分组",
+      catalog: groupCatalog,
+    },
     number("max_sessions", "会话数量上限", 1, 100000),
     {
       kind: "map",
       key: "inbound_groups",
       label: "入口绑定",
-      keyLabel: "入口 ID",
-      valueLabel: "分组 ID",
+      keyLabel: "入口",
+      valueLabel: "分组",
+      keyCatalog: inbounds,
+      valueCatalog: groupCatalog,
     },
     {
       kind: "map",
       key: "node_tags",
       label: "节点标签",
-      keyLabel: "节点 ID",
+      keyLabel: "节点",
+      keyCatalog: nodes,
       valueLabel: "标签",
       valueKind: "list",
     },
@@ -106,7 +143,8 @@ export function selectionFields(groups: { id: string }[]): Field[] {
       kind: "map",
       key: "provider_tags",
       label: "来源标签",
-      keyLabel: "来源 ID",
+      keyLabel: "来源",
+      keyCatalog: sources,
       valueLabel: "标签",
       valueKind: "list",
     },
@@ -114,49 +152,52 @@ export function selectionFields(groups: { id: string }[]): Field[] {
 }
 
 const inboundProtocols = { ...protocols, transparent: "透明接管" };
-const action = (groups?: string[]): Field[] => [
-  select("kind", "流量动作", {
-    default: "按入口与默认分组选点",
-    node: "指定节点",
-    group: "指定分组",
-    direct: "直连",
-    reject: "拒绝",
-  }),
+const action = ({ groups, nodes }: RoutingReferences): Field[] => [
   {
-    kind: "text",
+    kind: "select",
+    key: "kind",
+    label: "流量动作",
+    choices: {
+      default: "按入口与默认分组选点",
+      node: "指定节点",
+      group: "指定分组",
+      direct: "直连",
+      reject: "拒绝",
+    },
+    resetKeys: ["id"],
+  },
+  {
+    kind: "reference",
     key: "id",
-    label: "目标节点 ID",
+    label: "目标节点",
+    catalog: nodes,
     required: true,
     when: (value) => value.kind === "node",
   },
   {
-    ...(groups
-      ? select(
-          "id",
-          "目标代理组",
-          Object.fromEntries(groups.map((id) => [id, id])),
-        )
-      : {
-          kind: "text" as const,
-          key: "id",
-          label: "目标分组 ID",
-          required: true,
-        }),
+    kind: "reference",
+    key: "id",
+    label: "目标代理组",
+    catalog: groups,
+    required: true,
     when: (value) => value.kind === "group",
   },
 ];
 
-export const routingFields = (groups?: string[]): Field[] => [
+export const routingFields = (references: RoutingReferences): Field[] => [
   toggle("use_dns_observations", "使用 DNS 观测补充域名"),
   {
     kind: "object",
     key: "default_action",
     label: "默认动作",
-    fields: action(groups),
+    fields: action(references),
   },
 ];
 
-export function ruleFields(readOnly: boolean, groups?: string[]): Field[] {
+export function ruleFields(
+  readOnly: boolean,
+  references: RoutingReferences,
+): Field[] {
   return [
     identifier("规则 ID", readOnly),
     toggle("enabled", "启用此规则"),
@@ -164,7 +205,7 @@ export function ruleFields(readOnly: boolean, groups?: string[]): Field[] {
       kind: "object",
       key: "action",
       label: "匹配后的动作",
-      fields: action(groups),
+      fields: action(references),
     },
     {
       kind: "object",
@@ -203,7 +244,12 @@ export function ruleFields(readOnly: boolean, groups?: string[]): Field[] {
               label: "入口协议（不选匹配全部）",
               choices: inboundProtocols,
             },
-            list("inbounds", "入口 ID"),
+            {
+              kind: "references",
+              key: "inbounds",
+              label: "匹配入口",
+              catalog: references.inbounds,
+            },
             list("source_cidrs", "来源 IP 网段（CIDR）"),
             {
               kind: "object",
@@ -235,11 +281,11 @@ export function ruleFields(readOnly: boolean, groups?: string[]): Field[] {
   ];
 }
 
-export const simulationFields: Field[] = [
+export const simulationFields = (inbounds: Catalog): Field[] => [
   text("destination_host", "目标域名或 IP", true),
   number("destination_port", "目标端口", 1, 65535),
   select("transport", "传输协议", transports),
-  optionalText("inbound", "入口 ID"),
+  { kind: "reference", key: "inbound", label: "入口", catalog: inbounds },
   {
     kind: "section",
     key: "advanced",

@@ -260,6 +260,7 @@ fn validate_query(q: &NodeQuery) -> Result<(), ApplicationError> {
             .as_ref()
             .is_some_and(|s| s != "@static" && !hps_config::valid_source_id(s))
         || q.group.as_ref().is_some_and(|s| !valid_id(s))
+        || (q.ignore_group_pin == Some(true) && q.group.is_none())
         || q.protocol
             .as_ref()
             .is_some_and(|s| !["http", "https", "socks5"].contains(&s.as_str()))
@@ -367,6 +368,15 @@ fn inventory(
             .iter()
             .find(|g| g.id == *id)
     });
+    // The pin editor needs alternatives within the group. Keep its membership
+    // filters and any child group's pin, and leave runtime selection unchanged.
+    let before_pin = requested_group
+        .filter(|_| q.ignore_group_pin == Some(true))
+        .map(|group| GroupConfig {
+            pinned_node: None,
+            ..group.clone()
+        });
+    let requested_group = before_pin.as_ref().or(requested_group);
     for (index, (up, lease)) in sources.iter().enumerate() {
         let lease = *lease;
         let plan = plans.get(&up.id);
@@ -393,6 +403,7 @@ fn inventory(
         }
         if (q.hide_expired == Some(true) && node.remaining_secs == Some(0))
             || (q.hide_deleted == Some(true) && node.operation.state == NodeOperationState::Deleted)
+            || (q.hide_retired == Some(true) && state_matches("retired", &node))
             || q.id.as_ref().is_some_and(|id| *id != node.id)
             || needle.as_ref().is_some_and(|s| {
                 !node.id.to_lowercase().contains(s)

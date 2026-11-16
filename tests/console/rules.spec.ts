@@ -64,7 +64,12 @@ test("rules MPA separates candidates and runtime, orders by keyboard/buttons and
       exact: true,
     });
     await action.selectOption("node");
-    await editor.getByLabel("目标节点 ID").fill("old-draft-target");
+    const targetNode = editor.getByRole("combobox", {
+      name: "目标节点",
+      exact: true,
+    });
+    await expect(targetNode).toHaveValue("");
+    await expect(targetNode).toHaveJSProperty("required", true);
     await action.selectOption("direct");
     await page.getByRole("button", { name: "保存为候选", exact: true }).click();
     await expect(page.getByRole("main").getByRole("status")).toContainText(
@@ -74,7 +79,9 @@ test("rules MPA separates candidates and runtime, orders by keyboard/buttons and
     const context = page.getByRole("form", { name: "规则模拟条件" });
     await context.getByLabel("目标域名或 IP").fill("127.0.0.1");
     await context.getByLabel("目标端口").fill(String(port));
-    await context.getByLabel("入口 ID").fill("browser-http");
+    await context
+      .getByRole("combobox", { name: "入口", exact: true })
+      .selectOption("browser-http");
     await context.getByText("来源、DNS 观测与进程", { exact: true }).click();
     await context.getByLabel("来源 IP", { exact: true }).fill("127.0.0.1");
     await context
@@ -417,7 +424,10 @@ members=["node-${name}"]
 
     await page.getByRole("button", { name: "编辑规则策略" }).click();
     const editor = page.getByRole("form", { name: "规则配置" });
+    await editor.getByLabel("流量动作").selectOption("node");
+    await editor.getByLabel("目标节点").selectOption("node-alpha");
     await editor.getByLabel("流量动作").selectOption("group");
+    await expect(editor.getByLabel("目标代理组")).toHaveValue("");
     await editor.getByLabel("目标代理组").selectOption("alpha");
     await editor.getByRole("button", { name: "保存为候选" }).click();
     await activate();

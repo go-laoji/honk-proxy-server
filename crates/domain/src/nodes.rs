@@ -44,6 +44,9 @@ pub struct NodeQuery {
     pub search: Option<String>,
     pub provider: Option<String>,
     pub group: Option<String>,
+    /// List candidates that could be pinned, before applying the requested group's current pin.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ignore_group_pin: Option<bool>,
     pub protocol: Option<String>,
     pub capability: Option<String>,
     pub state: Option<String>,
@@ -51,6 +54,8 @@ pub struct NodeQuery {
     pub hide_expired: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hide_deleted: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hide_retired: Option<bool>,
     pub remaining_max_secs: Option<u64>,
     pub sort: Option<String>,
     pub offset: u32,
