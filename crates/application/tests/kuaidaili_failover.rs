@@ -7,10 +7,10 @@ use axum::{
     http::Uri,
     routing::get,
 };
-use hps_application::{StartupOverrides, Supervisor};
+use hps_application::{ApplicationError, StartupOverrides, Supervisor};
 use hps_config::DaemonConfig;
 use hps_domain::{ExtractionInput, LeaseInfo};
-use hps_storage::Store;
+use hps_storage::{StorageError, Store};
 use std::{
     collections::BTreeMap,
     net::SocketAddr,
@@ -173,12 +173,11 @@ impl Fixture {
     async fn assert_replaced(&self, old: SocketAddr, new: SocketAddr) {
         let detail = self.app.provider_detail(SOURCE).await.unwrap();
         assert_eq!(detail.provider.active_leases, 1);
-        assert_eq!(detail.leases.len(), 2);
-        assert_eq!(detail.leases[1].state, "revoked");
-        assert_eq!(detail.leases[1].port, old.port());
+        assert_eq!(detail.leases.len(), 1);
         assert_eq!(detail.leases[0].state, "active");
         assert_eq!(detail.leases[0].port, new.port());
         assert_eq!(detail.tasks[0].trigger, "automatic");
+        assert_eq!(detail.tasks[1].request_id, "seed");
         assert_eq!(
             self.vendor.extractions.lock().unwrap().as_slice(),
             [old, new]
@@ -392,7 +391,7 @@ async fn budget_exhaustion_does_not_readmit_a_failed_lease_or_buy_another() {
         .await
         .unwrap();
     assert_eq!(response.status().as_u16(), 503);
-    assert_eq!(fixture.leases().await[0].state, "revoked");
+    assert!(fixture.leases().await.is_empty());
     assert_eq!(
         fixture
             .app
@@ -405,6 +404,130 @@ async fn budget_exhaustion_does_not_readmit_a_failed_lease_or_buy_another() {
     assert!(!fixture.app.current().engine.ready());
     assert_eq!(old.requests.lock().unwrap().len(), 1);
     assert_eq!(fixture.vendor.extractions.lock().unwrap().len(), 1);
+    fixture.app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn concurrent_failures_remove_the_lease_and_refill_after_cooldown_even_when_idle() {
+    let upstream = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let old = upstream.local_addr().unwrap();
+    let replacement = support::http_proxy(None, None, 200).await;
+    let spare = support::http_proxy(None, None, 200).await;
+    let fixture = Fixture::boot(vec![old, replacement.address, spare.address], |config| {
+        config.providers[0].min_interval_secs = 4;
+        config.providers[0].refill.idle_timeout_secs = 1;
+        config.providers[0].refill.daily_request_budget = 3;
+        config.providers[0].refill.daily_node_budget = 3;
+    })
+    .await;
+    let lease = fixture.leases().await.remove(0);
+    let failure_server = tokio::spawn(async move {
+        let mut requests = Vec::new();
+        for _ in 0..2 {
+            let mut connection: hps_engine::BoxIo = Box::new(upstream.accept().await.unwrap().0);
+            assert!(support::head(&mut connection).await.starts_with(b"POST "));
+            requests.push(connection);
+        }
+        for mut connection in requests {
+            connection
+                .write_all(b"HTTP/1.1 460 Proxy Authentication Invalid\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                .await
+                .unwrap();
+        }
+    });
+
+    let client = fixture.client();
+    let url = "http://127.0.0.1:1/";
+    let (a, b) = tokio::join!(client.post(url).send(), client.post(url).send());
+    assert_eq!(a.unwrap().status().as_u16(), 502);
+    assert_eq!(b.unwrap().status().as_u16(), 502);
+    failure_server.await.unwrap();
+
+    until(async || {
+        let status = fixture.app.provider_controller(SOURCE).await.unwrap();
+        status.decision == "idle" && status.current_inventory == 0
+    })
+    .await;
+    assert!(!fixture.app.current().engine.ready());
+    assert!(fixture.leases().await.is_empty());
+    assert!(matches!(
+        fixture.app.node(lease.upstream_id).await,
+        Err(ApplicationError::Storage(StorageError::NotFound))
+    ));
+    assert_eq!(fixture.vendor.extractions.lock().unwrap().as_slice(), [old]);
+
+    until(async || fixture.app.current().engine.ready()).await;
+    fixture.assert_replaced(old, replacement.address).await;
+    assert_eq!(
+        fixture
+            .app
+            .provider_controller(SOURCE)
+            .await
+            .unwrap()
+            .used_requests,
+        2
+    );
+    assert!(replacement.requests.lock().unwrap().is_empty());
+    fixture.app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn a_remaining_eligible_lease_handles_retry_without_an_extra_extraction() {
+    let old = support::http_proxy(None, None, 460).await;
+    let other = support::http_proxy(None, None, 200).await;
+    let spare = support::http_proxy(None, None, 200).await;
+    let origin = support::origin(None).await;
+    let fixture = Fixture::boot(vec![old.address, other.address, spare.address], |config| {
+        config.providers[0].refill.max_nodes = 2;
+        config.providers[0].refill.daily_request_budget = 3;
+        config.providers[0].refill.daily_node_budget = 3;
+    })
+    .await;
+    let next_allowed = async || {
+        fixture
+            .app
+            .provider_controller(SOURCE)
+            .await
+            .unwrap()
+            .next_allowed_at
+            <= hps_provider::unix_now()
+    };
+    until(next_allowed).await;
+    fixture
+        .app
+        .extract(
+            SOURCE.into(),
+            ExtractionInput {
+                request_id: "seed-other".into(),
+            },
+        )
+        .await
+        .unwrap();
+    until(async || fixture.app.current().engine.status().eligible_upstreams == 2).await;
+    until(next_allowed).await;
+
+    let client = fixture.client();
+    for _ in 0..2 {
+        let response = client
+            .get(format!("http://{}/get", origin.address))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status().as_u16(), 200);
+        assert_eq!(response.text().await.unwrap(), "origin");
+        if !old.requests.lock().unwrap().is_empty() {
+            break;
+        }
+    }
+    assert_eq!(old.requests.lock().unwrap().len(), 1);
+    until(async || fixture.leases().await.len() == 1).await;
+    assert_eq!(fixture.leases().await[0].port, other.address.port());
+    let status = fixture.app.provider_controller(SOURCE).await.unwrap();
+    assert_eq!((status.current_inventory, status.used_requests), (1, 2));
+    assert_eq!(
+        fixture.vendor.extractions.lock().unwrap().as_slice(),
+        [old.address, other.address]
+    );
     fixture.app.shutdown().await.unwrap();
 }
 
