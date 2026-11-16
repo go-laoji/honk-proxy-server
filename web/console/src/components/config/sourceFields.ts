@@ -1,4 +1,4 @@
-import type { ProviderConfig } from "../../types";
+import type { ProviderConfig, ProviderRefillConfig } from "../../types";
 import {
   identifier,
   number,
@@ -24,7 +24,7 @@ const json = {
   expires_at: null,
   expiry_milliseconds: false,
 };
-const refillDefaults = {
+const refillDefaults: ProviderRefillConfig = {
   enabled: false,
   mode: "on_demand",
   min_nodes: 5,
@@ -87,6 +87,68 @@ export function providerPayload(config: ProviderConfig): ProviderConfig {
   };
 }
 
+export function refillProblems(draft: ProviderConfig): string[] {
+  const refill = draft.refill;
+  if (!refill) return [];
+  const problems: string[] = [];
+  const {
+    min_nodes,
+    target_nodes,
+    max_nodes,
+    backoff_initial_secs,
+    backoff_max_secs,
+  } = refill;
+  if (
+    [min_nodes, target_nodes, max_nodes].every(Number.isInteger) &&
+    (min_nodes > target_nodes || target_nodes > max_nodes)
+  ) {
+    problems.push(
+      "最低节点数不能大于目标节点数，目标节点数不能大于最大节点数。",
+    );
+  }
+  if (
+    Number.isInteger(backoff_initial_secs) &&
+    Number.isInteger(backoff_max_secs) &&
+    backoff_initial_secs > backoff_max_secs
+  ) {
+    problems.push("最长退避间隔不能小于首次退避间隔。");
+  }
+  if (!refill.enabled) return problems;
+  if (
+    Number.isInteger(refill.batch_size) &&
+    Number.isInteger(draft.count) &&
+    refill.batch_size > draft.count
+  ) {
+    problems.push(
+      `每批补充节点数 ${refill.batch_size} 不能超过单次提取数量 ${draft.count}。`,
+    );
+  }
+  if (
+    (draft.kind === "json" || draft.kind === "text") &&
+    !draft.count_parameter?.trim()
+  ) {
+    problems.push(
+      "通用供应商启用自动补池时，需要在「请求参数与鉴权」中填写数量参数名。",
+    );
+  }
+  const minimum = draft.min_remaining_secs ?? 0;
+  const { retire_before_secs, forecast_secs } = refill;
+  if (
+    draft.ttl_secs !== null &&
+    [draft.ttl_secs, minimum, retire_before_secs, forecast_secs].every(
+      Number.isInteger,
+    )
+  ) {
+    const window = Math.max(minimum, retire_before_secs) + forecast_secs;
+    if (draft.ttl_secs <= window) {
+      problems.push(
+        `默认有效期 ${draft.ttl_secs} 秒必须大于补池所需的 ${window} 秒（取最少剩余时长与提前退出时长中的较大值，再加预估使用窗口）。`,
+      );
+    }
+  }
+  return problems;
+}
+
 export function providerFields(
   readOnly: boolean,
   draft: ProviderConfig,
@@ -95,6 +157,10 @@ export function providerFields(
     draft.kind === "text" ||
     draft.kind === "yun_free" ||
     (draft.kind === "kuaidaili" && !draft.query_valid_time);
+  const maxBatch =
+    draft.refill?.enabled && Number.isInteger(draft.count) && draft.count > 0
+      ? Math.min(draft.count, 1000)
+      : 1000;
   return [
     identifier("来源 ID", readOnly),
     { kind: "text", key: "name", label: "显示名称", maxLength: 128 },
@@ -243,7 +309,7 @@ export function providerFields(
         number("min_nodes", "最低节点数", 1, 100000),
         number("target_nodes", "目标节点数", 1, 100000),
         number("max_nodes", "最大节点数", 1, 100000),
-        number("batch_size", "每批补充节点数", 1, 1000),
+        number("batch_size", "每批补充节点数", 1, maxBatch),
         number("retire_before_secs", "提前退出补池水位（秒）", 0, 86400),
         number("forecast_secs", "预估使用窗口（秒）", 0, 86400),
         number("idle_timeout_secs", "空闲超时（秒）", 1, 86400),

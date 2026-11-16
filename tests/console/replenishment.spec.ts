@@ -66,9 +66,49 @@ test("controller MPA shows reservations, pauses in-flight refill and resumes to 
       暂停前失败次数: "2",
     }))
       await form.getByLabel(label, { exact: true }).fill(value);
-    await page
-      .getByRole("button", { name: "保存并激活来源", exact: true })
-      .click();
+    const save = form.getByRole("button", {
+      name: "保存并激活来源",
+      exact: true,
+    });
+    const limit = form.getByLabel("单次提取数量", { exact: true });
+    const batch = form.getByLabel("每批补充节点数", { exact: true });
+    await limit.fill("1");
+    await expect(batch).toHaveAttribute("max", "1");
+    await expect(form.getByRole("alert")).toContainText(
+      "每批补充节点数 2 不能超过单次提取数量 1。",
+    );
+    await expect(save).toBeDisabled();
+    expect(quantities).toEqual([]);
+
+    const workspace = await (
+      await request.get("/api/v1/config/workspace")
+    ).json();
+    const denied = await request.post("/api/v1/providers/refill-vendor/save", {
+      data: {
+        expected_revision: workspace.desired_revision,
+        configuration: {
+          id: "refill-vendor",
+          enabled: true,
+          kind: "json",
+          endpoint: `http://127.0.0.1:${port}/extract`,
+          count: 1,
+          count_parameter: "num",
+          refill: { enabled: true, batch_size: 2 },
+        },
+      },
+    });
+    expect(denied.status()).toBe(422);
+    expect((await denied.json()).message).toContain(
+      "refill.batch_size (2) must not exceed count (1)",
+    );
+
+    await batch.fill("1");
+    await expect(form.getByRole("alert")).toHaveCount(0);
+    await expect(save).toBeEnabled();
+    // Keep the fixture's two-request budget and exercise a partial second batch.
+    await limit.fill("2");
+    await batch.fill("2");
+    await save.click();
     await expect(page.getByRole("main").getByRole("status")).toContainText(
       "来源配置已激活",
     );

@@ -3,6 +3,7 @@ import {
   providerDraft,
   providerFields,
   providerPayload,
+  refillProblems,
 } from "../components/config/sourceFields";
 import SubscriptionsPanel from "../components/SubscriptionsPanel";
 import ProviderRegionGroups from "../components/ProviderRegionGroups";
@@ -120,6 +121,7 @@ export default function ProvidersPage({
 
   const [loaded, setLoaded] = useState(false);
   const [editor, setEditor] = useState(() => providerDraft());
+  const refillErrors = refillProblems(editor);
   const [editorRevision, setEditorRevision] = useState<number>();
   const [editingId, setEditingId] = useState("");
   const [task, setTask] = useState<ExtractionTask | null>(null);
@@ -810,7 +812,7 @@ export default function ProvidersPage({
           label="供应商配置"
           className="mt-3 space-y-3"
           onSave={() => {
-            if (busy || !head) return;
+            if (busy || !head || refillErrors.length) return;
             void act("save", async () => {
               await save(providerPayload(editor), editorRevision ?? head);
               if (!detailPage) resetEditor();
@@ -830,11 +832,31 @@ export default function ProvidersPage({
               setEditorRevision((revision) => revision ?? head);
             }}
           />
+          {refillErrors.length > 0 && (
+            <div
+              role="alert"
+              className="space-y-2 rounded-lg border border-console-danger-border p-3 text-sm text-console-danger"
+            >
+              <p className="font-medium">修正补池参数后即可保存。</p>
+              <ul className="list-disc space-y-1 pl-5">
+                {refillErrors.map((error) => (
+                  <li key={error}>{error}</li>
+                ))}
+              </ul>
+              <button
+                type="button"
+                className="btn"
+                onClick={openRefillSettings}
+              >
+                查看补池设置
+              </button>
+            </div>
+          )}
           <div className="flex flex-wrap gap-2">
             <button
               className="btn-primary"
               type="submit"
-              disabled={!!busy || !head}
+              disabled={!!busy || !head || refillErrors.length > 0}
             >
               <Save size={15} />
               保存并激活来源
