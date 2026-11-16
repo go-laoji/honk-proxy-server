@@ -4,20 +4,19 @@ use hps_domain::{ExtractionInput, ExtractionTask, LeaseInfo, ProviderDetail, Pro
 use hps_provider::{FetchError, ProviderClient};
 use std::collections::{HashMap, HashSet};
 impl Supervisor {
-    pub(crate) async fn revoke_failed_provider_leases(
-        &self,
-    ) -> Result<HashSet<String>, ApplicationError> {
+    pub(crate) async fn revoke_failed_provider_leases(&self) -> HashMap<String, String> {
         let pool = self.current().engine.dynamic_pool();
         let failures = pool.failed_leases();
         if failures.is_empty() {
-            return Ok(HashSet::new());
+            return HashMap::new();
         }
         let _operation = self.operation.lock().await;
         if self.closed.load(std::sync::atomic::Ordering::Acquire) {
-            return Ok(HashSet::new());
+            return HashMap::new();
         }
         let now = pool.logical_now().min(i64::MAX as u64) as i64;
-        let mut sources = HashSet::new();
+        let current = self.current();
+        let mut sources = HashMap::new();
         let mut processed = Vec::new();
         for failure in failures {
             match self
@@ -25,7 +24,7 @@ impl Supervisor {
                 .revoke_failed_lease(
                     failure.id,
                     failure.provider_id.clone(),
-                    failure.fingerprint,
+                    failure.fingerprint.clone(),
                     now,
                 )
                 .await
@@ -38,8 +37,15 @@ impl Supervisor {
                             removed,
                             "retired provider endpoint after a traffic failure"
                         );
+                        if current.config.providers.iter().any(|p| {
+                            p.id == failure.provider_id
+                                && p.enabled
+                                && p.refill.enabled
+                                && hps_provider::fingerprint(p) == failure.fingerprint
+                        }) {
+                            sources.insert(failure.provider_id, failure.fingerprint);
+                        }
                     }
-                    sources.insert(failure.provider_id);
                     processed.push(failure.id);
                 }
                 Err(error) => {
@@ -48,13 +54,15 @@ impl Supervisor {
             }
         }
         if !processed.is_empty() {
-            self.refresh_pool().await?;
-            pool.complete_failures(processed);
+            match self.refresh_pool_after_retirement().await {
+                Ok(()) => pool.complete_failures(processed),
+                Err(error) => tracing::warn!(%error, "could not publish pool after lease removal"),
+            }
         }
-        Ok(sources)
+        sources
     }
 
-    pub(crate) async fn purge_expired_provider_leases(&self) -> Result<(), ApplicationError> {
+    pub(crate) async fn purge_retired_provider_leases(&self) -> Result<(), ApplicationError> {
         let _operation = self.operation.lock().await;
         if self.closed.load(std::sync::atomic::Ordering::Acquire) {
             return Ok(());
@@ -65,12 +73,16 @@ impl Supervisor {
             .dynamic_pool()
             .logical_now()
             .min(i64::MAX as u64) as i64;
-        if self.store.purge_expired_leases(now).await? != 0 {
-            let controls = self.store.node_controls().await?;
-            current.engine.node_registry().reconcile(controls);
-            self.refresh_pool().await?;
+        if self.store.purge_retired_leases(now).await? != 0 {
+            self.refresh_pool_after_retirement().await?;
         }
         Ok(())
+    }
+
+    async fn refresh_pool_after_retirement(&self) -> Result<(), ApplicationError> {
+        let controls = self.store.node_controls().await?;
+        self.current().engine.node_registry().reconcile(controls);
+        self.refresh_pool().await
     }
 
     pub(crate) async fn refresh_pool(&self) -> Result<(), ApplicationError> {

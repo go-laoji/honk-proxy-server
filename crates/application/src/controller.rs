@@ -1,8 +1,19 @@
 use super::*;
 use hps_config::{ProviderConfig, RefillMode};
-use hps_domain::{ControllerEvaluation, ProviderControllerStatus};
+use hps_domain::{ControllerEvaluation, ExtractionTask, ProviderControllerStatus};
 use hps_provider::policy::{ControlState, Decision, Inventory};
-use std::{collections::HashSet, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    time::Duration,
+};
+
+#[derive(Clone, Copy)]
+enum RefillTrigger<'a> {
+    Scheduled,
+    Manual,
+    LeaseFailure(&'a str),
+}
+
 impl Supervisor {
     pub(crate) fn start_pool_controller(self: &Arc<Self>) {
         if self
@@ -18,6 +29,7 @@ impl Supervisor {
         self.provider_tasks.spawn(async move {
             let mut timer = tokio::time::interval(Duration::from_secs(1));
             timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            let mut recoveries = HashMap::new();
             loop {
                 let tick = tokio::select! {
                     biased;
@@ -28,29 +40,34 @@ impl Supervisor {
                 let Some(service) = weak.upgrade() else {
                     break;
                 };
-                let sources = match service.revoke_failed_provider_leases().await {
-                    Ok(sources) => sources,
-                    Err(error) => {
-                        tracing::warn!(%error, "could not retire failed provider leases");
-                        HashSet::new()
-                    }
-                };
-                if tick && let Err(error) = service.purge_expired_provider_leases().await {
-                    tracing::warn!(%error, "could not clean up expired provider leases");
+                recoveries.extend(service.revoke_failed_provider_leases().await);
+                if tick && let Err(error) = service.purge_retired_provider_leases().await {
+                    tracing::warn!(%error, "could not clean up retired provider leases");
                 }
                 let ids = service
                     .current()
                     .config
                     .providers
                     .iter()
-                    .filter(|p| p.enabled && p.refill.enabled && (tick || sources.contains(&p.id)))
+                    .filter(|p| {
+                        p.enabled && p.refill.enabled && (tick || recoveries.contains_key(&p.id))
+                    })
                     .map(|p| p.id.clone())
                     .collect::<Vec<_>>();
+                recoveries.retain(|id, _| ids.contains(id));
                 for id in ids {
                     if cancel.is_cancelled() {
                         break;
                     }
-                    let _ = service.evaluate_controller_inner(id, false).await;
+                    let trigger = recoveries
+                        .get(&id)
+                        .map_or(RefillTrigger::Scheduled, |fingerprint| {
+                            RefillTrigger::LeaseFailure(fingerprint)
+                        });
+                    let _operation = service.operation.lock().await;
+                    if let Ok((_, false)) = service.evaluate_controller_locked(&id, trigger).await {
+                        recoveries.remove(&id);
+                    }
                 }
             }
         });
@@ -58,8 +75,8 @@ impl Supervisor {
     async fn controller_context(
         &self,
         id: &str,
-        force: bool,
-    ) -> Result<(ProviderConfig, ProviderControllerStatus, Decision), ApplicationError> {
+        trigger: RefillTrigger<'_>,
+    ) -> Result<(ProviderConfig, ProviderControllerStatus, Decision, bool), ApplicationError> {
         let current = self.current();
         let config = current
             .config
@@ -133,6 +150,9 @@ impl Supervisor {
             used_requests: record.used_requests,
             reserved_nodes: record.reserved_nodes,
         };
+        let recovering = inventory.current == 0
+            && matches!(trigger, RefillTrigger::LeaseFailure(failed) if failed == fp);
+        let force = matches!(trigger, RefillTrigger::Manual) || recovering;
         let mut decision = hps_provider::policy::decide(&config, &inventory, &state, now, force);
         if clock_wrong {
             decision.reason = "clock_rollback";
@@ -172,35 +192,48 @@ impl Supervisor {
             last_task_id: record.last_task_id,
             acknowledged_at: record.acknowledged_at,
         };
-        Ok((config, status, decision))
+        let retry_after_cooldown = recovering && decision.reason == "cooldown";
+        Ok((config, status, decision, retry_after_cooldown))
     }
     pub async fn provider_controller(
         &self,
         id: &str,
     ) -> Result<ProviderControllerStatus, ApplicationError> {
-        Ok(self.controller_context(id, false).await?.1)
+        Ok(self
+            .controller_context(id, RefillTrigger::Scheduled)
+            .await?
+            .1)
     }
     pub async fn evaluate_controller(
         self: &Arc<Self>,
         id: String,
     ) -> Result<ControllerEvaluation, ApplicationError> {
         let service = self.clone();
-        tokio::spawn(async move { service.evaluate_controller_inner(id, true).await })
-            .await
-            .map_err(|_| ApplicationError::Worker)?
+        tokio::spawn(async move {
+            let _operation = service.operation.lock().await;
+            let (task, _) = service
+                .evaluate_controller_locked(&id, RefillTrigger::Manual)
+                .await?;
+            Ok(ControllerEvaluation {
+                status: service.provider_controller(&id).await?,
+                task,
+            })
+        })
+        .await
+        .map_err(|_| ApplicationError::Worker)?
     }
-    async fn evaluate_controller_inner(
+    async fn evaluate_controller_locked(
         self: &Arc<Self>,
-        id: String,
-        force: bool,
-    ) -> Result<ControllerEvaluation, ApplicationError> {
-        let _operation = self.operation.lock().await;
+        id: &str,
+        trigger: RefillTrigger<'_>,
+    ) -> Result<(Option<ExtractionTask>, bool), ApplicationError> {
         if self.closed.load(std::sync::atomic::Ordering::Acquire) {
             return Err(EngineError::ShuttingDown.into());
         }
-        let (mut config, _, decision) = self.controller_context(&id, force).await?;
+        let (mut config, _, decision, retry_after_cooldown) =
+            self.controller_context(id, trigger).await?;
         self.store
-            .set_refilling(id.clone(), decision.refilling)
+            .set_refilling(id.to_owned(), decision.refilling)
             .await?;
         let task = if decision.count > 0 {
             let forecast = config.refill.forecast_secs;
@@ -229,10 +262,7 @@ impl Supervisor {
         } else {
             None
         };
-        Ok(ControllerEvaluation {
-            status: self.provider_controller(&id).await?,
-            task,
-        })
+        Ok((task, retry_after_cooldown))
     }
     pub async fn pause_controller(
         &self,

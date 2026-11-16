@@ -96,17 +96,18 @@ fn lease(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredLease> {
         state: row.get(6)?,
     })
 }
-// Constrain the leading column of provider_leases_pool to use its expiry ranges.
-const EXPIRED_LEASE_IDS: &str = "SELECT id FROM provider_leases WHERE state IN ('active','revoked','clock_rollback') AND expires_at<=?1";
+// Constrain the leading column of provider_leases_pool to use its state and expiry ranges.
+const RETIRED_LEASE_IDS: &str = "SELECT id FROM provider_leases WHERE state='revoked'
+    UNION ALL SELECT id FROM provider_leases WHERE state IN ('active','clock_rollback') AND expires_at<=?1";
 
 /// The caller owns the transaction so lease and control deletion commit together.
-pub(super) fn delete_expired_leases(c: &Connection, now: i64) -> Result<usize, StorageError> {
+pub(super) fn delete_retired_leases(c: &Connection, now: i64) -> Result<usize, StorageError> {
     c.execute(
-        &format!("DELETE FROM node_controls WHERE node_id IN (SELECT 'lease:' || id FROM ({EXPIRED_LEASE_IDS}))"),
+        &format!("DELETE FROM node_controls WHERE node_id IN (SELECT 'lease:' || id FROM ({RETIRED_LEASE_IDS}))"),
         [now],
     )?;
     let removed = c.execute(
-        &format!("DELETE FROM provider_leases WHERE id IN ({EXPIRED_LEASE_IDS})"),
+        &format!("DELETE FROM provider_leases WHERE id IN ({RETIRED_LEASE_IDS})"),
         [now],
     )?;
     if removed != 0 {
@@ -130,16 +131,16 @@ fn prune_history(c: &Connection, now: i64) -> Result<(), StorageError> {
 }
 
 impl Store {
-    pub async fn purge_expired_leases(&self, now: i64) -> Result<usize, StorageError> {
+    pub async fn purge_retired_leases(&self, now: i64) -> Result<usize, StorageError> {
         self.call(move |c| {
-            let expired = c
-                .prepare_cached(&format!("SELECT EXISTS({EXPIRED_LEASE_IDS})"))?
+            let retired = c
+                .prepare_cached(&format!("SELECT EXISTS({RETIRED_LEASE_IDS})"))?
                 .query_row([now], |row| row.get::<_, bool>(0))?;
-            if !expired {
+            if !retired {
                 return Ok(0);
             }
             let tx = c.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-            let removed = delete_expired_leases(&tx, now)?;
+            let removed = delete_retired_leases(&tx, now)?;
             tx.commit()?;
             Ok(removed)
         })
@@ -225,7 +226,8 @@ impl Store {
         now: i64,
     ) -> Result<usize, StorageError> {
         self.call(move |c| {
-            Ok(c.execute(
+            let tx = c.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+            let removed = tx.execute(
                 "WITH failed AS MATERIALIZED (
                     SELECT json_extract(document,'$.upstream.protocol') AS protocol,
                            json_extract(document,'$.upstream.host') AS host,
@@ -240,7 +242,12 @@ impl Store {
                         json_extract(document,'$.upstream.host'),
                         json_extract(document,'$.upstream.port')) = (SELECT protocol,host,port FROM failed)",
                 params![id, provider_id, fingerprint, now],
-            )?)
+            )?;
+            if removed != 0 {
+                delete_retired_leases(&tx, now)?;
+            }
+            tx.commit()?;
+            Ok(removed)
         })
         .await
     }
@@ -456,7 +463,7 @@ mod tests {
         store.close().await.unwrap();
     }
     #[tokio::test]
-    async fn failed_endpoint_revokes_duplicates_without_touching_other_sources_or_endpoints() {
+    async fn failed_endpoint_deletes_duplicates_without_touching_other_sources_or_endpoints() {
         let store = Store::open(None, DaemonConfig::default()).unwrap();
         let c = config();
         let other = ProviderConfig {
@@ -474,6 +481,20 @@ mod tests {
         let failed = before
             .iter()
             .find(|row| row.candidate.upstream.host == "192.0.2.1")
+            .unwrap();
+        store
+            .set_node_control(
+                failed.candidate.upstream.id.clone(),
+                hps_domain::NodeOperationState::Disabled,
+                0,
+                1,
+                Some(crate::nodes::LeaseScope {
+                    id: failed.id,
+                    batch_id: failed.batch_id,
+                    provider_id: failed.provider_id.clone(),
+                }),
+            )
+            .await
             .unwrap();
         assert_eq!(
             store
@@ -501,6 +522,12 @@ mod tests {
         );
         let active = store.active_leases().await.unwrap();
         assert_eq!(active.len(), 2);
+        assert_eq!(store.node_inventory_leases().await.unwrap().len(), 2);
+        assert_eq!(
+            store.provider_leases(None, None, 10).await.unwrap().len(),
+            2
+        );
+        assert!(store.node_controls().await.unwrap().is_empty());
         assert!(
             active
                 .iter()
@@ -651,9 +678,12 @@ mod tests {
         drop(fault);
         let restored = Store::open(Some(dir.path()), DaemonConfig::default()).unwrap();
         assert!(restored.active_leases().await.unwrap().is_empty());
-        assert_eq!(
-            restored.provider_leases(None, None, 10).await.unwrap()[0].state,
-            "revoked"
+        assert!(
+            restored
+                .provider_leases(None, None, 10)
+                .await
+                .unwrap()
+                .is_empty()
         );
         restored.close().await.unwrap();
     }
