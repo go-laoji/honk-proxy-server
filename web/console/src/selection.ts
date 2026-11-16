@@ -57,6 +57,7 @@ export const candidateReasons: Record<string, string> = {
   insufficient_lifetime: "剩余寿命不足",
   source_reconfigured: "来源配置已变化",
   health_unavailable: "无合格健康证据",
+  failed_lease: "业务连接失败，正在撤销",
   missing_or_retired: "节点缺失或已退休",
   unknown_group: "分组不存在",
   no_eligible_candidate: "没有合格候选",

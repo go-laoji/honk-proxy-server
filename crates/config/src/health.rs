@@ -38,7 +38,8 @@ impl Default for ProbeProfile {
 #[serde(default, deny_unknown_fields)]
 pub struct HealthConfig {
     pub enabled: bool,
-    #[serde(skip_serializing_if = "is_false")]
+    /// Accepted for compatibility with older configurations.
+    #[serde(skip_serializing)]
     pub auto_remove_failed_leases: bool,
     pub profiles: Vec<ProbeProfile>,
     pub max_parallel: usize,

@@ -29,6 +29,7 @@ export default function RefillPanel({
   onAction: (action: ControllerAction) => void;
   onConfigure: () => void;
 }) {
+  const pending = value.pending_health_nodes ?? 0;
   return (
     <section className="panel overflow-hidden" aria-label="补池控制器">
       <div className="panel-header panel-toolbar">
@@ -41,12 +42,14 @@ export default function RefillPanel({
             : "自动补池停用"}
         </Badge>
       </div>
-      <div className="grid grid-cols-2 gap-y-4 divide-x sm:grid-cols-4 divide-console-border py-5 text-center">
+      <div
+        className={`grid grid-cols-2 gap-y-4 divide-x divide-console-border py-5 text-center ${pending > 0 ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}
+      >
         {[
           ["当前准入库存", value.current_inventory],
           ["预测窗口后库存", value.projected_inventory],
           ["在途预留数量", value.inflight_nodes],
-          ["等待健康检测", value.pending_health_nodes ?? 0],
+          ...(pending > 0 ? [["等待健康检测", pending]] : []),
         ].map(([label, count]) => (
           <div key={label} className="px-2">
             <p className="muted text-xs">{label}</p>
@@ -119,7 +122,7 @@ export default function RefillPanel({
           Retry-After。结果不确定时请先核对供应商记录，恢复后可能产生新的提取费用。暂停不取消已发送的请求，也不关闭已有代理连接。
         </p>
         <p className="muted text-xs leading-6">
-          当前库存依据来源、期限与配置准入，健康状态由健康模块接续。按需模式在无连接或最近拨号需求时停止自动购买；持续维护需要显式启用。补池参数在下方供应商表单中保存后生效。
+          有效供应商租约入池后计入库存。业务连接确认代理故障后，控制器撤销租约并评估是否补充。按需模式根据实际代理需求补充，持续维护模式根据库存水位补充。
         </p>
       </div>
     </section>

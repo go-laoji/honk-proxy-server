@@ -157,6 +157,16 @@ impl ProbePlan {
     pub fn operation(&self) -> hps_domain::NodeControl {
         self.dialer.nodes.control(&self.upstream.config.id)
     }
+    pub fn eligible(&self) -> bool {
+        self.config().enabled
+            && self.operation().state.blocking_reason().is_none()
+            && self
+                .remaining()
+                .is_none_or(|remaining| remaining > Duration::from_secs(self.minimum_lifetime()))
+            && !self.dialer.pool.is_failed(&self.upstream)
+            && (self.upstream.lease_id().is_some()
+                || self.dialer.health_usable(self.identity(), None))
+    }
     /// Bypasses selection/health and production demand, preserving prepared trust roots.
     pub async fn connect(
         &self,
@@ -617,7 +627,9 @@ impl Dialer {
                         .into(),
                     );
                 }
-                if !self.health.usable(&upstream.identity, &policy, family) {
+                if upstream.lease_id().is_none()
+                    && !self.health.usable(&upstream.identity, &policy, family)
+                {
                     reasons.push("health_unavailable".into());
                 }
                 crate::selection::Choice {
@@ -957,20 +969,21 @@ impl Dialer {
         if !self.pool.lease_is_current(&upstream)
             || remaining(&upstream)
                 .is_some_and(|r| r <= Duration::from_secs(self.minimum_lifetime(&upstream)))
-            || !self.health_usable(
-                &upstream.identity,
-                query
-                    .destination_host
-                    .as_ref()
-                    .and_then(|h| h.parse::<std::net::IpAddr>().ok())
-                    .map(|ip| {
-                        if ip.is_ipv4() {
-                            hps_domain::IpFamily::Ipv4
-                        } else {
-                            hps_domain::IpFamily::Ipv6
-                        }
-                    }),
-            )
+            || (upstream.lease_id().is_none()
+                && !self.health_usable(
+                    &upstream.identity,
+                    query
+                        .destination_host
+                        .as_ref()
+                        .and_then(|h| h.parse::<std::net::IpAddr>().ok())
+                        .map(|ip| {
+                            if ip.is_ipv4() {
+                                hps_domain::IpFamily::Ipv4
+                            } else {
+                                hps_domain::IpFamily::Ipv6
+                            }
+                        }),
+                ))
         {
             observation.fail("admission", "node_no_longer_eligible", false);
             return Err(ProxyError::NoUpstream);

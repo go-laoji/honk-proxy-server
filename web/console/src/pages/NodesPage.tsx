@@ -262,7 +262,7 @@ export default function NodesPage() {
         }
       } else {
         setNotice(
-          `${node.id}：${kind === "enable" ? "已解除人工限制，仍需通过配置、健康与寿命准入" : kind === "drain" ? "已停止新连接，现有连接自然排空" : "已禁用新连接"}`,
+          `${node.id}：${kind === "enable" ? "已解除人工限制，当前准入状态见列表" : kind === "drain" ? "已停止新连接，现有连接自然排空" : "已禁用新连接"}`,
         );
       }
       if (!result.pool_refreshed)
