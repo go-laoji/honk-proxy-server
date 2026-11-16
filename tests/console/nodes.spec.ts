@@ -328,6 +328,108 @@ port = 9
   }
 });
 
+test("node status refreshes after five seconds without changing the page or filter draft", async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const workspace = await (
+    await request.get("/api/v1/config/workspace")
+  ).json();
+  const toml = `management_listen = "${new URL(baseURL!).host}"
+
+[health]
+enabled = false
+
+[[proxy.upstreams]]
+id = "poll-node-a"
+protocol = "http"
+host = "127.0.0.1"
+port = 9
+
+[[proxy.upstreams]]
+id = "poll-node-b"
+protocol = "http"
+host = "127.0.0.1"
+port = 9
+`;
+  const saved = await request.post("/api/v1/config/revisions", {
+    data: { toml, expected_revision: workspace.desired_revision },
+  });
+  expect(saved.ok()).toBe(true);
+  const revision = await saved.json();
+  try {
+    const applied = await request.post("/api/v1/config/activate", {
+      data: {
+        revision: revision.id,
+        expected_revision: workspace.desired_revision,
+      },
+    });
+    expect(applied.ok()).toBe(true);
+    expect(await applied.json()).toMatchObject({ state: "applied" });
+    await page.clock.install();
+    await page.goto(
+      "/console/nodes.html?search=poll-node&sort=id&limit=1&offset=1",
+    );
+    const row = page.getByRole("row", {
+      name: "节点 poll-node-b",
+      exact: true,
+    });
+    await expect(
+      row.getByRole("button", { name: "禁用", exact: true }),
+    ).toBeEnabled();
+    const search = page.getByRole("textbox", {
+      name: "名称、端点或地区",
+      exact: true,
+    });
+    await search.fill("尚未应用");
+    const toggle = (action: "disable" | "enable", version: number) =>
+      request.post("/api/v1/nodes/action", {
+        data: {
+          id: "poll-node-b",
+          action,
+          expected_revision: revision.id,
+          expected_control_version: version,
+        },
+      });
+    expect((await toggle("disable", 0)).ok()).toBe(true);
+    await page.clock.runFor(5000);
+    await expect(
+      row.getByRole("button", { name: "解除限制", exact: true }),
+    ).toBeEnabled();
+    await expect(page).toHaveURL(/search=poll-node&sort=id&limit=1&offset=1$/);
+    await expect(search).toHaveValue("尚未应用");
+
+    const edit = page.getByRole("button", { name: "批量导入", exact: true });
+    await edit.click();
+    await expect(page.getByText("自动刷新暂缓", { exact: true })).toBeVisible();
+    const inventoryRequests: string[] = [];
+    page.on("request", (req) => {
+      if (req.url().includes("/api/v1/nodes?"))
+        inventoryRequests.push(req.url());
+    });
+    expect((await toggle("enable", 1)).ok()).toBe(true);
+    await page.clock.runFor(5000);
+    expect(inventoryRequests).toEqual([]);
+    await expect(
+      row.getByRole("button", { name: "解除限制", exact: true }),
+    ).toBeEnabled();
+    await edit.click();
+    await page.clock.runFor(5000);
+    await expect(
+      row.getByRole("button", { name: "禁用", exact: true }),
+    ).toBeEnabled();
+  } finally {
+    const head = await (await request.get("/api/v1/config/workspace")).json();
+    await request.post("/api/v1/config/rollback", {
+      data: {
+        revision: workspace.running_revision,
+        expected_revision: head.desired_revision,
+      },
+    });
+  }
+});
+
 test("node inventory updates the IP database and keeps its version on failure", async ({
   page,
 }) => {
