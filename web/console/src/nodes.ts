@@ -130,7 +130,7 @@ export const nodeStates: Record<string, string> = {
   subscription_snapshot: "标准订阅快照（有效期未知）",
   static: "静态配置",
   expired: "已到期",
-  revoked: "快照已撤销",
+  revoked: "租约已撤销",
   clock_rollback: "时钟回退已退休",
   source_deleted: "来源已删除",
   source_disabled: "来源已停用",
@@ -156,7 +156,8 @@ export const nodeReasons: Record<string, string> = {
   source_deleted: "来源已删除",
   source_disabled: "来源已停用",
   source_changed: "来源指纹已变化",
-  revoked: "快照已撤销",
+  revoked: "租约已撤销",
+  failed_lease: "业务连接失败，正在撤销",
   clock_rollback: "时钟回退已退休",
 };
 export const nodeAddress = (n: {
